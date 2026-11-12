@@ -7,6 +7,16 @@
 #          time, what was built so far is saved and the next run continues.
 #   build  restores the finished libraries, builds Luckgram.exe and packages
 #          Luckgram-Setup-<version>-<build>-x64.exe and the portable zip.
+#
+# Runner switch: repository variable WIN_RUNNER (Settings → Variables → Actions)
+#   unset / anything else  GitHub hosted windows-latest, libraries via actions/cache.
+#   self-hosted            runs-on [self-hosted, luckgram-win]. TBuild stays in the
+#                          runner workspace between runs (no cache upload/download,
+#                          prepare.py and the app build are incremental), nothing on
+#                          the machine is deleted. Only pushes to this repository and
+#                          PRs from branches of this repository run there; PRs from
+#                          forks are skipped (public repo). Put the runner work folder
+#                          on a large disk (E:), see luckgram/windows/RUNNER.md.
 name: Build
 
 on:
@@ -67,7 +77,9 @@ jobs:
   libs:
     name: Libraries
     needs: credentials
-    runs-on: windows-latest
+    # Self-hosted: never run code from fork PRs on our machine.
+    if: (vars.WIN_RUNNER != 'self-hosted' || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ vars.WIN_RUNNER == 'self-hosted' && fromJSON('["self-hosted","luckgram-win"]') || 'windows-latest' }}
     timeout-minutes: 355
     outputs:
       cache-key: ${{ steps.key.outputs.done }}
@@ -76,6 +88,7 @@ jobs:
         shell: cmd
     steps:
       - name: Free disk space on C.
+        if: vars.WIN_RUNNER != 'self-hosted'
         shell: pwsh
         run: |
           function Free { "{0:N1} GB free on C:" -f ((Get-PSDrive C).Free / 1GB) }
@@ -96,9 +109,16 @@ jobs:
           Free
 
       - name: Prepare directories.
+        env:
+          SELF_HOSTED: ${{ vars.WIN_RUNNER == 'self-hosted' }}
         run: |
-          mkdir %userprofile%\TBuild\Libraries
-          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          if "%SELF_HOSTED%"=="true" (
+            rem Persistent: the workspace (and TBuild in it) survives between runs.
+            if not exist %GITHUB_WORKSPACE%\TBuild\Libraries mkdir %GITHUB_WORKSPACE%\TBuild\Libraries
+          ) else (
+            mkdir %userprofile%\TBuild\Libraries
+            mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          )
           echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
           echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
 
@@ -107,6 +127,8 @@ jobs:
         with:
           submodules: recursive
           path: TBuild\luckgram-desktop
+          # Self-hosted keeps build output (out/) for incremental builds.
+          clean: ${{ vars.WIN_RUNNER != 'self-hosted' }}
 
       - name: Cache key.
         id: key
@@ -120,6 +142,7 @@ jobs:
           echo "done=win64-libs-$HASH-done" >> $GITHUB_OUTPUT
 
       - name: Finished libraries already cached?
+        if: vars.WIN_RUNNER != 'self-hosted'
         id: done
         uses: actions/cache/restore@v6
         with:
@@ -130,7 +153,7 @@ jobs:
           lookup-only: true
 
       - name: Restore partial libraries.
-        if: steps.done.outputs.cache-hit != 'true'
+        if: vars.WIN_RUNNER != 'self-hosted' && steps.done.outputs.cache-hit != 'true'
         id: partial
         uses: actions/cache/restore@v6
         with:
@@ -144,9 +167,12 @@ jobs:
         if: steps.done.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
-          git config --global user.email "ci@luckgram.invalid"
-          git config --global user.name "Luckgram CI"
+          if [ "${{ vars.WIN_RUNNER }}" != "self-hosted" ]; then
+            # Hosted only (disk space): no /Zi in Debug. Never edit the self-hosted machine's CMake.
+            sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
+          fi
+          git config --global user.email >/dev/null || git config --global user.email "ci@luckgram.invalid"
+          git config --global user.name >/dev/null || git config --global user.name "Luckgram CI"
 
       - name: ATL for the 14.44 toolset (breakpad dump_syms).
         if: steps.done.outputs.cache-hit != 'true'
@@ -158,6 +184,10 @@ jobs:
           $vs = & $vswhere -latest -products * -property installationPath
           $atl = Get-ChildItem "$vs\VC\Tools\MSVC\14.44.*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
           if ($atl) { Write-Host "ATL already present: $($atl.FullName)"; exit 0 }
+          if ('${{ vars.WIN_RUNNER }}' -eq 'self-hosted') {
+            Write-Error "ATL for MSVC 14.44 missing in $vs. Add component Microsoft.VisualStudio.Component.VC.14.44.17.14.ATL (C++ ATL for v143 build tools 14.44) with the Visual Studio Installer."
+            exit 1
+          }
           $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
           $p = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList `
             'modify', '--installPath', "`"$vs`"", `
@@ -190,12 +220,12 @@ jobs:
           %TBUILD%\luckgram-desktop\Telegram\build\prepare\win.bat silent %QT%
 
       - name: Free up some disk space.
-        if: steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
+        if: vars.WIN_RUNNER != 'self-hosted' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
         shell: bash
         run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' ')' -type f ')' -o -empty ')' -delete
 
       - name: Save finished libraries.
-        if: steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
+        if: vars.WIN_RUNNER != 'self-hosted' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -204,7 +234,7 @@ jobs:
           key: ${{ steps.key.outputs.done }}
 
       - name: Save partial libraries (continue next run).
-        if: always() && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success' && steps.prepare.outcome != 'skipped'
+        if: always() && vars.WIN_RUNNER != 'self-hosted' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success' && steps.prepare.outcome != 'skipped'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -215,13 +245,15 @@ jobs:
   build:
     name: Luckgram x64
     needs: libs
-    runs-on: windows-latest
+    if: (vars.WIN_RUNNER != 'self-hosted' || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ vars.WIN_RUNNER == 'self-hosted' && fromJSON('["self-hosted","luckgram-win"]') || 'windows-latest' }}
     timeout-minutes: 355
     defaults:
       run:
         shell: cmd
     steps:
       - name: Free disk space on C.
+        if: vars.WIN_RUNNER != 'self-hosted'
         shell: pwsh
         run: |
           function Free { "{0:N1} GB free on C:" -f ((Get-PSDrive C).Free / 1GB) }
@@ -242,9 +274,16 @@ jobs:
           Free
 
       - name: Prepare directories.
+        env:
+          SELF_HOSTED: ${{ vars.WIN_RUNNER == 'self-hosted' }}
         run: |
-          mkdir %userprofile%\TBuild\Libraries
-          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          if "%SELF_HOSTED%"=="true" (
+            rem Persistent: the workspace (and TBuild in it) survives between runs.
+            if not exist %GITHUB_WORKSPACE%\TBuild\Libraries mkdir %GITHUB_WORKSPACE%\TBuild\Libraries
+          ) else (
+            mkdir %userprofile%\TBuild\Libraries
+            mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          )
           echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
           echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
 
@@ -253,8 +292,11 @@ jobs:
         with:
           submodules: recursive
           path: TBuild\luckgram-desktop
+          # Self-hosted keeps build output (out/) for incremental builds.
+          clean: ${{ vars.WIN_RUNNER != 'self-hosted' }}
 
       - name: Restore libraries.
+        if: vars.WIN_RUNNER != 'self-hosted'
         uses: actions/cache/restore@v6
         with:
           path: |
@@ -274,7 +316,9 @@ jobs:
           echo "LUCKGRAM_VERSION=$VERSION" >> $GITHUB_ENV
           echo "LUCKGRAM_BUILD=${{ github.run_number }}" >> $GITHUB_ENV
           echo "Luckgram $VERSION build ${{ github.run_number }} (${GITHUB_SHA::7})"
-          sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
+          if [ "${{ vars.WIN_RUNNER }}" != "self-hosted" ]; then
+            sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
+          fi
 
       - uses: Eden-CI/msvc-dev-cmd@master
         name: Native Tools Command Prompt.
@@ -310,6 +354,8 @@ jobs:
         run: |
           $out = "$env:TBUILD\luckgram-desktop\out\Release"
           $stage = "$env:GITHUB_WORKSPACE\stage\Luckgram"
+          # Self-hosted workspaces persist: start from empty output folders.
+          Remove-Item -Recurse -Force "$env:GITHUB_WORKSPACE\stage", "$env:GITHUB_WORKSPACE\portable", "$env:GITHUB_WORKSPACE\dist" -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force "$stage\modules\x64\d3d" | Out-Null
           Copy-Item "$out\Telegram.exe" "$stage\Luckgram.exe"
           Copy-Item "$out\modules\x64\d3d\d3dcompiler_47.dll" "$stage\modules\x64\d3d\"

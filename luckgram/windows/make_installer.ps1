@@ -8,12 +8,20 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-# ChineseSimplified.isl needs Inno Setup 6.5+; install or upgrade.
-choco upgrade innosetup -y --no-progress | Out-Host
-$iscc = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
-  Sort-Object FullName -Descending | Select-Object -First 1
-if (-not $iscc) { throw 'ISCC.exe not found' }
-Write-Host "Using $($iscc.FullName)"
+# ChineseSimplified.isl needs Inno Setup 6.5+.
+function Find-Iscc {
+  Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe", "$env:LOCALAPPDATA\Programs\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue |
+    Where-Object { [version]('{0}.{1}' -f $_.VersionInfo.FileMajorPart, $_.VersionInfo.FileMinorPart) -ge [version]'6.5' } |
+    Sort-Object { $_.VersionInfo.FileMajorPart * 1000 + $_.VersionInfo.FileMinorPart } -Descending | Select-Object -First 1
+}
+$iscc = Find-Iscc
+if (-not $iscc -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+  # Hosted runners: install or upgrade with Chocolatey.
+  choco upgrade innosetup -y --no-progress | Out-Host
+  $iscc = Find-Iscc
+}
+if (-not $iscc) { throw 'Inno Setup 6.5+ (ISCC.exe) not found. Install it from https://jrsoftware.org/isdl.php' }
+Write-Host "Using $($iscc.FullName) $($iscc.VersionInfo.FileVersion)"
 
 New-Item -ItemType Directory -Force $OutputDir | Out-Null
 & $iscc.FullName `
