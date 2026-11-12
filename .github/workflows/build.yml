@@ -75,6 +75,26 @@ jobs:
       run:
         shell: cmd
     steps:
+      - name: Free disk space on C.
+        shell: pwsh
+        run: |
+          function Free { "{0:N1} GB free on C:" -f ((Get-PSDrive C).Free / 1GB) }
+          Free
+          # Large preinstalled toolchains this build never uses (keeps VS, Strawberry Perl, Python, CMake, Git).
+          $dirs = @(
+            'C:\Android', 'C:\ghcup', 'C:\cabal', 'C:\tools\kotlinc', 'C:\SeleniumWebDrivers',
+            'C:\Program Files\MongoDB', 'C:\Program Files\MySQL', 'C:\Program Files\R',
+            'C:\Program Files\Microsoft SQL Server', 'C:\Program Files\Microsoft Service Fabric',
+            'C:\Program Files\Microsoft SDKs\Azure', 'C:\Program Files\Amazon',
+            'C:\hostedtoolcache\windows\go', 'C:\hostedtoolcache\windows\Ruby',
+            'C:\hostedtoolcache\windows\Java_Temurin-Hotspot_jdk', 'C:\hostedtoolcache\windows\PyPy',
+            'C:\hostedtoolcache\windows\stack', 'C:\hostedtoolcache\windows\node',
+            'C:\ProgramData\chocolatey\lib\maven', 'C:\ProgramData\chocolatey\lib\pulumi'
+          ) | Where-Object { Test-Path $_ }
+          $jobs = $dirs | ForEach-Object { Start-Job -ArgumentList $_ { param($d) cmd /c rmdir /s /q "`"$d`"" 2>$null } }
+          $jobs | Wait-Job -Timeout 900 | Out-Null
+          Free
+
       - name: Prepare directories.
         run: |
           mkdir %userprofile%\TBuild\Libraries
@@ -201,6 +221,26 @@ jobs:
       run:
         shell: cmd
     steps:
+      - name: Free disk space on C.
+        shell: pwsh
+        run: |
+          function Free { "{0:N1} GB free on C:" -f ((Get-PSDrive C).Free / 1GB) }
+          Free
+          # Large preinstalled toolchains this build never uses (keeps VS, Strawberry Perl, Python, CMake, Git).
+          $dirs = @(
+            'C:\Android', 'C:\ghcup', 'C:\cabal', 'C:\tools\kotlinc', 'C:\SeleniumWebDrivers',
+            'C:\Program Files\MongoDB', 'C:\Program Files\MySQL', 'C:\Program Files\R',
+            'C:\Program Files\Microsoft SQL Server', 'C:\Program Files\Microsoft Service Fabric',
+            'C:\Program Files\Microsoft SDKs\Azure', 'C:\Program Files\Amazon',
+            'C:\hostedtoolcache\windows\go', 'C:\hostedtoolcache\windows\Ruby',
+            'C:\hostedtoolcache\windows\Java_Temurin-Hotspot_jdk', 'C:\hostedtoolcache\windows\PyPy',
+            'C:\hostedtoolcache\windows\stack', 'C:\hostedtoolcache\windows\node',
+            'C:\ProgramData\chocolatey\lib\maven', 'C:\ProgramData\chocolatey\lib\pulumi'
+          ) | Where-Object { Test-Path $_ }
+          $jobs = $dirs | ForEach-Object { Start-Job -ArgumentList $_ { param($d) cmd /c rmdir /s /q "`"$d`"" 2>$null } }
+          $jobs | Wait-Job -Timeout 900 | Out-Null
+          Free
+
       - name: Prepare directories.
         run: |
           mkdir %userprofile%\TBuild\Libraries
