@@ -128,6 +128,26 @@ jobs:
           git config --global user.email "ci@luckgram.invalid"
           git config --global user.name "Luckgram CI"
 
+      - name: ATL for the 14.44 toolset (breakpad dump_syms).
+        if: steps.done.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          # Hosted runners have ATL only for the default toolset; breakpad's
+          # Release dump_syms (built with -vcvars_ver=14.44) needs atlbase.h.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath
+          $atl = Get-ChildItem "$vs\VC\Tools\MSVC\14.44.*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
+          if ($atl) { Write-Host "ATL already present: $($atl.FullName)"; exit 0 }
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $p = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList `
+            'modify', '--installPath', "`"$vs`"", `
+            '--add', 'Microsoft.VisualStudio.Component.VC.14.44.17.14.ATL', `
+            '--quiet', '--norestart', '--nocache'
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { exit $p.ExitCode }
+          $atl = Get-ChildItem "$vs\VC\Tools\MSVC\14.44.*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
+          if (-not $atl) { Write-Error "ATL for 14.44 still missing"; exit 1 }
+          Write-Host "Installed: $($atl.FullName)"
+
       - uses: Eden-CI/msvc-dev-cmd@master
         if: steps.done.outputs.cache-hit != 'true'
         name: Native Tools Command Prompt.
