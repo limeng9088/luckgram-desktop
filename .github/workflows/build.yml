@@ -385,8 +385,14 @@ jobs:
           if %errorlevel% neq 0 exit /b %errorlevel%
 
       - name: Build.
+        env:
+          # Self-hosted (16 GB): MSBuild projects x cl /MP processes ran out of
+          # heap (C1060). Cap both; tune with WIN_BUILD_PARALLEL / WIN_CL_MP.
+          _CL_: ${{ env.SELF_HOSTED == 'true' && format('/MP{0}', vars.WIN_CL_MP || '4') || '' }}
+          BUILD_PARALLEL: ${{ env.SELF_HOSTED == 'true' && (vars.WIN_BUILD_PARALLEL || '2') || '' }}
         run: |
-          cmake --build %TBUILD%\luckgram-desktop\out --config Release --parallel
+          echo _CL_=%_CL_% BUILD_PARALLEL=%BUILD_PARALLEL%
+          cmake --build %TBUILD%\luckgram-desktop\out --config Release --parallel %BUILD_PARALLEL%
 
       - name: Stage files.
         shell: pwsh
