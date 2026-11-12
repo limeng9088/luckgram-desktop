@@ -386,10 +386,11 @@ jobs:
 
       - name: Build.
         env:
-          # Self-hosted (16 GB): MSBuild projects x cl /MP processes ran out of
-          # heap (C1060). Cap both; tune with WIN_BUILD_PARALLEL / WIN_CL_MP.
-          _CL_: ${{ env.SELF_HOSTED == 'true' && format('/MP{0}', vars.WIN_CL_MP || '4') || '' }}
-          BUILD_PARALLEL: ${{ env.SELF_HOSTED == 'true' && (vars.WIN_BUILD_PARALLEL || '2') || '' }}
+          # MSBuild projects in parallel x cl /MP processes ran out of heap
+          # (C1060) on 16 GB, both hosted and self-hosted. Hosted: /MP4, one
+          # project at a time. Self-hosted: vars WIN_CL_MP / WIN_BUILD_PARALLEL.
+          _CL_: ${{ format('/MP{0}', env.SELF_HOSTED == 'true' && (vars.WIN_CL_MP || '4') || '4') }}
+          BUILD_PARALLEL: ${{ env.SELF_HOSTED == 'true' && (vars.WIN_BUILD_PARALLEL || '2') || '1' }}
         run: |
           echo _CL_=%_CL_% BUILD_PARALLEL=%BUILD_PARALLEL%
           cmake --build %TBUILD%\luckgram-desktop\out --config Release --parallel %BUILD_PARALLEL%
