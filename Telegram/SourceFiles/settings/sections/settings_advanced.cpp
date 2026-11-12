@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_advanced.h"
 
+#include "luckgram/luckgram_desktop.h"
+
 #include "settings/settings_common_session.h"
 
 #include "api/api_global_privacy.h"
@@ -787,6 +789,19 @@ void BuildSystemIntegrationSection(SectionBuilder &builder) {
 				psSendToMenu(checked);
 				Local::writeSettings();
 			}, sendto->lifetime());
+		}
+	}
+
+	// Luckgram: tg:// links, off by default (D1).
+	if (!Platform::IsWindowsStoreBuild() && !Platform::IsMacStoreBuild()) {
+		const auto tgScheme = builder.addCheckbox({
+			.id = u"advanced/luckgram_tg_scheme"_q,
+			.title = Luckgram::TgSchemeTitle(),
+			.checked = Luckgram::TgSchemeEnabled(),
+			.keywords = { u"tg"_q, u"link"_q, u"protocol"_q, u"链接"_q },
+		});
+		if (tgScheme) {
+			Luckgram::BindTgSchemeCheckbox(tgScheme);
 		}
 	}
 
@@ -1890,6 +1905,13 @@ void SetupSystemIntegrationContent(
 			psSendToMenu(checked);
 			Local::writeSettings();
 		}, sendto->lifetime());
+	}
+
+	// Luckgram: tg:// links, off by default (D1).
+	if (!Platform::IsWindowsStoreBuild() && !Platform::IsMacStoreBuild()) {
+		Luckgram::BindTgSchemeCheckbox(addCheckbox(
+			Luckgram::TgSchemeTitle(),
+			Luckgram::TgSchemeEnabled()));
 	}
 }
 

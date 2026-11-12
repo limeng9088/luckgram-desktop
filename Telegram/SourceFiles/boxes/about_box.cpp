@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/update_channel.h"
 #include "core/update_checker.h"
 #include "core/version.h"
+#include "luckgram/luckgram_desktop.h"
 #include "lang/lang_keys.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/painter.h"
@@ -47,11 +48,11 @@ rpl::producer<TextWithEntities> Text2() {
 		lt_gpl_link,
 		rpl::single(tr::link(
 			"GNU GPL",
-			"https://github.com/telegramdesktop/tdesktop/blob/master/LICENSE")),
+			"https://github.com/limeng9088/luckgram-desktop/blob/master/LICENSE")),
 		lt_github_link,
 		rpl::single(tr::link(
 			"GitHub",
-			"https://github.com/telegramdesktop/tdesktop")),
+			"https://github.com/limeng9088/luckgram-desktop")),
 		tr::marked);
 }
 
@@ -65,7 +66,7 @@ rpl::producer<TextWithEntities> Text3() {
 } // namespace
 
 void AboutBox(not_null<Ui::GenericBox*> box) {
-	box->setTitle(u"Telegram Desktop"_q);
+	box->setTitle(AppName.utf16());
 
 	auto layout = box->verticalLayout();
 
@@ -110,7 +111,12 @@ void AboutBox(not_null<Ui::GenericBox*> box) {
 					"version of Telegram Desktop was copied "
 					"to the clipboard."));
 		} else {
-			File::OpenUrl(Core::App().changelogLink());
+			// Luckgram: the source of exactly this build.
+			const auto commit = Luckgram::CommitHash();
+			File::OpenUrl(commit.isEmpty()
+				? u"https://github.com/limeng9088/luckgram-desktop"_q
+				: (u"https://github.com/limeng9088/luckgram-desktop/commit/"_q
+					+ commit));
 		}
 	});
 
@@ -169,6 +175,7 @@ namespace {
 #ifdef _DEBUG
 	result += " DEBUG";
 #endif
+	result += Luckgram::VersionSuffix(withCommit);
 	if (withCommit
 		&& Core::BuildIsCanary
 		&& Core::CanaryCommitHash[0] != '\0') {

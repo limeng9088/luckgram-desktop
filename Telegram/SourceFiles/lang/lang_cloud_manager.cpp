@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "lang/lang_cloud_manager.h"
 
+#include "luckgram/luckgram_desktop.h"
+
 #include "lang/lang_instance.h"
 #include "lang/lang_file_parser.h"
 #include "lang/lang_text_entity.h"
@@ -260,6 +262,16 @@ void CloudManager::setSuggestedLanguage(const QString &langCode) {
 	if (!_languageWasSuggested) {
 		_languageWasSuggested = true;
 		_firstLanguageSuggestion.fire({});
+
+		// Luckgram: Chinese system -> Simplified Chinese, no prompt (D1).
+		if (Luckgram::ShouldSwitchToChinese(
+				_langpack.id(),
+				_langpack.systemLangCode())) {
+			Luckgram::MarkSwitchedToChinese();
+			switchToLanguage(QString::fromLatin1(
+				Luckgram::kChineseLangPackId));
+			return;
+		}
 
 		if (Core::App().offerLegacyLangPackSwitch()
 			&& _langpack.id().isEmpty()

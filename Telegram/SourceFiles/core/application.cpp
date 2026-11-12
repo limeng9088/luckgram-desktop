@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "core/application.h"
 
+#include "luckgram/luckgram_desktop.h"
+
 #include "data/data_abstract_structure.h"
 #include "data/data_channel.h"
 #include "data/data_forum.h"
@@ -489,8 +491,9 @@ void Application::run() {
 }
 
 void Application::autoRegisterUrlScheme() {
+	// Luckgram: tg:// is registered only when the user enabled it (D1).
 	if (!OptionSkipUrlSchemeRegister.value()) {
-		InvokeQueued(this, [] { RegisterUrlScheme(); });
+		InvokeQueued(this, [] { Luckgram::AutoRegisterTgScheme(); });
 	}
 }
 
@@ -2181,42 +2184,8 @@ void Application::startShortcuts() {
 }
 
 void Application::RegisterUrlScheme() {
-	const auto arguments = Launcher::Instance().customWorkingDir()
-		? u"-workdir \"%1\""_q.arg(cWorkingDir())
-		: QString();
-
-	base::Platform::RegisterUrlScheme(base::Platform::UrlSchemeDescriptor{
-		.executable = Platform::ExecutablePathForShortcuts(),
-		.arguments = arguments,
-		.protocol = u"tg"_q,
-		.protocolName = u"Telegram Link"_q,
-		.shortAppName = u"tdesktop"_q,
-		.longAppName = QCoreApplication::applicationName(),
-		.displayAppName = AppName.utf16(),
-		.displayAppDescription = AppName.utf16(),
-	});
-
-	base::Platform::RegisterUrlScheme(base::Platform::UrlSchemeDescriptor{
-		.executable = Platform::ExecutablePathForShortcuts(),
-		.arguments = arguments,
-		.protocol = u"tonsite"_q,
-		.protocolName = u"TonSite Link"_q,
-		.shortAppName = u"tdesktop"_q,
-		.longAppName = QCoreApplication::applicationName(),
-		.displayAppName = AppName.utf16(),
-		.displayAppDescription = AppName.utf16(),
-	});
-
-	base::Platform::RegisterUrlScheme(base::Platform::UrlSchemeDescriptor{
-		.executable = Platform::ExecutablePathForShortcuts(),
-		.arguments = arguments,
-		.protocol = u"ton"_q,
-		.protocolName = u"Ton Link"_q,
-		.shortAppName = u"tdesktop"_q,
-		.longAppName = QCoreApplication::applicationName(),
-		.displayAppName = AppName.utf16(),
-		.displayAppDescription = AppName.utf16(),
-	});
+	// Luckgram: own registry names, tg:// only (see luckgram_desktop.cpp).
+	Luckgram::RegisterTgScheme();
 }
 
 bool IsAppLaunched() {

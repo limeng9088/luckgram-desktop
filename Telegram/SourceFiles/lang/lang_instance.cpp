@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "lang/lang_instance.h"
 
+#include "luckgram/luckgram_brand.h"
+
 #include "core/application.h"
 #include "storage/serialize_common.h"
 #include "storage/localstorage.h"
@@ -28,11 +30,16 @@ constexpr auto kCloudLangPackName = "tdesktop"_cs;
 constexpr auto kCustomLanguage = "#custom"_cs;
 constexpr auto kLangValuesLimit = 20000;
 
+// Luckgram: built-in values with the product name replaced.
+[[nodiscard]] QString OriginalValue(ushort key) {
+	return Luckgram::RebrandText(GetOriginalValue(key));
+}
+
 std::vector<QString> PrepareDefaultValues() {
 	auto result = std::vector<QString>();
 	result.reserve(kKeysCount);
 	for (auto i = 0; i != kKeysCount; ++i) {
-		result.emplace_back(GetOriginalValue(ushort(i)));
+		result.emplace_back(OriginalValue(ushort(i)));
 	}
 	return result;
 }
@@ -205,7 +212,11 @@ void ParseKeyValue(
 		Save &&save) {
 	const auto index = GetKeyIndex(QLatin1String(key));
 	if (index != kKeysCount) {
-		ValueParser parser(key, index, value);
+		// Luckgram: rebrand the raw value, before {tag} parsing.
+		const auto rebranded = Luckgram::RebrandLangValue(
+			index,
+			QString::fromUtf8(value)).toUtf8();
+		ValueParser parser(key, index, rebranded);
 		if (parser.parse()) {
 			save(index, parser.takeResult());
 		}
@@ -297,7 +308,7 @@ void Instance::reset(const Language &data) {
 	_version = 0;
 	_nonDefaultValues.clear();
 	for (auto i = 0, count = int(_values.size()); i != count; ++i) {
-		_values[i] = GetOriginalValue(ushort(i));
+		_values[i] = OriginalValue(ushort(i));
 	}
 	ranges::fill(_nonDefaultSet, 0);
 	updateChoosingStickerReplacement();
@@ -772,9 +783,9 @@ void Instance::resetValue(const QByteArray &key) {
 				: QString();
 			_values[keyIndex] = !base.isEmpty()
 				? base
-				: GetOriginalValue(keyIndex);
+				: OriginalValue(keyIndex);
 		} else if (!_derived->_nonDefaultSet[keyIndex]) {
-			_derived->_values[keyIndex] = GetOriginalValue(keyIndex);
+			_derived->_values[keyIndex] = OriginalValue(keyIndex);
 		}
 		if (keyIndex == tr::lng_send_action_choose_sticker.base
 			|| keyIndex == tr::lng_user_action_choose_sticker.base) {
