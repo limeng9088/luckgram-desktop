@@ -42,8 +42,6 @@ concurrency:
 env:
   # 'true' when the Windows jobs run on [self-hosted, luckgram-win].
   SELF_HOSTED: ${{ (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) }}
-  # Bump when the prune keep-list changes: a pruned cache cannot be repaired.
-  PRUNE_RULES: keep-patch-tdesktop_rust-out
   PREPARE_PATH: Telegram/build/prepare/prepare.py
   QT: qt6
 
@@ -146,9 +144,10 @@ jobs:
           DOC=$TBUILD/luckgram-desktop/docs/building-win.md
           SDK="$(grep "SDK version" $DOC | sed -r 's/.*\*\*(.*)\*\* SDK version.*/\1/')"
           echo "SDK=$SDK" >> $GITHUB_ENV
-          HASH=$( { sha256sum $TBUILD/luckgram-desktop/$PREPARE_PATH | awk '{print $1}'; echo "$SDK"; echo "$QT"; echo "$PRUNE_RULES"; } | sha256sum | awk '{print $1}')
+          HASH=$( { sha256sum $TBUILD/luckgram-desktop/$PREPARE_PATH | awk '{print $1}'; echo "$SDK"; echo "$QT"; } | sha256sum | awk '{print $1}')
           echo "prefix=win64-libs-$HASH-" >> $GITHUB_OUTPUT
-          echo "done=win64-libs-$HASH-done" >> $GITHUB_OUTPUT
+          # done2: "-done" caches were pruned without tdesktop_rust/out.
+          echo "done=win64-libs-$HASH-done2" >> $GITHUB_OUTPUT
 
       - name: Finished libraries already cached?
         if: env.SELF_HOSTED != 'true'
@@ -170,7 +169,11 @@ jobs:
             ${{ env.TBUILD }}\Libraries
             ${{ env.TBUILD }}\ThirdParty
           key: ${{ steps.key.outputs.prefix }}partial-${{ github.run_id }}
-          restore-keys: ${{ steps.key.outputs.prefix }}partial-
+          # Last resort: any older cache of these libraries (incl. "-done"),
+          # prepare.py rebuilds what is missing or stale.
+          restore-keys: |
+            ${{ steps.key.outputs.prefix }}partial-
+            ${{ steps.key.outputs.prefix }}
 
       - name: CMake patch.
         if: steps.done.outputs.cache-hit != 'true'
@@ -220,6 +223,17 @@ jobs:
         run: |
           nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
           nuget sources Add -Source https://api.nuget.org/v3/index.json & exit 0
+
+      - name: Repair restored libraries.
+        # Older prunes deleted the generated wallet_engine.cpp while the
+        # stage keys stayed valid; make prepare.py rebuild those stages.
+        if: env.SELF_HOSTED != 'true' && steps.partial.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          if [ -d "$LibrariesPath/cache_keys" ] && [ ! -f "$LibrariesPath/tdesktop_rust/out/src/wallet_engine/wallet_engine.cpp" ]; then
+            echo "wallet_engine.cpp missing: rebuilding tlottie, wallet-engine, tdesktop_rust"
+            rm -f "$LibrariesPath/cache_keys/tlottie" "$LibrariesPath/cache_keys/wallet-engine" "$LibrariesPath/cache_keys/tdesktop_rust"
+          fi
 
       - name: Prune restored partial libraries.
         # Finished stages are skipped by prepare.py (cache_keys), so their
