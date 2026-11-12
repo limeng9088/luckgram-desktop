@@ -212,6 +212,17 @@ jobs:
           nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
           nuget sources Add -Source https://api.nuget.org/v3/index.json & exit 0
 
+      - name: Prune restored partial libraries.
+        # Finished stages are skipped by prepare.py (cache_keys), so their
+        # intermediate files (.obj, sources) only take disk space. Same rule
+        # as the final prune below; C: ran out of space without this.
+        if: vars.WIN_RUNNER != 'self-hosted' && steps.partial.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          df -h /c | tail -1
+          find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' ')' -type f ')' -o -empty ')' -delete
+          df -h /c | tail -1
+
       - name: Libraries.
         id: prepare
         if: steps.done.outputs.cache-hit != 'true'
@@ -222,7 +233,7 @@ jobs:
       - name: Free up some disk space.
         if: vars.WIN_RUNNER != 'self-hosted' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
         shell: bash
-        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' ')' -type f ')' -o -empty ')' -delete
+        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' ')' -type f ')' -o -empty ')' -delete
 
       - name: Save finished libraries.
         if: vars.WIN_RUNNER != 'self-hosted' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
@@ -232,6 +243,13 @@ jobs:
             ${{ env.TBUILD }}\Libraries
             ${{ env.TBUILD }}\ThirdParty
           key: ${{ steps.key.outputs.done }}
+
+      - name: Prune partial libraries.
+        if: always() && vars.WIN_RUNNER != 'self-hosted' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success' && steps.prepare.outcome != 'skipped'
+        shell: bash
+        run: |
+          find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' ')' -type f ')' -o -empty ')' -delete || true
+          df -h /c | tail -1
 
       - name: Save partial libraries (continue next run).
         if: always() && vars.WIN_RUNNER != 'self-hosted' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success' && steps.prepare.outcome != 'skipped'
