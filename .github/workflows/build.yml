@@ -42,6 +42,8 @@ concurrency:
 env:
   # 'true' when the Windows jobs run on [self-hosted, luckgram-win].
   SELF_HOSTED: ${{ (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) }}
+  # Bump when the prune keep-list changes: a pruned cache cannot be repaired.
+  PRUNE_RULES: keep-patch-tdesktop_rust-out
   PREPARE_PATH: Telegram/build/prepare/prepare.py
   QT: qt6
 
@@ -144,7 +146,7 @@ jobs:
           DOC=$TBUILD/luckgram-desktop/docs/building-win.md
           SDK="$(grep "SDK version" $DOC | sed -r 's/.*\*\*(.*)\*\* SDK version.*/\1/')"
           echo "SDK=$SDK" >> $GITHUB_ENV
-          HASH=$( { sha256sum $TBUILD/luckgram-desktop/$PREPARE_PATH | awk '{print $1}'; echo "$SDK"; echo "$QT"; } | sha256sum | awk '{print $1}')
+          HASH=$( { sha256sum $TBUILD/luckgram-desktop/$PREPARE_PATH | awk '{print $1}'; echo "$SDK"; echo "$QT"; echo "$PRUNE_RULES"; } | sha256sum | awk '{print $1}')
           echo "prefix=win64-libs-$HASH-" >> $GITHUB_OUTPUT
           echo "done=win64-libs-$HASH-done" >> $GITHUB_OUTPUT
 
@@ -227,7 +229,7 @@ jobs:
         shell: bash
         run: |
           df -h /c | tail -1
-          find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' ')' -type f ')' -o -empty ')' -delete
+          find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' -o -path '*/tdesktop_rust/out/*' ')' -type f ')' -o -empty ')' -delete
           df -h /c | tail -1
 
       - name: Libraries.
@@ -240,7 +242,7 @@ jobs:
       - name: Free up some disk space.
         if: env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
         shell: bash
-        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' ')' -type f ')' -o -empty ')' -delete
+        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' -o -path '*/tdesktop_rust/out/*' ')' -type f ')' -o -empty ')' -delete
 
       - name: Save finished libraries.
         if: env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
@@ -255,7 +257,7 @@ jobs:
         if: always() && env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success' && steps.prepare.outcome != 'skipped'
         shell: bash
         run: |
-          find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' ')' -type f ')' -o -empty ')' -delete || true
+          find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' -o -path '*/tdesktop_rust/out/*' ')' -type f ')' -o -empty ')' -delete || true
           df -h /c | tail -1
 
       - name: Save partial libraries (continue next run).
