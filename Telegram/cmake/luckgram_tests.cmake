@@ -24,6 +24,19 @@ PRIVATE
     luckgram/luckgram_onboarding_logic.h
     luckgram/tests/luckgram_onboarding_tests.cpp
 
+    # D10 discover, square, people nearby, scan, block list
+    luckgram/discover/luckgram_discover_logic.cpp
+    luckgram/discover/luckgram_discover_logic.h
+    luckgram/discover/luckgram_nearby_logic.cpp
+    luckgram/discover/luckgram_nearby_logic.h
+    luckgram/discover/luckgram_scan_logic.cpp
+    luckgram/discover/luckgram_scan_logic.h
+    luckgram/discover/luckgram_square_logic.cpp
+    luckgram/discover/luckgram_square_logic.h
+    luckgram/tests/luckgram_discover_tests.cpp
+    luckgram/tests/luckgram_nearby_tests.cpp
+    luckgram/tests/luckgram_square_tests.cpp
+
     # D12 Luckgram Pro, account link
     luckgram/pro/luckgram_pro_logic.cpp
     luckgram/pro/luckgram_pro_logic.h

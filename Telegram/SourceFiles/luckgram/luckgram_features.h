@@ -20,6 +20,7 @@ enum class Group {
 	MessagesLanguage,
 	MediaCallsStorage,
 	ProfileOrganize,
+	Discover, // D10: People Nearby, Square (mobile LuckgramFeature.Group.DISCOVER).
 	AI,
 	Debug, // Only in dev builds.
 };
