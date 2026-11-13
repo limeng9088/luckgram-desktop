@@ -17,6 +17,11 @@ PRIVATE
     luckgram/tests/luckgram_test.cpp
     luckgram/tests/luckgram_test.h
 
+    # D2 when device data is cleared on logout
+    luckgram/luckgram_logout_logic.cpp
+    luckgram/luckgram_logout_logic.h
+    luckgram/tests/luckgram_logout_tests.cpp
+
     # D2 encrypted storage naming
     luckgram/luckgram_storage_logic.cpp
     luckgram/luckgram_storage_logic.h

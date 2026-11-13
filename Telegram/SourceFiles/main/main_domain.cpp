@@ -9,8 +9,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "luckgram/luckgram_double_bottom.h" // Luckgram D8
 
-#include "luckgram/luckgram_service.h"
-
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "core/shortcuts.h"
@@ -499,7 +497,8 @@ bool Domain::removePasscodeIfEmpty() {
 		return false;
 	}
 	Local::reset();
-	Luckgram::OnLoggedOutCompletely(); // D2: Luckgram settings and token.
+	// Luckgram D2: not here (this also runs at every start while nobody is
+	// logged in), see Main::Account::loggedOut().
 
 	// We completely logged out, remove the passcode if it was there.
 	if (Core::App().passcodeLocked()) {
