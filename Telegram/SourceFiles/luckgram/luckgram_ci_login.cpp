@@ -29,7 +29,8 @@ namespace {
 
 // Kept in the binary so CI can check the release exe does not contain it.
 constexpr auto kMarker = "LuckgramCiTestLogin";
-constexpr auto kTestDc = 2;
+constexpr auto kTestDc = 2; // When the account has no main DC 1..3 yet.
+constexpr auto kCodeLength = 5; // When sentCode gives none.
 constexpr auto kStartDelay = 3000;
 
 void Log(const QString &text) {
@@ -39,6 +40,9 @@ void Log(const QString &text) {
 struct Flow {
 	not_null<Main::Account*> account;
 	MTP::Sender api;
+	int dc = kTestDc; // The X in 99966 X YYYY, the DC the number is on.
+	int codeLength = kCodeLength;
+	bool retried = false;
 	QString phone;
 	QByteArray phoneHash;
 	QByteArray termsId;
@@ -102,7 +106,8 @@ void SignUp(std::shared_ptr<Flow> flow) {
 }
 
 void SignIn(std::shared_ptr<Flow> flow) {
-	const auto code = QString(5, QChar('0' + kTestDc));
+	// Test numbers: the code is the DC digit of the number repeated.
+	const auto code = QString(flow->codeLength, QChar('0' + flow->dc));
 	flow->api.request(MTPauth_SignIn(
 		MTP_flags(MTPauth_SignIn::Flag::f_phone_code),
 		MTP_string(flow->phone),
@@ -114,6 +119,35 @@ void SignIn(std::shared_ptr<Flow> flow) {
 	}).fail([=](const MTP::Error &error) {
 		Fail(flow, u"auth.signIn"_q, error);
 	}).send();
+}
+
+[[nodiscard]] int MainDc(not_null<Main::Account*> account) {
+	const auto dc = int(account->mtp().mainDcId());
+	return (dc >= 1 && dc <= 3) ? dc : kTestDc;
+}
+
+void Start(std::shared_ptr<Flow> flow);
+
+[[nodiscard]] int CodeLength(const MTPauth_SentCodeType &type) {
+	auto result = 0;
+	type.match([&](const MTPDauth_sentCodeTypeApp &data) {
+		result = data.vlength().v;
+	}, [&](const MTPDauth_sentCodeTypeSms &data) {
+		result = data.vlength().v;
+	}, [&](const MTPDauth_sentCodeTypeFragmentSms &data) {
+		result = data.vlength().v;
+	}, [&](const MTPDauth_sentCodeTypeCall &data) {
+		result = data.vlength().v;
+	}, [&](const MTPDauth_sentCodeTypeFlashCall &) {
+	}, [&](const MTPDauth_sentCodeTypeMissedCall &) {
+	}, [&](const MTPDauth_sentCodeTypeFirebaseSms &) {
+	}, [&](const MTPDauth_sentCodeTypeEmailCode &data) {
+		result = data.vlength().v;
+	}, [&](const MTPDauth_sentCodeTypeSmsWord &) {
+	}, [&](const MTPDauth_sentCodeTypeSmsPhrase &) {
+	}, [&](const MTPDauth_sentCodeTypeSetUpEmailRequired &) {
+	});
+	return result;
 }
 
 void SendCode(std::shared_ptr<Flow> flow) {
@@ -129,6 +163,20 @@ void SendCode(std::shared_ptr<Flow> flow) {
 	)).done([=](const MTPauth_SentCode &result) {
 		result.match([&](const MTPDauth_sentCode &data) {
 			flow->phoneHash = data.vphone_code_hash().v;
+			const auto length = CodeLength(data.vtype());
+			flow->codeLength = (length > 0) ? length : kCodeLength;
+			const auto dc = MainDc(flow->account);
+			Log(u"auth.sendCode: type %1, code length %2, main dc %3"_q
+				.arg(data.vtype().type(), 0, 16)
+				.arg(length)
+				.arg(dc));
+			if (dc != flow->dc && !flow->retried) {
+				// Migrated (PHONE_MIGRATE): a number on that DC instead,
+				// so the number, the DC and the code agree.
+				flow->retried = true;
+				Start(flow);
+				return;
+			}
 			SignIn(flow);
 		}, [&](const MTPDauth_sentCodeSuccess &data) {
 			Authorized(flow, data.vauthorization());
@@ -139,6 +187,20 @@ void SendCode(std::shared_ptr<Flow> flow) {
 	}).fail([=](const MTP::Error &error) {
 		Fail(flow, u"auth.sendCode"_q, error);
 	}).send();
+}
+
+void Start(std::shared_ptr<Flow> flow) {
+	// The number on the DC the account talks to (test DC 1..3), so
+	// auth.sendCode is not migrated and the code is that DC's digit.
+	flow->dc = MainDc(flow->account);
+	flow->phone = u"99966%1%2"_q
+		.arg(flow->dc)
+		.arg(base::RandomIndex(10000), 4, 10, QChar('0'));
+	flow->phoneHash = QByteArray();
+	Log(u"test number 99966%1XXXX on test dc %2"_q
+		.arg(flow->dc)
+		.arg(flow->dc));
+	SendCode(flow);
 }
 
 } // namespace
@@ -156,13 +218,9 @@ void CiTestLogin(Fn<void(bool)> done) {
 		return;
 	}
 	auto flow = std::make_shared<Flow>(account);
-	flow->phone = u"99966%1%2"_q
-		.arg(kTestDc)
-		.arg(base::RandomIndex(10000), 4, 10, QChar('0'));
 	flow->done = std::move(done);
-	Log(u"test number 99966%1XXXX"_q.arg(kTestDc));
 	QTimer::singleShot(kStartDelay, qApp, [=] {
-		SendCode(flow);
+		Start(flow);
 	});
 }
 

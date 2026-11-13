@@ -15,7 +15,9 @@ namespace Luckgram {
 [[nodiscard]] bool CiTestLoginAvailable();
 
 // Adds a test-environment account, signs in (or signs up) with a random
-// public test number (99966 2 XXXX, code 22222) and calls `done(true)` once
+// public test number on the account's main test DC X (99966 X YYYY, the
+// code is X repeated, as long as auth.sendCode says; 22222 on DC 2) and
+// calls `done(true)` once
 // the session exists. Production accounts and data are not touched.
 void CiTestLogin(Fn<void(bool)> done);
 
