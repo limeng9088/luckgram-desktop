@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "platform/platform_window_title.h"
 
+#include "core/version.h" // Luckgram (M1): AppName
+
 #include "ui/image/image_prepare.h"
 #include "ui/painter.h"
 #include "core/application.h"
@@ -83,10 +85,10 @@ void PreviewWindowTitle(Painter &p, const style::palette &palette, QRect body, i
 		constexpr auto kTrafficLightsWidth = 8 + 3 * (12 + 8);
 		p.drawText(
 			titleRect.adjusted(kTrafficLightsWidth, 0, 0, 0),
-			u"Telegram"_q,
+			AppName.utf16() /* Luckgram (M1) */,
 			style::al_left);
 	} else {
-		p.drawText(titleRect, u"Telegram"_q, style::al_center);
+		p.drawText(titleRect, AppName.utf16() /* Luckgram (M1) */, style::al_center);
 	}
 
 	auto isGraphite = ([NSColor currentControlTint] == NSGraphiteControlTint);

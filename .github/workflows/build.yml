@@ -766,3 +766,300 @@ jobs:
             sleep $((i * 5))   # another app pushed at the same time: clone again and retry
           done
           echo "::error::could not push download/latest.json"; exit 1
+  # M1: macOS, universal (Apple silicon + Intel), macOS 12+, GitHub hosted
+  # Mac (never the iOS machine xcode-27). Same two-job split as Windows:
+  # mac-libs builds the libraries with prepare.py (universal by default on
+  # macOS) and caches them, partly done work is kept for the next run.
+  mac-libs:
+    name: Libraries (macOS)
+    needs: credentials
+    runs-on: macos-15
+    timeout-minutes: 355
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '12.0'
+    steps:
+      - name: Clone.
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          path: luckgram-desktop
+
+      - name: Cache key.
+        id: key
+        run: |
+          HASH=$( { shasum -a 256 luckgram-desktop/$PREPARE_PATH | awk '{print $1}'; echo "$MACOSX_DEPLOYMENT_TARGET"; } | shasum -a 256 | awk '{print $1}')
+          echo "prefix=mac-libs-$HASH-" >> $GITHUB_OUTPUT
+          echo "done=mac-libs-$HASH-done" >> $GITHUB_OUTPUT
+
+      - name: Finished libraries already cached?
+        id: done
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            Libraries
+            ThirdParty
+          key: ${{ steps.key.outputs.done }}
+          lookup-only: true
+
+      - name: Restore partial libraries.
+        if: steps.done.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            Libraries
+            ThirdParty
+          key: ${{ steps.key.outputs.prefix }}partial-${{ github.run_id }}
+          restore-keys: |
+            ${{ steps.key.outputs.prefix }}partial-
+            ${{ steps.key.outputs.prefix }}
+
+      - name: First set up.
+        if: steps.done.outputs.cache-hit != 'true'
+        run: |
+          brew install automake libtool meson nasm ninja pkg-config
+          sudo mdutil -a -i off || true
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          git config --global user.email >/dev/null || git config --global user.email "ci@luckgram.invalid"
+
+      - name: Libraries.
+        id: prepare
+        if: steps.done.outputs.cache-hit != 'true'
+        timeout-minutes: 320
+        run: ./luckgram-desktop/Telegram/build/prepare/mac.sh skip-release silent
+
+      - name: Free up some disk space.
+        if: always() && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'skipped'
+        run: find Libraries '(' '(' ! '(' -name '*.a' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -perm +111 ')' -type f ')' -o -empty ')' -delete || true
+
+      - name: Save finished libraries.
+        if: steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            Libraries
+            ThirdParty
+          key: ${{ steps.key.outputs.done }}
+
+      - name: Save partial libraries (continue next run).
+        if: always() && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success' && steps.prepare.outcome != 'skipped'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            Libraries
+            ThirdParty
+          key: ${{ steps.key.outputs.prefix }}partial-${{ github.run_id }}
+
+      - name: Not finished yet.
+        if: steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success'
+        run: |
+          echo "::error::Libraries not finished in this run; the partial build is cached, the next run continues."
+          exit 1
+
+  # Luckgram.app (bundle id cc.luckgram.desktop), Xray as a universal binary,
+  # ad-hoc signature, Luckgram-<version>-<build>.dmg and the update zip.
+  macos:
+    name: Luckgram macOS
+    needs: [credentials, mac-libs]
+    runs-on: macos-15
+    timeout-minutes: 355
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '12.0'
+    steps:
+      - name: Clone.
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          path: luckgram-desktop
+
+      - name: Cache key.
+        id: key
+        run: |
+          HASH=$( { shasum -a 256 luckgram-desktop/$PREPARE_PATH | awk '{print $1}'; echo "$MACOSX_DEPLOYMENT_TARGET"; } | shasum -a 256 | awk '{print $1}')
+          echo "done=mac-libs-$HASH-done" >> $GITHUB_OUTPUT
+
+      - name: Restore libraries.
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            Libraries
+            ThirdParty
+          key: ${{ steps.key.outputs.done }}
+          fail-on-cache-miss: true
+
+      - name: First set up.
+        run: |
+          brew install automake libtool meson nasm ninja pkg-config create-dmg
+          sudo mdutil -a -i off || true
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Version.
+        run: |
+          VERSION=$(sed -n 's/.*AppVersionStr = "\([0-9.]*\)".*/\1/p' luckgram-desktop/Telegram/SourceFiles/core/version.h)
+          [ -n "$VERSION" ] || { echo "::error::Could not read AppVersionStr"; exit 1; }
+          echo "LUCKGRAM_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "LUCKGRAM_BUILD=${{ github.run_number }}" >> $GITHUB_ENV
+          echo "Luckgram $VERSION build ${{ github.run_number }} (${GITHUB_SHA::7})"
+          echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Configure.
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          LUCKGRAM_DEV: ${{ inputs.dev && 'ON' || 'OFF' }}
+        run: |
+          cd luckgram-desktop/Telegram
+          ./configure.sh \
+            -D CMAKE_CONFIGURATION_TYPES=Release \
+            -D CMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -D CMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET \
+            -D CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
+            -D LUCKGRAM_DEV=$LUCKGRAM_DEV \
+            -D TDESKTOP_API_ID=$TG_API_ID \
+            -D TDESKTOP_API_HASH=$TG_API_HASH \
+            -D LUCKGRAM_REQUIRE_API_CREDENTIALS=ON \
+            -D LUCKGRAM_CI_BUILD=OFF \
+            -D LUCKGRAM_BUILD_NUMBER=$LUCKGRAM_BUILD \
+            -D LUCKGRAM_COMMIT=${{ github.sha }} \
+            -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON \
+            -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON
+
+      - name: Build.
+        run: |
+          cd luckgram-desktop/out
+          cmake --build . --config Release --parallel
+          echo "Build took $(( ($(date +%s) - BUILD_START) / 60 )) min"
+
+      - name: Stage Luckgram.app.
+        run: |
+          set -euo pipefail
+          STAGE="${GITHUB_WORKSPACE:?}/stage"
+          APP="$STAGE/Luckgram.app"
+          rm -rf "${GITHUB_WORKSPACE:?}/stage" "${GITHUB_WORKSPACE:?}/dist"
+          mkdir -p "$STAGE" "${GITHUB_WORKSPACE:?}/dist"
+          cp -R luckgram-desktop/out/Release/Luckgram.app "$APP"
+          # D12: the built-in Xray core, pinned by version and SHA-256
+          # (luckgram/xray/xray-core.lock); both Mac builds joined with lipo.
+          LOCK=luckgram-desktop/luckgram/xray/xray-core.lock
+          XVER=$(sed -n 's/^version=//p' "$LOCK")
+          for arch in macos-64 macos-arm64-v8a; do
+            want=$(sed -n "s/^$arch=//p" "$LOCK")
+            curl -sSfL --retry 3 -o "${RUNNER_TEMP:?}/$arch.zip" "https://github.com/XTLS/Xray-core/releases/download/$XVER/Xray-$arch.zip"
+            got=$(shasum -a 256 "${RUNNER_TEMP:?}/$arch.zip" | cut -d' ' -f1)
+            [ "$want" = "$got" ] || { echo "::error::Xray-$arch.zip SHA-256 mismatch: $got"; exit 1; }
+            mkdir -p "${RUNNER_TEMP:?}/xray-${arch:?}"
+            unzip -q -o "${RUNNER_TEMP:?}/$arch.zip" -d "${RUNNER_TEMP:?}/xray-${arch:?}"
+          done
+          lipo -create "$RUNNER_TEMP/xray-macos-64/xray" "$RUNNER_TEMP/xray-macos-arm64-v8a/xray" -output "$APP/Contents/MacOS/xray"
+          chmod +x "$APP/Contents/MacOS/xray"
+          cp "$RUNNER_TEMP/xray-macos-arm64-v8a/LICENSE" "$APP/Contents/Resources/xray-LICENSE.txt"
+          lipo -info "$APP/Contents/MacOS/xray"
+          lipo -info "$APP/Contents/MacOS/Luckgram"
+
+      # No Developer ID yet (user, 2026-11-12): ad-hoc signature, without it
+      # Apple silicon refuses to run the app. With MACOS_SIGN_P12_BASE64 /
+      # MACOS_SIGN_P12_PASSWORD / MACOS_SIGN_IDENTITY the app is signed with
+      # Developer ID and the hardened runtime instead, and with
+      # MACOS_NOTARY_APPLE_ID / MACOS_NOTARY_PASSWORD / MACOS_NOTARY_TEAM_ID
+      # the dmg is notarized and stapled.
+      - name: Sign.
+        env:
+          P12: ${{ secrets.MACOS_SIGN_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MACOS_SIGN_P12_PASSWORD }}
+          IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          set -euo pipefail
+          APP="${GITHUB_WORKSPACE:?}/stage/Luckgram.app"
+          ENT=luckgram-desktop/Telegram/Telegram/Telegram.entitlements
+          if [ -z "${P12:-}" ] || [ -z "${IDENTITY:-}" ]; then
+            echo "未签名、未公证 (not signed with Developer ID, not notarized): ad-hoc signature only."
+            codesign --force --sign - "$APP/Contents/MacOS/xray"
+            codesign --force --deep --sign - "$APP"
+            echo "LUCKGRAM_DEVELOPER_ID=0" >> $GITHUB_ENV
+          else
+            KC="${RUNNER_TEMP:?}/sign.keychain-db"; KCP=$(openssl rand -hex 16)
+            printf '%s' "$P12" | base64 --decode > "${RUNNER_TEMP:?}/sign.p12"
+            security create-keychain -p "$KCP" "$KC"
+            security set-keychain-settings -lut 3600 "$KC"
+            security unlock-keychain -p "$KCP" "$KC"
+            security import "${RUNNER_TEMP:?}/sign.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$KCP" "$KC" >/dev/null
+            security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+            rm -f "${RUNNER_TEMP:?}/sign.p12"
+            codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP/Contents/MacOS/xray"
+            codesign --force --deep --options runtime --timestamp --entitlements "$ENT" --sign "$IDENTITY" "$APP"
+            echo "LUCKGRAM_DEVELOPER_ID=1" >> $GITHUB_ENV
+          fi
+          codesign --verify --deep --strict "$APP"
+          codesign -dv "$APP" 2>&1 | tee "${RUNNER_TEMP:?}/codesign.txt"
+          grep -q '^Identifier=cc.luckgram.desktop$' "$RUNNER_TEMP/codesign.txt" || { echo "::error::bundle id is not cc.luckgram.desktop"; exit 1; }
+
+      - name: Check outputs.
+        run: |
+          set -euo pipefail
+          APP="${GITHUB_WORKSPACE:?}/stage/Luckgram.app"
+          BIN="$APP/Contents/MacOS/Luckgram"
+          for f in "$BIN" "$APP/Contents/MacOS/xray"; do
+            archs=$(lipo -archs "$f")
+            case " $archs " in *" arm64 "*) ;; *) echo "::error::$f has no arm64 ($archs)"; exit 1 ;; esac
+            case " $archs " in *" x86_64 "*) ;; *) echo "::error::$f has no x86_64 ($archs)"; exit 1 ;; esac
+          done
+          # The binary must not carry the upstream test api_hash, nor CI-only code.
+          if grep -aq 344583e45741c457fe1862106095a5eb "$BIN"; then echo "::error::upstream test api_hash found"; exit 1; fi
+          if grep -aq LuckgramCiTestLogin "$BIN"; then echo "::error::CI test login code found"; exit 1; fi
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist" || true
+
+      - name: Disk image and update zip.
+        env:
+          IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          set -euo pipefail
+          NAME="Luckgram-$LUCKGRAM_VERSION-$LUCKGRAM_BUILD"
+          BG="${RUNNER_TEMP:?}/dmg-background.tiff"
+          tiffutil -cathidpicheck luckgram-desktop/luckgram/macos/dmg-background.png luckgram-desktop/luckgram/macos/dmg-background@2x.png -out "$BG"
+          make_dmg() {
+            rm -f "dist/$NAME.dmg"
+            create-dmg --volname "Luckgram" --background "$BG" \
+              --window-pos 200 120 --window-size 600 380 --icon-size 128 \
+              --icon "Luckgram.app" 150 260 --hide-extension "Luckgram.app" \
+              --app-drop-link 450 260 --no-internet-enable "$@" \
+              "dist/$NAME.dmg" stage/
+          }
+          # Finder lays the window out over AppleScript, which sometimes
+          # times out on hosted runners: retry, then without the layout.
+          make_dmg || make_dmg || { echo "::warning::dmg without the Finder layout"; make_dmg --skip-jenkins; }
+          if [ "$LUCKGRAM_DEVELOPER_ID" = "1" ]; then
+            codesign --force --timestamp --sign "$IDENTITY" "dist/$NAME.dmg"
+          fi
+          # M2: the in-app update downloads only Luckgram.app, zipped.
+          ditto -c -k --sequesterRsrc --keepParent stage/Luckgram.app "dist/$NAME-mac.zip"
+          ls -l dist
+          shasum -a 256 dist/*
+
+      - name: Notarize (optional).
+        env:
+          APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+        run: |
+          if [ "$LUCKGRAM_DEVELOPER_ID" != "1" ] || [ -z "${APPLE_ID:-}" ]; then
+            echo "未公证 (not notarized): no Developer ID / notary credentials."
+            exit 0
+          fi
+          DMG="dist/Luckgram-$LUCKGRAM_VERSION-$LUCKGRAM_BUILD.dmg"
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$TEAM_ID" --wait
+          xcrun stapler staple "$DMG"
+
+      - name: Upload disk image.
+        uses: actions/upload-artifact@v7
+        with:
+          name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-macos-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
+
+      - name: Upload update zip.
+        uses: actions/upload-artifact@v7
+        with:
+          name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-macos-zip
+          path: dist/*-mac.zip
+          if-no-files-found: error
