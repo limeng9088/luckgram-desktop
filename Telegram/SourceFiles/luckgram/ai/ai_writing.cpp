@@ -449,6 +449,8 @@ Compose::Slot CreateWritingSlot(const Compose::SlotContext &context) {
 		context.parent,
 		st::historyLuckgramAi);
 	const auto raw = button.data();
+	// Found by the CI screenshots (luckgram_screenshots.cpp, D7 ✦ menu).
+	raw->setObjectName(u"luckgram-ai-writing"_q);
 	const auto host = raw->lifetime().make_state<FieldHost>(context);
 	const auto field = context.field;
 	raw->setClickedCallback([=] {
