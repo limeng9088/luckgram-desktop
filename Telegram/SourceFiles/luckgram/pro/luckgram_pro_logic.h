@@ -106,6 +106,34 @@ struct State {
 // The "upgrade" line only for free users, when Pro raises the limit.
 [[nodiscard]] bool OfferAccountsUpgrade(bool pro, int remoteMaxFree);
 
+// --- Pro community (mobile 31 / S14, Android ProCommunityLogic).
+
+inline constexpr auto kCommunityFeatureKey = "pro_community"; // Default on.
+inline constexpr auto kCommunityInvitePath = "/v1/pro/community/invite";
+inline constexpr auto kErrorAlreadyMember = "already_member";
+
+struct CommunityInvite {
+	enum class Kind {
+		Join,
+		AlreadyMember,
+		BadAnswer,
+	};
+	Kind kind = Kind::BadAnswer;
+	QString link; // Join: the one-time link; AlreadyMember: optional.
+	int64_t channelId = 0; // AlreadyMember: Telegram channel id, or 0.
+};
+
+// The row shows when the switch is on and the server lists the perk.
+[[nodiscard]] bool ShowCommunityRow(bool featureEnabled, bool hasPerk);
+// A 200 body: {invite_link} or {already_member:true, chat_id, chat_link?}.
+[[nodiscard]] CommunityInvite ParseCommunityInvite(const QJsonObject &body);
+// already_member sent as an error (409): from its body, possibly empty.
+[[nodiscard]] CommunityInvite CommunityAlreadyMember(const QJsonObject &body);
+// Bot API supergroup id (-100…) or a plain channel id -> channel id; else 0.
+[[nodiscard]] int64_t CommunityChannelId(int64_t botApiId);
+// Only Telegram links are opened (inside the app).
+[[nodiscard]] bool IsOpenableTelegramLink(const QString &url);
+
 // --- Account link (S6).
 
 inline constexpr auto kLinkPollIntervalMs = 2000;
@@ -266,6 +294,12 @@ public:
 		int total,
 		int64_t resetsAtMs,
 		const QTimeZone &tz) const;
+	// Pro community (31).
+	[[nodiscard]] QString communityJoin() const;
+	[[nodiscard]] QString communityInfo() const;
+	[[nodiscard]] QString communityAlreadyMember() const;
+	[[nodiscard]] QString communityProOnly() const;
+
 	[[nodiscard]] QString upgradeTitle() const;
 	[[nodiscard]] QString upgradeReason(Reason reason) const;
 	[[nodiscard]] QString upgradeButton() const;

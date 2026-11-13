@@ -27,6 +27,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "settings/sections/settings_luckgram_translate.h"
 #include "settings/sections/settings_privacy_security.h"
 #include "window/window_session_controller.h"
+#include "luckgram/pro/luckgram_pro_logic.h"
+#include "settings/sections/settings_luckgram_pro.h"
 #include "luckgram/backup/luckgram_backup.h"
 #include "settings/sections/settings_luckgram_backup.h"
 
@@ -68,6 +70,17 @@ namespace {
 		.confirmEnable = ::Settings::ConfirmDoubleBottomEnable,
 		.confirmDisable = ::Settings::ConfirmDoubleBottomDisable,
 		.hiddenWhen = [] { return DoubleBottom::ActiveValue(); },
+	});
+	// D12 (mobile 31): the 「加入 Pro 社群」 row of the Luckgram Pro page.
+	result.push_back({
+		.key = QString::fromLatin1(Pro::kCommunityFeatureKey),
+		.group = Group::AccountPrivacy,
+		.titleZh = "Pro 社群",
+		.titleEn = "Pro community",
+		.aboutZh = "Luckgram Pro 页显示「加入 Pro 社群」，一键进 Pro 用户私密群",
+		.aboutEn = "Show \"Join the Pro community\" on the Luckgram Pro page to join the private Pro group",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramPro::Id(); },
 	});
 	// D12 (mobile 10, specs#150): local backup file, free, default on.
 	result.push_back({
