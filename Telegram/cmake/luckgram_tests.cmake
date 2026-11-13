@@ -92,6 +92,8 @@ PRIVATE
     luckgram/ai/ai_agents_logic.h
     luckgram/ai/ai_compose_logic.cpp
     luckgram/ai/ai_compose_logic.h
+    luckgram/ai/ai_image_logic.cpp
+    luckgram/ai/ai_image_logic.h
     luckgram/ai/ai_conversation_logic.cpp
     luckgram/ai/ai_conversation_logic.h
     luckgram/ai/ai_market_logic.cpp
@@ -103,6 +105,7 @@ PRIVATE
     luckgram/ai/ai_text_logic.cpp
     luckgram/ai/ai_text_logic.h
     luckgram/ai/ai_compose_logic_tests.cpp
+    luckgram/ai/ai_image_logic_tests.cpp
     luckgram/ai/ai_conversation_logic_tests.cpp
     luckgram/ai/ai_market_logic_tests.cpp
     luckgram/ai/ai_markdown_logic_tests.cpp
