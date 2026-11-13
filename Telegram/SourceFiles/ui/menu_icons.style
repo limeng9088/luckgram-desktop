@@ -57,6 +57,7 @@ menuIconExport: icon {{ "menu/export", menuIconColor }};
 menuIconClear: icon {{ "menu/clear", menuIconColor }};
 menuIconManage: icon {{ "menu/manage", menuIconColor }};
 menuIconDiscussion: icon {{ "menu/discussion", menuIconColor }};
+menuIconDiscover: icon {{ "menu/discover", menuIconColor }}; // Luckgram D10
 menuIconStats: icon {{ "menu/stats", menuIconColor }};
 menuIconBoosts: icon {{ "menu/boosts", menuIconColor }};
 menuIconEarn: icon {{ "menu/earn", menuIconColor }};

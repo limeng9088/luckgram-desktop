@@ -5,10 +5,12 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/luckgram_features.h"
 
+#include "luckgram/discover/luckgram_square_logic.h"
 #include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_hidden_chats.h"
 #include "luckgram/luckgram_store_restrictions.h"
 #include "luckgram/luckgram_strings.h"
+#include "settings/sections/settings_luckgram_discover.h"
 #include "settings/sections/settings_luckgram_privacy.h"
 #include "settings/sections/settings_privacy_security.h"
 #include "window/window_session_controller.h"
@@ -75,6 +77,17 @@ namespace {
 		.defaultValue = true,
 		.subpage = [] { return ::Settings::LuckgramHiddenChatsId(); },
 		.onToggled = HiddenChats::OnToggled,
+	});
+	// ---- 发现 / Discover (D10)
+	result.push_back({
+		.key = QString::fromLatin1(Square::kFeatureKey),
+		.group = Group::Discover,
+		.titleZh = "广场",
+		.titleEn = "Square",
+		.aboutZh = "「发现」里的入口：所有 Luckgram 用户的公开动态，发图文短帖、点赞、评论",
+		.aboutEn = "Entry in Discover: a public feed for all Luckgram users with short posts, likes and comments",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramSquare::Id(); },
 	});
 	// ---- AI. D7 (mobile 18-24, 30): same keys, order, texts and defaults
 	// as Android LuckgramFeatures; the consent row is always there. D6's
