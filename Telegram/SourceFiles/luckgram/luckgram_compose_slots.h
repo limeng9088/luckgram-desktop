@@ -5,6 +5,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #pragma once
 
+#include "api/api_common.h"
 #include "base/object_ptr.h"
 
 class History;
@@ -36,6 +37,9 @@ struct SlotContext {
 	// The current topic / reply thread root (ComposeControls), 0 for the
 	// whole chat (HistoryWidget, or when not set).
 	Fn<MsgId()> topicRootId;
+	// How the field would send now (send as, reply to, topic), or nullopt
+	// before the chat is set up. May be empty.
+	Fn<std::optional<Api::SendAction>()> sendAction;
 	Ui::RpWidget *send = nullptr; // The send button (AddSendMenuItems).
 };
 

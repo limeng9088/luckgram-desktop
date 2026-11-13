@@ -11,7 +11,9 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "base/timer.h"
 #include "chat_helpers/compose/compose_show.h"
 #include "data/data_peer.h"
+#include "data/data_chat_participant_status.h"
 #include "history/history.h"
+#include "history/history_item_helpers.h"
 #include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/luckgram_storage.h"
@@ -144,30 +146,38 @@ void Insert(QPointer<Ui::InputField> field, const QString &text) {
 	field->setFocus();
 }
 
+// Right-click: sent like the field would send it (send as, reply to,
+// topic from upstream's prepareSendAction), after upstream's checks (slow
+// mode, restrictions). Paid messages go through the field instead, where
+// the price is confirmed.
 void SendNow(
 		const Compose::SlotContext &context,
+		QPointer<Ui::InputField> field,
 		const QString &text) {
-	const auto history = context.history ? context.history() : nullptr;
-	if (!history) {
+	auto action = context.sendAction
+		? context.sendAction()
+		: std::optional<Api::SendAction>();
+	if (!action) {
 		return;
 	}
-	const auto rootId = context.topicRootId
-		? context.topicRootId()
-		: MsgId();
-	const auto thread = rootId
-		? history->threadFor(rootId, PeerId())
-		: (Data::Thread*)history;
-	if (!thread) {
+	const auto peer = action->history->peer;
+	if (peer->starsPerMessageChecked() > 0) {
+		Insert(field, text);
 		return;
 	}
-	auto action = Api::SendAction(thread);
-	action.clearDraft = false; // The user's draft stays.
-	if (rootId) {
-		action.replyTo.topicRootId = rootId;
+	const auto textWithTags = TextWithTags{ text };
+	const auto error = GetErrorForSending(peer, {
+		.topicRootId = action->replyTo.topicRootId,
+		.text = &textWithTags,
+	});
+	if (error) {
+		Data::ShowSendErrorToast(context.show, peer, error);
+		return;
 	}
-	auto message = Api::MessageToSend(action);
-	message.textWithTags = { text };
-	history->session().api().sendMessage(std::move(message));
+	action->clearDraft = false; // The user's draft stays.
+	auto message = Api::MessageToSend(*action);
+	message.textWithTags = textWithTags;
+	peer->session().api().sendMessage(std::move(message));
 }
 
 // Click: insert, right-click: send (mobile: tap / long press).
@@ -238,7 +248,7 @@ void ShowList(
 				menu,
 				text,
 				[=] { Insert(field, text); },
-				[=] { SendNow(context, text); },
+				[=] { SendNow(context, field, text); },
 				close);
 		}
 	}

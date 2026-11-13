@@ -607,6 +607,12 @@ HistoryWidget::HistoryWidget(
 			.show = controller->uiShow(),
 			.history = [=] { return _history; },
 			.topicRootId = [] { return MsgId(); }, // Whole chat.
+			.sendAction = [=]() -> std::optional<Api::SendAction> {
+				if (!_history) {
+					return std::nullopt;
+				}
+				return prepareSendAction({});
+			},
 		},
 		_send.get(),
 		[=] { updateFieldSize(); });
