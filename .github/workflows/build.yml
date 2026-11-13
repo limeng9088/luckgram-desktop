@@ -991,6 +991,20 @@ jobs:
     timeout-minutes: 355
     env:
       MACOSX_DEPLOYMENT_TARGET: '12.0'
+      # M1: Apple silicon only for now (the 3 core hosted runner did not
+      # finish the universal build in 6 hours, run 43415777359). Repository
+      # variable MAC_ARCHS='arm64;x86_64' builds the universal app again
+      # (the libraries are universal already).
+      MAC_ARCHS: ${{ vars.MAC_ARCHS || 'arm64' }}
+      # ccache under the Xcode generator (wrapper compilers, see Configure),
+      # kept with actions/cache per branch, saved also when Build times out,
+      # so the next run goes on from there.
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: 'true'
+      CCACHE_MAXSIZE: 3G
+      CCACHE_COMPILERCHECK: content
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime,clang_index_store,modules,system_headers
     steps:
       - name: Clone.
         uses: actions/checkout@v4
@@ -1019,7 +1033,7 @@ jobs:
 
       - name: First set up.
         run: |
-          brew install automake libtool meson nasm ninja pkg-config create-dmg
+          brew install automake libtool meson nasm ninja pkg-config create-dmg ccache
           sudo mdutil -a -i off || true
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
@@ -1032,16 +1046,44 @@ jobs:
           echo "Luckgram $VERSION build ${{ github.run_number }} (${GITHUB_SHA::7})"
           echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
 
+      - name: Restore compiler cache.
+        uses: actions/cache/restore@v6
+        with:
+          path: .ccache
+          key: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-macos-${{ github.ref_name }}-
+            ccache-macos-master-
+
       - name: Configure.
+        id: configure
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           LUCKGRAM_DEV: ${{ inputs.dev && 'ON' || 'OFF' }}
         run: |
+          # Xcode runs $(CC) for every C / C++ / Objective-C file and for the
+          # precompiled header: CC is a wrapper calling ccache with the real
+          # clang; LD / LDPLUSPLUS stay the real ones. No index store (its
+          # path would make every compile unique).
+          CLANG=$(xcrun -f clang)
+          CLANGXX=$(xcrun -f clang++)
+          W="${RUNNER_TEMP:?}/ccache-bin"
+          mkdir -p "$W"
+          printf '#!/bin/sh\nexec ccache "%s" "$@"\n' "$CLANG" > "$W/clang"
+          printf '#!/bin/sh\nexec ccache "%s" "$@"\n' "$CLANGXX" > "$W/clang++"
+          chmod +x "$W/clang" "$W/clang++"
+          ccache -z
+          ccache -p | grep -E 'base_dir|cache_dir|max_size|sloppiness|compiler_check' || true
           cd luckgram-desktop/Telegram
           ./configure.sh \
             -D CMAKE_CONFIGURATION_TYPES=Release \
-            -D CMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -D CMAKE_OSX_ARCHITECTURES="$MAC_ARCHS" \
+            -D CMAKE_XCODE_ATTRIBUTE_CC="$W/clang" \
+            -D CMAKE_XCODE_ATTRIBUTE_CXX="$W/clang++" \
+            -D CMAKE_XCODE_ATTRIBUTE_LD="$CLANG" \
+            -D CMAKE_XCODE_ATTRIBUTE_LDPLUSPLUS="$CLANGXX" \
+            -D CMAKE_XCODE_ATTRIBUTE_COMPILER_INDEX_STORE_ENABLE=NO \
             -D CMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET \
             -D CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
             -D LUCKGRAM_DEV=$LUCKGRAM_DEV \
@@ -1055,10 +1097,24 @@ jobs:
             -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON
 
       - name: Build.
+        # Below the job's 355 minutes, so that a build that runs out of time
+        # still saves the compiler cache (next steps) for the next run.
+        timeout-minutes: 300
         run: |
           cd luckgram-desktop/out
           cmake --build . --config Release --parallel
           echo "Build took $(( ($(date +%s) - BUILD_START) / 60 )) min"
+
+      - name: Compiler cache statistics.
+        if: always() && steps.configure.outcome == 'success'
+        run: ccache -s
+
+      - name: Save compiler cache.
+        if: always() && steps.configure.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}
 
       - name: Stage Luckgram.app.
         run: |
@@ -1069,10 +1125,14 @@ jobs:
           mkdir -p "$STAGE" "${GITHUB_WORKSPACE:?}/dist"
           cp -R luckgram-desktop/out/Release/Luckgram.app "$APP"
           # D12: the built-in Xray core, pinned by version and SHA-256
-          # (luckgram/xray/xray-core.lock); both Mac builds joined with lipo.
+          # (luckgram/xray/xray-core.lock); the builds of MAC_ARCHS joined
+          # with lipo.
           LOCK=luckgram-desktop/luckgram/xray/xray-core.lock
           XVER=$(sed -n 's/^version=//p' "$LOCK")
-          for arch in macos-64 macos-arm64-v8a; do
+          XRAYS=()
+          case ";$MAC_ARCHS;" in *";arm64;"*) XRAYS+=(macos-arm64-v8a) ;; esac
+          case ";$MAC_ARCHS;" in *";x86_64;"*) XRAYS+=(macos-64) ;; esac
+          for arch in "${XRAYS[@]}"; do
             want=$(sed -n "s/^$arch=//p" "$LOCK")
             curl -sSfL --retry 3 -o "${RUNNER_TEMP:?}/$arch.zip" "https://github.com/XTLS/Xray-core/releases/download/$XVER/Xray-$arch.zip"
             got=$(shasum -a 256 "${RUNNER_TEMP:?}/$arch.zip" | cut -d' ' -f1)
@@ -1080,9 +1140,11 @@ jobs:
             mkdir -p "${RUNNER_TEMP:?}/xray-${arch:?}"
             unzip -q -o "${RUNNER_TEMP:?}/$arch.zip" -d "${RUNNER_TEMP:?}/xray-${arch:?}"
           done
-          lipo -create "$RUNNER_TEMP/xray-macos-64/xray" "$RUNNER_TEMP/xray-macos-arm64-v8a/xray" -output "$APP/Contents/MacOS/xray"
+          INPUTS=()
+          for arch in "${XRAYS[@]}"; do INPUTS+=("$RUNNER_TEMP/xray-$arch/xray"); done
+          lipo -create "${INPUTS[@]}" -output "$APP/Contents/MacOS/xray"
           chmod +x "$APP/Contents/MacOS/xray"
-          cp "$RUNNER_TEMP/xray-macos-arm64-v8a/LICENSE" "$APP/Contents/Resources/xray-LICENSE.txt"
+          cp "$RUNNER_TEMP/xray-${XRAYS[0]}/LICENSE" "$APP/Contents/Resources/xray-LICENSE.txt"
           lipo -info "$APP/Contents/MacOS/xray"
           lipo -info "$APP/Contents/MacOS/Luckgram"
 
@@ -1131,8 +1193,9 @@ jobs:
           BIN="$APP/Contents/MacOS/Luckgram"
           for f in "$BIN" "$APP/Contents/MacOS/xray"; do
             archs=$(lipo -archs "$f")
-            case " $archs " in *" arm64 "*) ;; *) echo "::error::$f has no arm64 ($archs)"; exit 1 ;; esac
-            case " $archs " in *" x86_64 "*) ;; *) echo "::error::$f has no x86_64 ($archs)"; exit 1 ;; esac
+            for want in ${MAC_ARCHS//;/ }; do
+              case " $archs " in *" $want "*) ;; *) echo "::error::$f has no $want ($archs)"; exit 1 ;; esac
+            done
           done
           # The binary must not carry the upstream test api_hash, nor CI-only code.
           if grep -aq 344583e45741c457fe1862106095a5eb "$BIN"; then echo "::error::upstream test api_hash found"; exit 1; fi
