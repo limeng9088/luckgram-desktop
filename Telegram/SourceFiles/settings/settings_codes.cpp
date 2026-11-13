@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/settings_codes.h"
 
+#include "luckgram/luckgram_desktop.h"
+
 #include "ui/toast/toast.h"
 #include "mainwidget.h"
 #include "mainwindow.h"
@@ -165,7 +167,7 @@ auto GenerateCodes() {
 		}
 	});
 	codes.emplace(u"registertg"_q, [](SessionController *window) {
-		Core::Application::RegisterUrlScheme();
+		Luckgram::SetTgSchemeEnabled(true); // Luckgram: keeps the toggle in sync
 		Ui::Toast::Show("Forced custom scheme register.");
 	});
 	codes.emplace(u"numberbuttons"_q, [](SessionController *window) {
