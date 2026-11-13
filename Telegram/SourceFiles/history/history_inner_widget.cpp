@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history_inner_widget.h"
 
+#include "luckgram/luckgram_save_to_saved.h"
+
 #include "api/api_polls.h"
 #include "chat_helpers/stickers_emoji_pack.h"
 #include "core/application.h"
@@ -3486,6 +3488,9 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					_widget->forwardSelected();
 				}, &st::menuIconForward);
 			}
+			Luckgram::SaveToSaved::AddMenuAction(_menu, controller, getSelectedItems(), [=] {
+				_widget->clearSelected();
+			});
 			if (selectedState.count > 0 && selectedState.canDeleteCount == selectedState.count) {
 				_menu->addAction(tr::lng_context_delete_selected(tr::now), [=] {
 					_widget->confirmDeleteSelected();
@@ -3516,6 +3521,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						forwardItem(itemId);
 					}, &st::menuIconForward);
 				}
+				Luckgram::SaveToSaved::AddMenuAction(_menu, controller, { 1, itemId });
 				if (HistoryView::CanAddOfferToMessage(item)) {
 					_menu->addAction(tr::lng_context_add_offer(tr::now), [=] {
 						Api::AddOfferToMessage(_controller->uiShow(), itemId);
@@ -3798,6 +3804,9 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					_widget->forwardSelected();
 				}, &st::menuIconForward);
 			}
+			Luckgram::SaveToSaved::AddMenuAction(_menu, controller, getSelectedItems(), [=] {
+				_widget->clearSelected();
+			});
 			if (selectedState.count > 0 && selectedState.count == selectedState.canDeleteCount) {
 				_menu->addAction(tr::lng_context_delete_selected(tr::now), [=] {
 					_widget->confirmDeleteSelected();
@@ -3829,6 +3838,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						forwardAsGroup(itemId);
 					}, &st::menuIconForward);
 				}
+				Luckgram::SaveToSaved::AddMenuAction(_menu, controller, session().data().itemOrItsGroup(item));
 				if (HistoryView::CanAddOfferToMessage(item)) {
 					_menu->addAction(tr::lng_context_add_offer(tr::now), [=] {
 						Api::AddOfferToMessage(_controller->uiShow(), itemId);
