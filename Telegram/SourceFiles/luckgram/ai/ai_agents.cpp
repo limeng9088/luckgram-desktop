@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/ai/ai_agents.h"
 
 #include "luckgram/ai/ai_assistant.h"
+#include "luckgram/ai/ai_market.h"
 #include "luckgram/ai/ai_registry.h"
 #include "luckgram/ai/ai_store.h"
 #include "luckgram/luckgram_double_bottom.h"
@@ -235,10 +236,29 @@ void AddPinnedMenuEntries(
 	const auto rebuild = [=] {
 		inner->clear();
 		auto &mine = Mine::For(session);
+		const auto marketPrefix = QString::fromLatin1(kMarketPrefix);
 		for (const auto &id : mine.pinned()) {
+			if (id.startsWith(marketPrefix)) {
+				// 30 需求 6: a market agent from 「我的」.
+				const auto used = Market::Service::For(session).findUsed(
+					id.mid(marketPrefix.size()));
+				if (!used || !Market::Enabled()) {
+					continue;
+				}
+				const auto button = inner->add(::Settings::CreateButtonWithIcon(
+					inner,
+					rpl::single(used->name.pick(IsChinese())),
+					st::mainMenuButton,
+					{ &st::menuIconBot }));
+				const auto copy = *used;
+				button->setClickedCallback([=] {
+					Market::Open(controller, copy);
+				});
+				continue;
+			}
 			const auto agent = mine.find(id);
 			if (!agent) {
-				continue; // Deleted, or a market agent (30 adds those).
+				continue; // Deleted.
 			}
 			const auto button = inner->add(::Settings::CreateButtonWithIcon(
 				inner,
@@ -252,7 +272,9 @@ void AddPinnedMenuEntries(
 		}
 		inner->resizeToWidth(menu->width());
 	};
-	Mine::For(session).changes(
+	rpl::merge(
+		Mine::For(session).changes(),
+		Market::Service::For(session).usedChanges()
 	) | rpl::on_next(rebuild, wrap->lifetime());
 	rebuild();
 	wrap->toggleOn(rpl::single(QString()) | rpl::then(

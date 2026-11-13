@@ -136,6 +136,8 @@ PRIVATE
     # D7 AI
     luckgram/ai/ai_agents.cpp
     luckgram/ai/ai_agents.h
+    luckgram/ai/ai_market.cpp
+    luckgram/ai/ai_market.h
     luckgram/ai/ai_assistant.cpp
     luckgram/ai/ai_assistant.h
     luckgram/ai/ai_registry.cpp
