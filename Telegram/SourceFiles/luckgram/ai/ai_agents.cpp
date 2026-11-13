@@ -16,6 +16,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_strings.h"
 #include "main/main_session.h"
 #include "settings/settings_common.h"
+#include "ui/widgets/buttons.h"
 #include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "settings/sections/settings_luckgram_agents.h"
