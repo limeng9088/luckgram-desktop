@@ -4,6 +4,7 @@ This file is part of Luckgram Desktop, based on Telegram Desktop.
 Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/ai/ai_compose_logic.h"
+#include "luckgram/ai/ai_text_logic.h"
 
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSet>
@@ -89,7 +90,7 @@ namespace Luckgram::AI::Reply {
 
 QString TranscriptLine(const QString &name, QString text) {
 	if (text.size() > kMaxMessageChars) {
-		text = text.left(kMaxMessageChars) + QString::fromUtf8("…");
+		text = Text::SafeLeft(text, kMaxMessageChars) + QString::fromUtf8("…");
 	}
 	text.replace(QChar('\n'), QChar(' '));
 	return name + QStringLiteral(": ") + text;
@@ -190,7 +191,7 @@ QString Examples(const QStringList &posts, int maxChars) {
 			continue;
 		}
 		if (t.size() > kMaxExampleChars) {
-			t = t.left(kMaxExampleChars) + QString::fromUtf8("…");
+			t = Text::SafeLeft(t, kMaxExampleChars) + QString::fromUtf8("…");
 		}
 		if (result.size() + t.size() + 8 > maxChars) {
 			break;

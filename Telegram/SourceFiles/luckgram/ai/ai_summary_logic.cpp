@@ -4,6 +4,7 @@ This file is part of Luckgram Desktop, based on Telegram Desktop.
 Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/ai/ai_summary_logic.h"
+#include "luckgram/ai/ai_text_logic.h"
 
 #include <QtCore/QRegularExpression>
 
@@ -14,7 +15,7 @@ namespace {
 
 [[nodiscard]] QString CutLine(QString s) {
 	if (s.size() > kMaxLineChars) {
-		s = s.left(kMaxLineChars) + QString::fromUtf8("…");
+		s = Text::SafeLeft(s, kMaxLineChars) + QString::fromUtf8("…");
 	}
 	return s;
 }
@@ -91,7 +92,7 @@ QString MergeRequest(const QStringList &partSummaries, int maxChars) {
 			+ QStringLiteral("\n\n");
 	}
 	if (maxChars > 0 && result.size() > maxChars) {
-		result = result.left(maxChars);
+		result = Text::SafeLeft(result, maxChars);
 	}
 	return result;
 }

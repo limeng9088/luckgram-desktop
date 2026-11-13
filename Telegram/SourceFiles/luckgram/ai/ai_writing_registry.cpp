@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/ai/ai_writing_registry.h"
 
 #include "luckgram/ai/ai_reply.h"
+#include "luckgram/ai/ai_post.h"
 #include "luckgram/ai/ai_writing.h"
 
 namespace Luckgram::AI {
@@ -65,6 +66,7 @@ void RegisterWritingFeatures() {
 	// Features add one line each below:
 	RegisterReplyItem(); // 20 AI reply (order 0, Reply::kMenuOrder)
 	// 24 AI post (order 10, Post::kMenuOrder)
+	Post::Register();
 }
 
 } // namespace Luckgram::AI

@@ -117,9 +117,18 @@ PRIVATE
     luckgram/xray/luckgram_xray_logic.h
     settings/sections/settings_luckgram_translate.cpp
     settings/sections/settings_luckgram_translate.h
+    # D7 AI
+    luckgram/ai/ai_assistant.cpp
+    luckgram/ai/ai_assistant.h
+    luckgram/ai/ai_registry.cpp
+    luckgram/ai/ai_registry.h
+    luckgram/ai/ai_store.cpp
+    luckgram/ai/ai_store.h
     # D7 AI: ✦ writing menu
     luckgram/ai/ai_reply.cpp
     luckgram/ai/ai_reply.h
+    luckgram/ai/ai_post.cpp
+    luckgram/ai/ai_post.h
     luckgram/ai/ai_writing.cpp
     luckgram/ai/ai_writing.h
     luckgram/ai/ai_writing_registry.cpp
@@ -144,6 +153,8 @@ PRIVATE
     luckgram/backup/luckgram_backup_format.h
     settings/sections/settings_luckgram_backup.cpp
     settings/sections/settings_luckgram_backup.h
+    luckgram/ai/ai_text_logic.cpp
+    luckgram/ai/ai_text_logic.h
 )
 
 # A generated header rather than a compile definition: switching the option
