@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "core/version.h" // AppName (Luckgram)
 #include "luckgram/ai/ai_assistant.h" // Luckgram D7
+#include "luckgram/update/luckgram_update.h" // Luckgram D4
 #include "apiwrap.h"
 #include "base/event_filter.h"
 #include "base/qt_signal_producer.h"
@@ -727,6 +728,7 @@ void MainMenu::setupMenu() {
 		)->setClickedCallback([=] {
 			controller->showPeerHistory(controller->session().user());
 		});
+		Luckgram::Update::AddMainMenuEntry(_menu, controller); // Luckgram D4
 		// Luckgram D8 (mobile 12): the desktop way into hidden chats.
 		Luckgram::HiddenChats::AddMainMenuEntry(_menu, controller);
 		AddLuckgramDiscoverMenuItem(_menu, controller); // Luckgram D10

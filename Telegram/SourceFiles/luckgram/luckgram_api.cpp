@@ -14,6 +14,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QCoreApplication>
 #include <QtCore/QCryptographicHash>
 #include <QtCore/QDateTime>
+#include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QLocale>
@@ -483,6 +484,113 @@ RequestPtr Upload(
 				? kUpstreamUnavailable
 				: kNetworkError), .status = status });
 		}
+	});
+	return result;
+}
+
+RequestPtr DownloadToFile(
+		const QString &url,
+		const QString &path,
+		Fn<void(qint64, qint64)> progress,
+		Fn<void(QString, qint64)> done,
+		Fn<void(Error)> fail) {
+	class DownloadToFileImpl final : public Request {
+	public:
+		QPointer<QNetworkReply> reply;
+		std::unique_ptr<QFile> file;
+		QCryptographicHash hash{ QCryptographicHash::Sha256 };
+		qint64 size = 0;
+		bool failed = false;
+
+		void drop() {
+			if (file) {
+				file->close();
+				file->remove();
+				file = nullptr;
+			}
+		}
+		void cancel() override {
+			if (const auto r = reply.data()) {
+				reply = nullptr;
+				r->abort();
+			}
+			drop();
+		}
+	};
+	auto result = std::make_shared<DownloadToFileImpl>();
+	const auto part = path + u".part"_q;
+	QFile::remove(part);
+	result->file = std::make_unique<QFile>(part);
+	if (!result->file->open(QIODevice::WriteOnly)) {
+		result->file = nullptr;
+		crl::on_main([=] {
+			fail({ .code = QString::fromLatin1(kNetworkError) });
+		});
+		return result;
+	}
+	auto request = QNetworkRequest(QUrl(url));
+	request.setTransferTimeout(kTransferTimeoutMs);
+	request.setAttribute(
+		QNetworkRequest::RedirectPolicyAttribute,
+		QNetworkRequest::NoLessSafeRedirectPolicy);
+	const auto reply = Manager()->get(request);
+	result->reply = reply;
+	const auto strong = result;
+	QObject::connect(reply, &QNetworkReply::readyRead, [=] {
+		if (strong->reply != reply || !strong->file || strong->failed) {
+			return;
+		}
+		const auto bytes = reply->readAll();
+		if (strong->file->write(bytes) != bytes.size()) {
+			strong->failed = true; // Disk full: reported when finished.
+			reply->abort();
+			return;
+		}
+		strong->hash.addData(bytes);
+		strong->size += bytes.size();
+	});
+	if (progress) {
+		QObject::connect(reply, &QNetworkReply::downloadProgress, [=](
+				qint64 received,
+				qint64 total) {
+			if (strong->reply == reply) {
+				progress(received, total);
+			}
+		});
+	}
+	QObject::connect(reply, &QNetworkReply::finished, [=] {
+		reply->deleteLater();
+		if (strong->reply != reply) {
+			return;
+		}
+		strong->reply = nullptr;
+		const auto status = reply->attribute(
+			QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		if (!strong->failed
+			&& reply->error() == QNetworkReply::NoError
+			&& status >= 200
+			&& status < 300
+			&& strong->file) {
+			const auto rest = reply->readAll();
+			if (!rest.isEmpty()) {
+				strong->file->write(rest);
+				strong->hash.addData(rest);
+				strong->size += rest.size();
+			}
+			strong->file->close();
+			QFile::remove(path);
+			if (strong->file->rename(path)) {
+				strong->file = nullptr;
+				done(
+					QString::fromLatin1(strong->hash.result().toHex()),
+					strong->size);
+				return;
+			}
+		}
+		strong->drop();
+		fail({ .code = QString::fromLatin1(status
+			? kUpstreamUnavailable
+			: kNetworkError), .status = status });
 	});
 	return result;
 }

@@ -87,6 +87,17 @@ RequestPtr Upload(
 	Fn<void()> done,
 	Fn<void(Error)> fail);
 
+// GET of an absolute URL streamed into `path` (D4 / M2 update packages),
+// same proxy, no Authorization: written to path + ".part" while hashing,
+// renamed to `path` when complete. progress(received, total or -1);
+// done(sha256 lowercase hex, size). The .part goes on failure or cancel.
+RequestPtr DownloadToFile(
+	const QString &url,
+	const QString &path,
+	Fn<void(qint64, qint64)> progress,
+	Fn<void(QString, qint64)> done,
+	Fn<void(Error)> fail);
+
 // Registers now if there is no token yet (startup, debug page).
 void EnsureRegistered(Fn<void()> done = nullptr, Fn<void(Error)> fail = nullptr);
 [[nodiscard]] bool HasToken();

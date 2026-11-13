@@ -54,6 +54,11 @@ PRIVATE
     luckgram/media/luckgram_round_video.h
     luckgram/media/luckgram_round_video_logic.cpp
     luckgram/media/luckgram_round_video_logic.h
+    luckgram/update/luckgram_update.cpp
+    luckgram/update/luckgram_update.h
+    luckgram/update/luckgram_update_logic.cpp
+    luckgram/update/luckgram_update_logic.h
+    luckgram/platform/luckgram_update_platform.h
     luckgram/calls/luckgram_call_recording.cpp
     luckgram/calls/luckgram_call_recording.h
     luckgram/calls/luckgram_call_recording_encoder.cpp
@@ -276,6 +281,19 @@ endif()
 if (LINUX)
     target_link_libraries(lib_luckgram_quirc PUBLIC m)
 endif()
+# Platform parts (M1 §10: luckgram/platform/{win,mac}/).
+if (WIN32)
+    nice_target_sources(Telegram ${src_loc}
+    PRIVATE
+        luckgram/platform/win/luckgram_update_win.cpp
+    )
+else()
+    nice_target_sources(Telegram ${src_loc}
+    PRIVATE
+        luckgram/platform/other/luckgram_update_other.cpp
+    )
+endif()
+
 target_link_libraries(Telegram PRIVATE lib_luckgram_quirc)
 
 # Call recording (D11): the audio device module wrapper is the only Luckgram

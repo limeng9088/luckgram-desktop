@@ -48,6 +48,11 @@ PRIVATE
     luckgram/calls/luckgram_call_recording_logic.cpp
     luckgram/calls/luckgram_call_recording_logic.h
     luckgram/tests/luckgram_call_recording_tests.cpp
+
+    # D4 / M2 in-app update
+    luckgram/update/luckgram_update_logic.cpp
+    luckgram/update/luckgram_update_logic.h
+    luckgram/tests/luckgram_update_tests.cpp
     luckgram/tests/luckgram_nearby_tests.cpp
     luckgram/tests/luckgram_square_tests.cpp
 

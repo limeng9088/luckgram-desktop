@@ -1,0 +1,186 @@
+/*
+This file is part of Luckgram Desktop, based on Telegram Desktop.
+
+Luckgram changes are licensed under GPL-3.0 like the upstream project.
+*/
+#pragma once
+
+#include <QtCore/QString>
+#include <QtCore/QStringList>
+
+#include <optional>
+
+// D4 / M2 (mobile S5 UpdateLogic + specs#124 UpdateDownloadLogic): pure
+// rules of the in-app update, QtCore only (luckgram_tests), same cases as
+// the Android unit tests. GET /v1/version?platform=windows|macos.
+namespace Luckgram::Update {
+
+// Desktop spec D4 §4: at start and every 6 hours (mobile: 1 hour).
+inline constexpr auto kCheckIntervalMs = qint64(6) * 60 * 60 * 1000;
+inline constexpr auto kRetryAfterFailureMs = qint64(60) * 60 * 1000;
+inline constexpr auto kAutoRetryAfterMs = qint64(6) * 60 * 60 * 1000;
+inline constexpr auto kSpaceMargin = qint64(20) * 1024 * 1024;
+inline constexpr auto kMaxSize = qint64(500) * 1024 * 1024;
+inline constexpr auto kFilePrefix = "luckgram-update-";
+inline constexpr auto kPartSuffix = ".part";
+inline constexpr auto kAutoDownloadKey = "update_auto_download";
+inline constexpr auto kDownloadPage = "https://luckgram.cc/download/";
+
+// What GET /v1/version said (persisted, the hint survives restarts).
+struct Info {
+	QString latest;
+	qint64 build = 0;
+	QString min;
+	QString url; // Windows: the installer; macOS: the .dmg.
+	QString notesZh;
+	QString notesEn;
+	QString sha256; // Lowercase hex or empty.
+	qint64 size = 0;
+	// macOS (S16): the zip with Luckgram.app for the in-app update.
+	QString updateUrl;
+	QString updateSha256;
+	qint64 updateSize = 0;
+};
+
+// What the app shows.
+struct State {
+	bool updateAvailable = false;
+	bool forceUpdate = false;
+	QString latest;
+	QString url;
+	QString notes;
+	// Of `latest` (0 / empty when only `min` is the target).
+	qint64 build = 0;
+	QString sha256;
+	qint64 size = 0;
+	QString updateUrl;
+	QString updateSha256;
+	qint64 updateSize = 0;
+};
+
+[[nodiscard]] bool IsVersion(const QString &value);
+// Segment by segment, missing = 0, not a version = 0.0.0.
+[[nodiscard]] int CompareVersions(const QString &a, const QString &b);
+// Equal versions with both builds known compare by build.
+[[nodiscard]] bool IsNewer(
+	const QString &latest,
+	qint64 latestBuild,
+	const QString &current,
+	qint64 currentBuild);
+
+// "7.4.2+23": the installed package, a different one checks at once.
+[[nodiscard]] QString AppId(const QString &version, qint64 build);
+[[nodiscard]] bool ShouldCheck(
+	qint64 nowMs,
+	qint64 lastSuccessMs,
+	qint64 lastFailureMs,
+	const QString &checkedBy = QString(),
+	const QString &running = QString());
+[[nodiscard]] QString Path(
+	const QString &platform,
+	const QString &appVersion,
+	qint64 build);
+
+[[nodiscard]] std::optional<Info> Parse(const QByteArray &json);
+[[nodiscard]] QByteArray Serialize(const Info &info);
+
+// Against the running version every time; nothing without https.
+[[nodiscard]] State Evaluate(
+	const std::optional<Info> &info,
+	const QString &current,
+	qint64 currentBuild,
+	bool chinese);
+
+[[nodiscard]] bool IsSha256(const QString &value);
+[[nodiscard]] bool IsHttps(const QString &url);
+// luckgram-update-7.4.2-23.exe (only digits, dots and letters).
+[[nodiscard]] QString FileName(
+	const QString &version,
+	qint64 build,
+	const QString &suffix);
+
+enum class Verdict {
+	Ok,
+	NotChecked, // No sha256 from the server: accepted, logged.
+	SizeMismatch,
+	ShaMismatch,
+};
+[[nodiscard]] Verdict Verify(
+	const QString &expectedSha,
+	qint64 expectedSize,
+	const QString &actualSha,
+	qint64 actualSize);
+[[nodiscard]] bool Accepted(Verdict verdict);
+[[nodiscard]] bool EnoughSpace(qint64 available, qint64 size);
+[[nodiscard]] bool ShouldAutoDownload(
+	bool updateAvailable,
+	const QString &url,
+	bool switchOn,
+	bool unmetered,
+	bool alreadyReady,
+	bool downloading,
+	qint64 nowMs,
+	qint64 lastAutoFailureMs);
+// Packages and partial downloads to delete, except `keep` (and its .part).
+[[nodiscard]] QStringList ToDelete(
+	const QStringList &names,
+	const QString &keep);
+
+// Windows: the per-user installer run by the update, no wizard, no
+// reboot; /luckgramupdate=1 makes it start Luckgram again (luckgram.iss).
+[[nodiscard]] QStringList InstallerArguments();
+
+enum class Failure {
+	Network,
+	Verify,
+	Space,
+	NotHttps,
+};
+
+class Texts final {
+public:
+	explicit Texts(bool zh) : _zh(zh) {
+	}
+
+	// Mobile UpdateDownloadLogic.Texts, verbatim.
+	[[nodiscard]] QString failure(Failure failure, const QString &detail) const;
+	[[nodiscard]] QString failedTitle() const;
+	[[nodiscard]] QString verifyFailedTitle() const;
+	[[nodiscard]] QString label(const QString &version, qint64 build) const;
+	[[nodiscard]] QString availableRow(const QString &version, qint64 build) const;
+	[[nodiscard]] QString downloadingRow(
+		const QString &version,
+		qint64 build,
+		int percent) const;
+	[[nodiscard]] QString downloadingTitle(const QString &version, qint64 build) const;
+	[[nodiscard]] QString notesTitle(const QString &version, qint64 build) const;
+	[[nodiscard]] QString forceText(
+		const QString &current,
+		qint64 currentBuild,
+		const QString &target,
+		qint64 targetBuild) const;
+	[[nodiscard]] QString forceTitle() const;
+	[[nodiscard]] QString updateNow() const;
+	[[nodiscard]] QString later() const;
+	[[nodiscard]] QString cancel() const;
+	[[nodiscard]] QString retry() const;
+	[[nodiscard]] QString ok() const;
+	[[nodiscard]] QString autoSwitch() const;
+	[[nodiscard]] QString autoSwitchInfo() const;
+
+	// Desktop (spec D4 §6-8, M2 §6), not on mobile.
+	[[nodiscard]] QString readyRow(const QString &version, qint64 build) const;
+	[[nodiscard]] QString restartAndUpdate() const;
+	[[nodiscard]] QString quit() const;
+	[[nodiscard]] QString portableText(const QString &version, qint64 build) const;
+	[[nodiscard]] QString manualText(const QString &version, qint64 build) const;
+	[[nodiscard]] QString openDownloadPage() const;
+
+private:
+	[[nodiscard]] QString t(const char *zh, const char *en) const;
+
+	bool _zh = false;
+
+};
+
+} // namespace Luckgram::Update
