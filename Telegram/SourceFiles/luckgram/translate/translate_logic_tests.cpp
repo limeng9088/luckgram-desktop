@@ -281,3 +281,28 @@ LUCKGRAM_TEST(TranslateScopeChatOrDefault) {
 		EffectiveLanguage(ChatOverrideAfter(Scope::ThisChat, S("ja")), S("en")),
 		S("ja"));
 }
+
+LUCKGRAM_TEST(TranslateChatLanguagesRoundTrip) {
+	auto languages = std::map<int64_t, QString>{
+		{ 777000, S("ja") },
+		{ 9000000123, S("en") },
+	};
+	const auto decoded = DecodeChatLanguages(EncodeChatLanguages(languages));
+	LG_EQUAL(decoded.size(), size_t(2));
+	LG_EQUAL(decoded.at(777000), S("ja"));
+	LG_EQUAL(decoded.at(9000000123), S("en"));
+}
+
+LUCKGRAM_TEST(TranslateChatLanguagesDropBadEntries) {
+	LG_CHECK(DecodeChatLanguages(QByteArray()).empty());
+	LG_CHECK(DecodeChatLanguages(QByteArray("[1,2]")).empty());
+	const auto decoded = DecodeChatLanguages(QByteArray(
+		R"({"1":"ja","x":"en","0":"de","2":"","3":5,"4":" fr "})"));
+	LG_EQUAL(decoded.size(), size_t(2));
+	LG_EQUAL(decoded.at(1), S("ja"));
+	LG_EQUAL(decoded.at(4), S("fr"));
+	// Empty languages are not written.
+	LG_CHECK(DecodeChatLanguages(EncodeChatLanguages({
+		{ 5, S("  ") },
+	})).empty());
+}

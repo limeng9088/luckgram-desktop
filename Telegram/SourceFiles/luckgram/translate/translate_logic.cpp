@@ -157,6 +157,35 @@ std::optional<LanguageLinkTarget> ParseLanguageLink(const QString &link) {
 	return LanguageLinkTarget{ .peerId = peerId, .msgId = msgId };
 }
 
+QByteArray EncodeChatLanguages(const std::map<int64_t, QString> &languages) {
+	auto object = QJsonObject();
+	for (const auto &[peerId, language] : languages) {
+		const auto code = language.trimmed();
+		if (peerId > 0 && !code.isEmpty()) {
+			object.insert(QString::number(peerId), code);
+		}
+	}
+	return QJsonDocument(object).toJson(QJsonDocument::Compact);
+}
+
+std::map<int64_t, QString> DecodeChatLanguages(const QByteArray &data) {
+	auto result = std::map<int64_t, QString>();
+	const auto document = QJsonDocument::fromJson(data);
+	if (!document.isObject()) {
+		return result;
+	}
+	const auto object = document.object();
+	for (auto i = object.begin(); i != object.end(); ++i) {
+		auto ok = false;
+		const auto peerId = i.key().toLongLong(&ok);
+		const auto code = i.value().toString().trimmed();
+		if (ok && peerId > 0 && !code.isEmpty()) {
+			result.emplace(peerId, code);
+		}
+	}
+	return result;
+}
+
 QStringList PushRecent(const QStringList &recent, const QString &language) {
 	const auto code = language.trimmed();
 	auto result = QStringList();
