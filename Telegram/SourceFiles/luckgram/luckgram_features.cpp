@@ -28,7 +28,9 @@ namespace {
 		.titleEn = "Store-restricted channels",
 		.aboutZh = "查看只在商店版 Telegram 中被隐藏的频道和群组；点进去可调整「显示 18+ 内容」",
 		.aboutEn = "View channels and groups hidden only in store versions of Telegram; click for the 18+ content setting",
-		.defaultValue = false,
+		// On by default on desktop (w-1109, 2026-11-13): no app store
+		// review here, so never stricter than upstream Telegram Desktop.
+		.defaultValue = true,
 		.subpage = [] { return ::Settings::PrivacySecurityId(); },
 		.confirmEnable = [](
 				not_null<Window::SessionController*> controller,

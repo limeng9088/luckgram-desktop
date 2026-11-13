@@ -15,10 +15,11 @@ class Show;
 // message is checked. Entries for all platforms and everything the server
 // refuses by region stay in force.
 //
-// Desktop note: upstream (non-store) Telegram Desktop obeyed only "all"
-// entries. Like the mobile apps, Luckgram Desktop now also obeys ios /
-// android entries while the switch is off (the default), and skips them
-// when it is on.
+// Desktop note (w-1109, 2026-11-13): the desktop app doesn't go through an
+// app store, so it is never stricter than upstream Telegram Desktop, which
+// obeys only "all" entries. The switch is therefore on by default (same
+// result as upstream); only a user who turns it off also gets the ios /
+// android entries, like the store versions of the mobile apps.
 namespace Luckgram {
 
 inline constexpr auto kStoreRestrictionsKey = "store_restrictions_off";
