@@ -37,6 +37,8 @@ PRIVATE
     luckgram/luckgram_ai.h
     luckgram/luckgram_api.cpp
     luckgram/luckgram_api.h
+    luckgram/luckgram_compose_slots.cpp
+    luckgram/luckgram_compose_slots.h
     luckgram/luckgram_features.cpp
     luckgram/luckgram_features.h
     luckgram/luckgram_secure_store.cpp

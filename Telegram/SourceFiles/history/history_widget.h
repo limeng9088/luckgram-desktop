@@ -148,6 +148,10 @@ using AiTooltipManager = ComposeTooltipManager;
 struct VoiceToSend;
 } // namespace HistoryView::Controls
 
+namespace Luckgram::Compose {
+class RightSlots;
+} // namespace Luckgram::Compose
+
 class BotKeyboard;
 class HistoryInner;
 
@@ -938,6 +942,7 @@ private:
 	Ui::IconButton * const _sendAsFile = nullptr;
 	Ui::IconButton * const _expand = nullptr;
 	Ui::IconButton * const _discardRichDraft = nullptr;
+	std::unique_ptr<Luckgram::Compose::RightSlots> _luckgramSlots; // D6
 	object_ptr<Ui::FlatButton> _unblock;
 	object_ptr<Ui::FlatButton> _botStart;
 	object_ptr<Ui::FlatButton> _joinChannel;

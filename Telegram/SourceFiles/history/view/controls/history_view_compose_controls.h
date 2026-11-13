@@ -35,6 +35,10 @@ namespace SendMenu {
 struct Details;
 } // namespace SendMenu
 
+namespace Luckgram::Compose {
+class RightSlots;
+} // namespace Luckgram::Compose
+
 namespace ChatHelpers {
 class TabbedPanel;
 class TabbedSelector;
@@ -563,6 +567,7 @@ private:
 	const std::shared_ptr<Ui::SendButton> _send;
 	rpl::event_stream<bool> _sendLockBadge;
 	Controls::ComposeAiButton * const _aiButton = nullptr;
+	std::unique_ptr<Luckgram::Compose::RightSlots> _luckgramSlots; // D6
 	Ui::IconButton * const _sendAsFile = nullptr;
 	Ui::IconButton * const _expand = nullptr;
 	Ui::IconButton * const _discardRichDraft = nullptr;

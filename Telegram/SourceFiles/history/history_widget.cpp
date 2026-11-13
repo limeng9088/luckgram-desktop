@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history_widget.h"
 
+#include "luckgram/luckgram_compose_slots.h"
+
 #include "api/api_compose_with_ai.h"
 #include "api/api_editing.h"
 #include "api/api_bot.h"
@@ -594,6 +596,15 @@ HistoryWidget::HistoryWidget(
 	initSendAsFileButton();
 	initExpandButton();
 	initDiscardRichDraftButton();
+	_luckgramSlots = std::make_unique<Luckgram::Compose::RightSlots>(
+		Luckgram::Compose::SlotContext{
+			.parent = this,
+			.field = _field,
+			.show = controller->uiShow(),
+			.history = [=] { return _history; },
+		},
+		_send.get(),
+		[=] { updateFieldSize(); });
 
 	_fieldCharsCountManager.limitExceeds(
 	) | rpl::on_next([=] {
@@ -7699,6 +7710,9 @@ void HistoryWidget::moveFieldControls() {
 	}
 	auto right = st::historySendRight;
 	_send->moveToRight(right, buttonsBottom); right += _send->width();
+	if (_luckgramSlots) {
+		right = _luckgramSlots->moveToRight(right, buttonsBottom);
+	}
 	_voiceRecordBar->moveToLeft(0, bottom - _voiceRecordBar->height());
 	_tabbedSelectorToggle->moveToRight(right, buttonsBottom);
 	_botKeyboardHide->moveToRight(right, buttonsBottom);
@@ -7769,6 +7783,9 @@ void HistoryWidget::updateFieldSize() {
 		- st::historySendRight
 		- _send->width()
 		- _tabbedSelectorToggle->width();
+	if (_luckgramSlots) {
+		fieldWidth -= _luckgramSlots->width();
+	}
 	if (_botMenu) {
 		fieldWidth -= st::historyBotMenuSkip + _botMenu->width();
 	}
