@@ -124,6 +124,8 @@ PRIVATE
     luckgram/pro/luckgram_pro_logic.h
     settings/sections/settings_luckgram_pro.cpp
     settings/sections/settings_luckgram_pro.h
+    settings/sections/settings_luckgram_agents.cpp
+    settings/sections/settings_luckgram_agents.h
     # D12 built-in Xray
     luckgram/xray/luckgram_xray.cpp
     luckgram/xray/luckgram_xray.h
@@ -132,6 +134,8 @@ PRIVATE
     settings/sections/settings_luckgram_translate.cpp
     settings/sections/settings_luckgram_translate.h
     # D7 AI
+    luckgram/ai/ai_agents.cpp
+    luckgram/ai/ai_agents.h
     luckgram/ai/ai_assistant.cpp
     luckgram/ai/ai_assistant.h
     luckgram/ai/ai_registry.cpp
