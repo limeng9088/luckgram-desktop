@@ -12,8 +12,12 @@ class Session;
 } // namespace Main
 
 // D7 (mobile 18 需求 6): the AI conversations of one Telegram account, only on
-// this device (tdata/luckgram_ai/<user id>.json, same JSON as Android
-// LuckgramAiStore). Nothing here talks to Telegram.
+// this device. The bytes are the same JSON as Android LuckgramAiStore, but on
+// disk they go through the D2 encrypted account storage (luckgram_storage.h,
+// docs/desktop.md): encrypted with the account's local key, removed with the
+// account on log out. While that storage is unavailable (account not started
+// or hidden in the second space) conversations live in memory only and are
+// written once it is back. Nothing here talks to Telegram.
 namespace Luckgram::AI {
 
 class Store final {
@@ -21,9 +25,8 @@ public:
 	using Conversation = Conversations::Conversation;
 	using Message = Conversations::Message;
 
+	// One per session, destroyed with it.
 	[[nodiscard]] static Store &For(not_null<Main::Session*> session);
-	// Logged out of every account (D2 OnLoggedOutCompletely).
-	static void ClearAll();
 
 	// Most recently updated first.
 	[[nodiscard]] std::vector<Conversation> list() const;
@@ -48,7 +51,7 @@ public:
 		const QString &title,
 		const QJsonObject &params = QJsonObject());
 
-	// Replaces (or adds) the conversation and writes the file. Messages
+	// Replaces (or adds) the conversation and writes it. Messages
 	// still pending are kept in memory only.
 	void save(const Conversation &conversation);
 	void remove(const QString &id);
@@ -56,16 +59,23 @@ public:
 	// The id of the conversation that changed ("" = several / all).
 	[[nodiscard]] rpl::producer<QString> changes() const;
 
-	explicit Store(uint64 userId);
+	explicit Store(not_null<Main::Session*> session);
 
 private:
+	// Reads the stored list once the storage is available; conversations
+	// made while it was not are kept (they win over stored ones by id) and
+	// written back.
 	void load();
-	void write() const;
-	[[nodiscard]] QString path() const;
+	void write();
 
-	uint64 _userId = 0;
+	const not_null<Main::Session*> _session;
 	std::vector<Conversation> _list;
+	// Removed while not loaded: must not come back from the stored list.
+	base::flat_set<QString> _removedUnsaved;
+	bool _loaded = false;
+	bool _unsaved = false;
 	rpl::event_stream<QString> _changes;
+	rpl::lifetime _lifetime;
 
 };
 

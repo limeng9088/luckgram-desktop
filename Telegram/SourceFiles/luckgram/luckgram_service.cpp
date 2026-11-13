@@ -8,7 +8,6 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/discover/luckgram_nearby_state.h"
 
 #include "base/timer.h"
-#include "luckgram/ai/ai_store.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/translate/translate_service.h"
