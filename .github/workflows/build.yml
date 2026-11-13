@@ -52,6 +52,10 @@ on:
         description: 'Keep going after compile errors, to collect all of them in one run (the job still fails)'
         type: boolean
         default: false
+      tests:
+        description: 'Also build and run luckgram_tests (Luckgram unit tests, Windows build job)'
+        type: boolean
+        default: false
       platforms:
         description: 'Platforms to build: windows skips mac-libs and macos, macos skips libs and the Windows build'
         type: choice
@@ -431,14 +435,18 @@ jobs:
           if %errorlevel% neq 0 exit /b %errorlevel%
 
       - name: Configure.
+        id: configure
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           LUCKGRAM_DEV: ${{ inputs.dev && 'ON' || 'OFF' }}
+          # Always passed: self-hosted keeps the CMake cache between runs.
+          LUCKGRAM_TESTS: ${{ inputs.tests && 'ON' || 'OFF' }}
         run: |
           cd %TBUILD%\luckgram-desktop\Telegram
           call configure.bat x64 %QT% ^
             -D LUCKGRAM_DEV=%LUCKGRAM_DEV% ^
+            -D LUCKGRAM_TESTS=%LUCKGRAM_TESTS% ^
             -D TDESKTOP_API_ID=%TG_API_ID% ^
             -D TDESKTOP_API_HASH=%TG_API_HASH% ^
             -D LUCKGRAM_REQUIRE_API_CREDENTIALS=ON ^
@@ -648,6 +656,26 @@ jobs:
           name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-screenshots
           path: screenshots/*.png
           if-no-files-found: warn
+
+      # Manual runs with tests: luckgram_tests (pure logic of D2-D12, QtCore +
+      # std, see luckgram_tests.cmake) is built on its own and run. Runs even
+      # when the app build failed (it does not need Telegram); a failing
+      # test fails this step and so the job, after the packages are made.
+      - name: Unit tests.
+        if: always() && inputs.tests && steps.configure.outcome == 'success'
+        run: |
+          set OUT=%TBUILD%\luckgram-desktop\out
+          cmake --build %OUT% --config Release --target luckgram_tests --parallel 2
+          if errorlevel 1 exit /b 1
+          set EXE=%OUT%\Release\luckgram_tests.exe
+          if not exist "%EXE%" set EXE=%OUT%\luckgram_tests.exe
+          if not exist "%EXE%" (
+            echo ::error::luckgram_tests.exe not found
+            exit /b 1
+          )
+          cd /d %OUT%
+          "%EXE%"
+          exit /b %errorlevel%
 
   # D4: master builds go to dl.luckgram.cc (never GitHub), the Luckgram API
   # (GET /v1/version?platform=windows, S16) and luckgram.cc/download.
