@@ -56,6 +56,7 @@ std::vector<Group> Groups() {
 		Group::MessagesLanguage,
 		Group::MediaCallsStorage,
 		Group::ProfileOrganize,
+		Group::Discover,
 		Group::AI,
 	};
 	if (IsDevBuild()) {
@@ -72,6 +73,7 @@ QString GroupTitle(Group group) {
 		return Tr("媒体、通话与存储", "Media, Calls & Storage");
 	case Group::ProfileOrganize:
 		return Tr("资料与整理", "Profiles & Organization");
+	case Group::Discover: return Tr("发现", "Discover");
 	case Group::AI: return u"AI"_q;
 	case Group::Debug: return Tr("调试", "Debug");
 	}

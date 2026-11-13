@@ -28,6 +28,14 @@ PRIVATE
     luckgram/luckgram_desktop.h
     luckgram/luckgram_intro.cpp
     luckgram/luckgram_intro.h
+    luckgram/discover/luckgram_discover_logic.cpp
+    luckgram/discover/luckgram_discover_logic.h
+    luckgram/discover/luckgram_nearby_logic.cpp
+    luckgram/discover/luckgram_nearby_logic.h
+    luckgram/discover/luckgram_scan_logic.cpp
+    luckgram/discover/luckgram_scan_logic.h
+    luckgram/discover/luckgram_square_logic.cpp
+    luckgram/discover/luckgram_square_logic.h
     luckgram/luckgram_onboarding.cpp
     luckgram/luckgram_onboarding.h
     luckgram/luckgram_onboarding_logic.cpp
