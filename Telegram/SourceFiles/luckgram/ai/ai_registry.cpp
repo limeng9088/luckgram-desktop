@@ -24,6 +24,7 @@ struct Registry {
 	std::vector<InputInterceptor> interceptors;
 	std::vector<TopEntry> entries;
 	std::vector<MessageType> types;
+	std::vector<not_null<Host*>> open;
 };
 
 [[nodiscard]] Registry &Get() {
@@ -125,6 +126,26 @@ void RegisterDebugDemos() {
 }
 
 } // namespace
+
+Host *FindOpenHost(const QString &conversationId) {
+	for (const auto host : Get().open) {
+		if (host->conversation().id == conversationId) {
+			return host;
+		}
+	}
+	return nullptr;
+}
+
+void AddOpenHost(not_null<Host*> host) {
+	if (!ranges::contains(Get().open, host)) {
+		Get().open.push_back(host);
+	}
+}
+
+void RemoveOpenHost(not_null<Host*> host) {
+	auto &open = Get().open;
+	open.erase(ranges::remove(open, host), end(open));
+}
 
 void RegisterQuickButton(QuickButton button) {
 	ReplaceById(Get().buttons, std::move(button), &QuickButton::id);
