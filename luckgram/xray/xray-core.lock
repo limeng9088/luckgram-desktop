@@ -1,0 +1,8 @@
+# Luckgram D12 (spec 33): the Xray-core release shipped with the desktop app
+# (official XTLS/Xray-core GitHub release zips, MPL-2.0). Upgrades go in their
+# own PR with the changelog link: https://github.com/XTLS/Xray-core/releases
+# SHA-256 of the release zips (GitHub asset digests).
+version=v26.10.31
+windows-64=2e04a9995a6f2ad1b28c0bb25c708ecb2695e43a1c9c7889c4b6ac2b48cf7a6a
+macos-64=37c60b63c77ef5edcfb46a0d70349f7d96e0c132e6a356ead4fd20aeeacc5c75
+macos-arm64-v8a=0a05dca3bd311b0bc5a89c7ce56350cab1e829e131e4b2bcd48eb304fac07e9a
