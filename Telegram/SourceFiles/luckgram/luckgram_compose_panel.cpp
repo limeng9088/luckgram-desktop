@@ -19,6 +19,15 @@ namespace {
 	return result;
 }
 
+// Panels are often closed from their own buttons: hide at once, delete
+// after the click handler returned.
+void Destroy(base::unique_qptr<Ui::RpWidget> &panel) {
+	if (const auto raw = panel.release()) {
+		raw->hide();
+		raw->deleteLater();
+	}
+}
+
 } // namespace
 
 PanelHost::PanelHost(not_null<QWidget*> anchor, PanelAnchor how)
@@ -50,7 +59,7 @@ PanelHost *PanelHost::For(not_null<Ui::InputField*> field) {
 }
 
 Ui::RpWidget *PanelHost::show(object_ptr<Ui::RpWidget> panel) {
-	_panel = nullptr;
+	Destroy(_panel);
 	const auto raw = panel.release();
 	if (!raw) {
 		return nullptr;
@@ -67,12 +76,12 @@ Ui::RpWidget *PanelHost::show(object_ptr<Ui::RpWidget> panel) {
 
 void PanelHost::hide(not_null<Ui::RpWidget*> panel) {
 	if (_panel.get() == panel.get()) {
-		_panel = nullptr;
+		Destroy(_panel);
 	}
 }
 
 void PanelHost::hide() {
-	_panel = nullptr;
+	Destroy(_panel);
 }
 
 Ui::RpWidget *PanelHost::current() const {

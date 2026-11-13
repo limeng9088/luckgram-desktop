@@ -27,7 +27,8 @@ class InputField;
 // Features find it by the field (Compose::SlotContext::field).
 //
 // A panel sizes itself in resizeGetHeight (e.g. a Ui::VerticalLayout); it is
-// destroyed when hidden, replaced, or with the host.
+// destroyed when hidden or replaced (deleteLater, so a panel may close
+// itself from its own button), or with the host.
 namespace Luckgram::Compose {
 
 enum class PanelAnchor {
