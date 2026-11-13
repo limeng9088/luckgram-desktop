@@ -3,7 +3,11 @@
 
 set(LUCKGRAM_BUILD_NUMBER "0" CACHE STRING "CI run number shown on the about page.")
 set(LUCKGRAM_COMMIT "" CACHE STRING "Git commit shown on the about page.")
+<<<<<<< HEAD
 option(LUCKGRAM_CI_BUILD "CI screenshot build only: screenshot mode and Telegram test-server login. Never for releases." OFF)
+=======
+option(LUCKGRAM_DEV "Dev build: api-dev.luckgram.cc, debug switches and page (D2)." OFF)
+>>>>>>> cbf8fcf56f (D2: Luckgram settings, feature registry, API client, device registration, remote config, AI client)
 option(LUCKGRAM_REQUIRE_API_CREDENTIALS "Fail unless real api_id / api_hash are given (CI)." OFF)
 
 if (LUCKGRAM_REQUIRE_API_CREDENTIALS)
@@ -24,6 +28,7 @@ PRIVATE
     luckgram/luckgram_brand.h
     luckgram/luckgram_desktop.cpp
     luckgram/luckgram_desktop.h
+<<<<<<< HEAD
     luckgram/luckgram_intro.cpp
     luckgram/luckgram_intro.h
     luckgram/luckgram_screenshots.cpp
@@ -44,6 +49,30 @@ file(CONFIGURE
     CONTENT "#pragma once\n#define LUCKGRAM_CI_BUILD @LUCKGRAM_CI_BUILD_VALUE@\n"
     @ONLY)
 target_include_directories(Telegram PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/luckgram_gen)
+=======
+    # D2 foundation
+    luckgram/luckgram_ai.cpp
+    luckgram/luckgram_ai.h
+    luckgram/luckgram_api.cpp
+    luckgram/luckgram_api.h
+    luckgram/luckgram_features.cpp
+    luckgram/luckgram_features.h
+    luckgram/luckgram_secure_store.cpp
+    luckgram/luckgram_secure_store.h
+    luckgram/luckgram_service.cpp
+    luckgram/luckgram_service.h
+    luckgram/luckgram_settings.cpp
+    luckgram/luckgram_settings.h
+    luckgram/luckgram_strings.cpp
+    luckgram/luckgram_strings.h
+    settings/sections/settings_luckgram.cpp
+    settings/sections/settings_luckgram.h
+)
+
+if (LUCKGRAM_DEV)
+    target_compile_definitions(Telegram PRIVATE LUCKGRAM_DEV_BUILD)
+endif()
+>>>>>>> cbf8fcf56f (D2: Luckgram settings, feature registry, API client, device registration, remote config, AI client)
 
 target_compile_definitions(Telegram
 PRIVATE

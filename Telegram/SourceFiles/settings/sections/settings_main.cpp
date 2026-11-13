@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_main.h"
 
+#include "settings/sections/settings_luckgram.h"
+
 #include "settings/settings_common_session.h"
 
 #include "api/api_cloud_password.h"
@@ -378,6 +380,10 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		});
 	}
 
+	if (!session->premiumPossible()) {
+		AddLuckgramFeaturesButton(builder); // Luckgram D2: above Notifications.
+	}
+
 	builder.addSectionButton({
 		.title = tr::lng_settings_section_notify(),
 		.targetSection = NotificationsId(),
@@ -509,6 +515,8 @@ void BuildPremiumSection(SectionBuilder &builder) {
 
 	builder.addDivider();
 	builder.addSkip();
+
+	AddLuckgramFeaturesButton(builder); // Luckgram D2: above Telegram Premium.
 
 	builder.addPremiumButton({
 		.id = u"main/premium"_q,

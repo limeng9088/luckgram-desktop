@@ -37,6 +37,10 @@ on:
         type: choice
         options: [default, hosted, self-hosted]
         default: default
+      dev:
+        description: 'Dev build: api-dev.luckgram.cc, debug switches and page (D2)'
+        type: boolean
+        default: false
 
 concurrency:
   group: build-${{ github.ref }}
@@ -406,9 +410,11 @@ jobs:
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          LUCKGRAM_DEV: ${{ inputs.dev && 'ON' || 'OFF' }}
         run: |
           cd %TBUILD%\luckgram-desktop\Telegram
           call configure.bat x64 %QT% ^
+            -D LUCKGRAM_DEV=%LUCKGRAM_DEV% ^
             -D TDESKTOP_API_ID=%TG_API_ID% ^
             -D TDESKTOP_API_HASH=%TG_API_HASH% ^
             -D LUCKGRAM_REQUIRE_API_CREDENTIALS=ON ^
