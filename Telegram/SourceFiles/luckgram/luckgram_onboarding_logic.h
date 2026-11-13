@@ -29,7 +29,6 @@ inline constexpr auto kSeenStepsKey = "onboarding_seen_steps";
 // Remote config values (GET /v1/config "values").
 inline constexpr auto kRemotePrivacyUrl = "app.privacy_url";
 inline constexpr auto kRemotePrivacyVersion = "app.privacy_version";
-inline constexpr auto kRemoteBillingEnabled = "billing.enabled";
 
 inline constexpr auto kDefaultPrivacyUrlZh
 	= "https://luckgram.cc/privacy-policy/";

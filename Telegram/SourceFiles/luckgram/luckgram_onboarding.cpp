@@ -18,7 +18,9 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_onboarding_logic.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/luckgram_strings.h"
+#include "luckgram/pro/luckgram_pro.h"
 #include "settings/sections/settings_luckgram.h"
+#include "settings/sections/settings_luckgram_pro.h"
 #include "ui/layers/generic_box.h"
 #include "ui/layers/show.h"
 #include "ui/text/text_utilities.h"
@@ -87,13 +89,9 @@ void AcceptPrivacy() {
 	Settings::SetInt(Key(kPrivacyVersionKey), RemotePrivacyVersion());
 }
 
-[[nodiscard]] bool BillingEnabled() {
-	return RemoteValue(kRemoteBillingEnabled).toBool(false);
-}
-
-// Luckgram Pro is not on the desktop yet (D12); its page then shows here.
+// D12: the Pro page is on the desktop; users who already have Pro skip it.
 [[nodiscard]] bool ProStepAvailable() {
-	return false;
+	return !Pro::IsPro();
 }
 
 [[nodiscard]] bool FeatureOnDesktop(const QString &key) {
@@ -157,7 +155,10 @@ void ShowPrivacyBox(
 	}
 }
 
-void OnboardingBox(not_null<Ui::GenericBox*> box, std::vector<Step> steps) {
+void OnboardingBox(
+		not_null<Ui::GenericBox*> box,
+		not_null<Window::SessionController*> controller,
+		std::vector<Step> steps) {
 	struct State {
 		rpl::variable<int> index = 0;
 		Fn<void()> rebuild;
@@ -193,34 +194,53 @@ void OnboardingBox(not_null<Ui::GenericBox*> box, std::vector<Step> steps) {
 			return tr::bold(texts.question(step(index)));
 		}),
 		st::boxLabel));
+	box->addRow(object_ptr<Ui::FlatLabel>(
+		box,
+		state->index.value() | rpl::map([=](int index) {
+			auto result = TextWithEntities();
+			if (step(index) == Step::Pro) {
+				for (const auto &[title, about] : texts.proFeatures()) {
+					if (!result.text.isEmpty()) {
+						result.append(u"\n\n"_q);
+					}
+					result.append(tr::bold(title)).append(u"\n"_q).append(about);
+				}
+			}
+			return result;
+		}),
+		st::boxLabel));
 
 	state->choose = [=](bool primary) {
 		const auto current = step(state->index.current());
 		if (primary
 			&& current == Step::Pro
-			&& !CanSubscribe(current, BillingEnabled())) {
+			&& !CanSubscribe(current, Pro::BillingEnabled())) {
 			return; // "Coming soon".
 		}
 		for (const auto &key : Toggles(current)) {
 			Settings::SetEnabled(key, primary);
 		}
-		if (current == Step::Pro) {
-			// Mobile key: D12 opens the Pro page when it is set.
-			Settings::SetBool(u"onboarding_open_pro"_q, primary);
-		}
 		MarkStepsSeen({ current });
-		if (state->index.current() + 1 < count) {
+		const auto subscribe = primary && (current == Step::Pro);
+		if (!subscribe && state->index.current() + 1 < count) {
 			state->index = state->index.current() + 1;
 			state->rebuild();
-		} else {
-			box->closeBox();
+			return;
+		}
+		const auto weak = base::make_weak(controller);
+		box->closeBox();
+		if (subscribe) {
+			if (const auto strong = weak.get()) {
+				// Paying needs the Pro page (D12), the user is logged in.
+				strong->showSettings(::Settings::LuckgramPro::Id());
+			}
 		}
 	};
 	state->rebuild = [=] {
 		box->clearButtons();
 		const auto current = step(state->index.current());
 		const auto comingSoon = (current == Step::Pro)
-			&& !CanSubscribe(current, BillingEnabled());
+			&& !CanSubscribe(current, Pro::BillingEnabled());
 		box->addButton(
 			rpl::single(comingSoon ? texts.comingSoon() : texts.primary(current)),
 			[=] { state->choose(true); });
@@ -241,7 +261,7 @@ void OnboardingBox(not_null<Ui::GenericBox*> box, std::vector<Step> steps) {
 void ShowOnboarding(not_null<Window::SessionController*> controller) {
 	auto steps = StepsToShow(FeatureOnDesktop, ProStepAvailable(), SeenSteps());
 	if (!steps.empty()) {
-		controller->show(Box(OnboardingBox, std::move(steps)));
+		controller->show(Box(OnboardingBox, controller, std::move(steps)));
 	}
 }
 
