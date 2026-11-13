@@ -698,10 +698,14 @@ jobs:
           done
 
       # S5 / S16: GET /v1/version?platform=windows answers with this build.
+      # api-dev on every master build; api.luckgram.cc only while the
+      # repository variable RELEASE_PROD_WINDOWS is 'true' (w-1109: the
+      # first packages are tested on a real Windows machine first).
       - name: Publish version to Luckgram API
         env:
           TOKEN_DEV: ${{ secrets.LUCKGRAM_RELEASE_TOKEN_DEV_WINDOWS }}
           TOKEN_PROD: ${{ secrets.LUCKGRAM_RELEASE_TOKEN_PROD_WINDOWS }}
+          RELEASE_PROD: ${{ vars.RELEASE_PROD_WINDOWS }}
         run: |
           set -euo pipefail
           SETUP="Luckgram-Setup-$VER-$BUILD-x64.exe"
@@ -719,7 +723,11 @@ jobs:
             echo
           }
           publish api-dev.luckgram.cc "${TOKEN_DEV:-}"
-          publish api.luckgram.cc "${TOKEN_PROD:-}"
+          if [ "${RELEASE_PROD:-}" = "true" ]; then
+            publish api.luckgram.cc "${TOKEN_PROD:-}"
+          else
+            echo "api.luckgram.cc not told (repository variable RELEASE_PROD_WINDOWS is not 'true')"
+          fi
 
       # luckgram.cc/download: download/latest.json through the site's
       # scripts/update_latest.py (windows: setup + portable), pushed with a

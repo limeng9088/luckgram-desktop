@@ -25,6 +25,8 @@ inline constexpr auto kFilePrefix = "luckgram-update-";
 inline constexpr auto kPartSuffix = ".part";
 inline constexpr auto kAutoDownloadKey = "update_auto_download";
 inline constexpr auto kDownloadPage = "https://luckgram.cc/download/";
+// The only host a package is downloaded from for installing (review P1).
+inline constexpr auto kTrustedPrefix = "https://dl.luckgram.cc/";
 
 // What GET /v1/version said (persisted, the hint survives restarts).
 struct Info {
@@ -93,6 +95,15 @@ struct State {
 
 [[nodiscard]] bool IsSha256(const QString &value);
 [[nodiscard]] bool IsHttps(const QString &url);
+// https://dl.luckgram.cc/... (host compared without case).
+[[nodiscard]] bool IsTrustedUrl(const QString &url);
+// Installed by the app only with a dl.luckgram.cc address, a sha256 and a
+// size to check it against; anything else goes to the download page.
+[[nodiscard]] bool CanInstallFrom(
+	const QString &url,
+	const QString &sha256,
+	qint64 size);
+
 // luckgram-update-7.4.2-23.exe (only digits, dots and letters).
 [[nodiscard]] QString FileName(
 	const QString &version,
@@ -111,6 +122,9 @@ enum class Verdict {
 	const QString &actualSha,
 	qint64 actualSize);
 [[nodiscard]] bool Accepted(Verdict verdict);
+// The downloaded package may be run: sha256 and size given and both
+// matched (NotChecked is never enough to install, review P1).
+[[nodiscard]] bool MayInstall(Verdict verdict, qint64 expectedSize);
 [[nodiscard]] bool EnoughSpace(qint64 available, qint64 size);
 [[nodiscard]] bool ShouldAutoDownload(
 	bool updateAvailable,
@@ -174,6 +188,7 @@ public:
 	[[nodiscard]] QString quit() const;
 	[[nodiscard]] QString portableText(const QString &version, qint64 build) const;
 	[[nodiscard]] QString manualText(const QString &version, qint64 build) const;
+	[[nodiscard]] QString unverifiedText(const QString &version, qint64 build) const;
 	[[nodiscard]] QString openDownloadPage() const;
 
 private:

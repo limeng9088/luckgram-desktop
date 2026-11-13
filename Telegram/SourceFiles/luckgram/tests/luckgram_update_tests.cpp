@@ -168,6 +168,26 @@ LUCKGRAM_TEST(UpdateShaAndHttps) {
 	LG_CHECK(!IsHttps(U("https://")));
 }
 
+LUCKGRAM_TEST(UpdateTrustedSource) {
+	LG_CHECK(IsTrustedUrl(U("https://dl.luckgram.cc/windows/windows-7.4.2-23/a.exe")));
+	LG_CHECK(IsTrustedUrl(U("HTTPS://DL.LUCKGRAM.CC/windows/a.exe")));
+	LG_CHECK(!IsTrustedUrl(U("https://dl.luckgram.cc/")));
+	LG_CHECK(!IsTrustedUrl(U("http://dl.luckgram.cc/windows/a.exe")));
+	LG_CHECK(!IsTrustedUrl(U("https://dl.luckgram.cc.evil.com/a.exe")));
+	LG_CHECK(!IsTrustedUrl(U("https://evil.com/dl.luckgram.cc/a.exe")));
+	LG_CHECK(!IsTrustedUrl(U("https://github.com/limeng9088/x/releases/a.exe")));
+	LG_CHECK(!IsTrustedUrl(U("https://dl.luckgram.cc/@evil.com/a.exe")));
+	LG_CHECK(CanInstallFrom(U("https://dl.luckgram.cc/windows/a.exe"), kSha, 10));
+	LG_CHECK(!CanInstallFrom(U("https://dl.luckgram.cc/windows/a.exe"), QString(), 10));
+	LG_CHECK(!CanInstallFrom(U("https://dl.luckgram.cc/windows/a.exe"), kSha, 0));
+	LG_CHECK(!CanInstallFrom(U("https://evil.com/a.exe"), kSha, 10));
+	LG_CHECK(MayInstall(Verdict::Ok, 10));
+	LG_CHECK(!MayInstall(Verdict::Ok, 0));
+	LG_CHECK(!MayInstall(Verdict::NotChecked, 10));
+	LG_CHECK(!MayInstall(Verdict::ShaMismatch, 10));
+	LG_CHECK(!MayInstall(Verdict::SizeMismatch, 10));
+}
+
 LUCKGRAM_TEST(UpdateAutoDownload) {
 	const auto url = U("https://dl.luckgram.cc/a.exe");
 	LG_CHECK(ShouldAutoDownload(true, url, true, true, false, false, kNow, 0));

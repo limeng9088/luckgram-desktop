@@ -194,6 +194,21 @@ bool IsHttps(const QString &url) {
 		&& url.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive);
 }
 
+bool IsTrustedUrl(const QString &url) {
+	const auto prefix = QString::fromLatin1(kTrustedPrefix);
+	return url.size() > prefix.size()
+		&& url.startsWith(prefix, Qt::CaseInsensitive)
+		&& !url.contains(QChar('@'))
+		&& !url.contains(QChar('\\'));
+}
+
+bool CanInstallFrom(
+		const QString &url,
+		const QString &sha256,
+		qint64 size) {
+	return IsTrustedUrl(url) && IsSha256(sha256) && size > 0;
+}
+
 QString FileName(const QString &version, qint64 build, const QString &suffix) {
 	auto clean = QString();
 	for (const auto ch : version) {
@@ -228,6 +243,10 @@ Verdict Verify(
 
 bool Accepted(Verdict verdict) {
 	return verdict == Verdict::Ok || verdict == Verdict::NotChecked;
+}
+
+bool MayInstall(Verdict verdict, qint64 expectedSize) {
+	return (verdict == Verdict::Ok) && (expectedSize > 0);
 }
 
 bool EnoughSpace(qint64 available, qint64 size) {
@@ -390,6 +409,12 @@ QString Texts::manualText(const QString &version, qint64 build) const {
 	return _zh
 		? (QString::fromUtf8("Luckgram 没有权限替换当前位置的程序。请下载新版本 ") + label(version, build) + QString::fromUtf8(" 手动安装。"))
 		: (QStringLiteral("Luckgram can't replace the app where it is installed. Download version ") + label(version, build) + QStringLiteral(" and install it yourself."));
+}
+
+QString Texts::unverifiedText(const QString &version, qint64 build) const {
+	return _zh
+		? (QString::fromUtf8("无法验证这个更新包，Luckgram 不会自动安装。请从官网下载新版本 ") + label(version, build) + QString::fromUtf8("。"))
+		: (QStringLiteral("This update can't be verified, so Luckgram won't install it. Download version ") + label(version, build) + QStringLiteral(" from the website."));
 }
 
 QString Texts::openDownloadPage() const { return t("打开下载页面", "Open download page"); }

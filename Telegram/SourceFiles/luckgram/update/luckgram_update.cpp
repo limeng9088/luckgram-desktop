@@ -34,6 +34,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "styles/style_settings.h"
 #include "styles/style_window.h"
 
+#include <QtCore/QCryptographicHash>
 #include <QtCore/QDateTime>
 
 #include <algorithm>
@@ -140,6 +141,16 @@ struct Data {
 
 [[nodiscard]] QString PackagePath(const State &state) {
 	return Folder() + PackageName(state);
+}
+
+// Review P1: a dl.luckgram.cc address with sha256 and size, else only the
+// download page is offered.
+[[nodiscard]] bool Installable(const State &state) {
+	return Platform::CanInstall()
+		&& CanInstallFrom(
+			PackageUrl(state),
+			PackageSha(state),
+			PackageSize(state));
 }
 
 [[nodiscard]] Phase CurrentPhase() {
@@ -281,10 +292,8 @@ void StartDownload(bool manual) {
 		return;
 	}
 	const auto url = PackageUrl(state);
-	if (!IsHttps(url)) {
-		data.downloadManual = manual;
-		DownloadFailed(Failure::NotHttps, QString());
-		return;
+	if (!Installable(state)) {
+		return; // OnClicked shows the download page instead.
 	}
 	const auto size = PackageSize(state);
 	if (size > kMaxSize) {
@@ -315,10 +324,7 @@ void StartDownload(bool manual) {
 		}
 	}, [=](QString sha, qint64 got) {
 		const auto verdict = Verify(PackageSha(state), size, sha, got);
-		if (verdict == Verdict::NotChecked) {
-			LOG(("Luckgram Update: no sha256 from the server, not checked."));
-		}
-		if (!Accepted(verdict)) {
+		if (!MayInstall(verdict, size)) {
 			LOG(("Luckgram Update Error: %1 failed verification (%2)."
 				).arg(PackageName(state)
 				).arg(int(verdict)));
@@ -362,7 +368,7 @@ void CancelDownload() {
 
 void MaybeAutoDownload() {
 	const auto state = Current();
-	if (!Platform::CanInstall()) {
+	if (!Installable(state)) {
 		return;
 	}
 	const auto ready = (CurrentPhase() == Phase::Ready);
@@ -424,16 +430,29 @@ void OpenDownloadPage() {
 	File::OpenUrl(QString::fromLatin1(kDownloadPage));
 }
 
-void ShowManual(bool portable) {
+enum class Manual {
+	Portable,
+	NoAccess,
+	Unverified,
+};
+
+void ShowManual(Manual reason) {
 	const auto state = Current();
 	const auto controller = ActiveController();
 	if (!controller) {
 		return;
 	}
 	controller->show(Ui::MakeConfirmBox({
-		.text = (portable
-			? Tx().portableText(state.latest, state.build)
-			: Tx().manualText(state.latest, state.build)),
+		.text = [&] {
+			switch (reason) {
+			case Manual::Portable:
+				return Tx().portableText(state.latest, state.build);
+			case Manual::NoAccess:
+				return Tx().manualText(state.latest, state.build);
+			case Manual::Unverified: break;
+			}
+			return Tx().unverifiedText(state.latest, state.build);
+		}(),
 		.confirmed = [=](Fn<void()> close) {
 			close();
 			OpenDownloadPage();
@@ -472,7 +491,10 @@ void OnClicked() {
 	if (!state.updateAvailable) {
 		return;
 	} else if (!Platform::CanInstall()) {
-		ShowManual(IsPortable());
+		ShowManual(IsPortable() ? Manual::Portable : Manual::NoAccess);
+		return;
+	} else if (!Installable(state)) {
+		ShowManual(Manual::Unverified);
 		return;
 	}
 	switch (CurrentPhase()) {
@@ -570,15 +592,44 @@ void InstallNow() {
 		Changed();
 		return;
 	} else if (!Platform::CanInstall()) {
-		ShowManual(IsPortable());
+		ShowManual(IsPortable() ? Manual::Portable : Manual::NoAccess);
+		return;
+	} else if (!Installable(state)) {
+		ShowManual(Manual::Unverified);
 		return;
 	}
-	if (!Platform::Install(path)) {
-		LOG(("Luckgram Update Error: could not start %1.").arg(path));
-		ShowManual(false);
-		return;
-	}
-	Core::Quit();
+	// Checked again right before it runs: the file may be from an earlier
+	// start, or changed on disk since (review P1).
+	const auto sha = PackageSha(state);
+	const auto size = PackageSize(state);
+	crl::async([=] {
+		auto file = QFile(path);
+		auto hash = QCryptographicHash(QCryptographicHash::Sha256);
+		const auto read = file.open(QIODevice::ReadOnly) && hash.addData(&file);
+		const auto actual = read
+			? QString::fromLatin1(hash.result().toHex())
+			: QString();
+		const auto actualSize = read ? file.size() : qint64(-1);
+		crl::on_main([=] {
+			if (!MayInstall(Verify(sha, size, actual, actualSize), size)) {
+				LOG(("Luckgram Update Error: %1 failed verification before "
+					"installing.").arg(path));
+				QFile::remove(path);
+				Shared().ready = false;
+				Changed();
+				ShowInfo(
+					Tx().verifyFailedTitle(),
+					Tx().failure(Failure::Verify, QString()));
+				return;
+			}
+			if (!Platform::Install(path)) {
+				LOG(("Luckgram Update Error: could not start %1.").arg(path));
+				ShowManual(Manual::NoAccess);
+				return;
+			}
+			Core::Quit();
+		});
+	});
 }
 
 void Start(not_null<Window::SessionController*>) {
