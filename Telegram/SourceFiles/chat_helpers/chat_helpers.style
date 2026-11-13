@@ -1378,6 +1378,11 @@ historyLuckgramTranslate: IconButton(historyAttach) {
 	icon: icon {{ "menu/translate", historyComposeIconFg }};
 	iconOver: icon {{ "menu/translate", historyComposeIconFgOver }};
 }
+// Luckgram D6 (spec 17.5): voice input button.
+historyLuckgramDictation: IconButton(historyAttach) {
+	icon: icon {{ "chat/voice_to_text", historyComposeIconFg }};
+	iconOver: icon {{ "chat/voice_to_text", historyComposeIconFgOver }};
+}
 historyBotKeyboardShow: IconButton(historyAttach) {
 	icon: icon {{ "chat/input_bot_keyboard", historyComposeIconFg }};
 	iconOver: icon {{ "chat/input_bot_keyboard", historyComposeIconFgOver }};

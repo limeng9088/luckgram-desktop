@@ -49,4 +49,19 @@ struct LinkTarget {
 [[nodiscard]] QString FailedText(bool chinese);
 [[nodiscard]] QString RetryLabel(bool chinese);
 
+// 17.5-17.6 dictation (voice input), like mobile LuckgramDictationSheet.
+inline constexpr auto kDictationFeature = "dictation";
+inline constexpr auto kDictationTidyFeature = "dictation_ai_tidy";
+inline constexpr auto kDictationEffect = "dictation"; // writing-dictation
+inline constexpr auto kMaxRecordMs = int64_t(10) * 60 * 1000;
+inline constexpr auto kMinRecordMs = int64_t(100);
+inline constexpr auto kMaxLevel = 1800.; // Like the voice record button.
+
+// Recordings shorter than this are dropped without a request.
+[[nodiscard]] bool TooShort(int64_t durationMs);
+// 0..1 for the level bars.
+[[nodiscard]] double LevelRatio(int level);
+// Mobile: an empty AI tidy result keeps the plain transcript.
+[[nodiscard]] QString TidyResult(const QString &raw, const QString &tidy);
+
 } // namespace Luckgram::Transcribe

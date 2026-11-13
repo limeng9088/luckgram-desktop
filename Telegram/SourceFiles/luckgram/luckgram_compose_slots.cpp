@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_compose_slots.h"
 
 #include "base/unique_qptr.h"
+#include "luckgram/transcribe/luckgram_dictation.h"
 #include "luckgram/translate/translate_out.h"
 #include "ui/rp_widget.h"
 #include "ui/widgets/popup_menu.h"
@@ -20,6 +21,7 @@ using Factory = Slot(*)(const SlotContext &context);
 	return {
 		// D7: ✦ AI.
 		Luckgram::Translate::CreateSendSlot, // D6: send translation.
+		Luckgram::Transcribe::CreateDictationSlot, // D6: voice input.
 	};
 }
 

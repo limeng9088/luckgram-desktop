@@ -262,10 +262,28 @@ namespace {
 		.key = u"free_transcribe"_q, // D6, mobile 17
 		.group = Group::AI,
 		.titleZh = "免费语音转文字",
-		.titleEn = "Free voice transcription",
-		.aboutZh = "非 Premium 也能把语音消息和圆形视频转成文字",
-		.aboutEn = "Transcribe voice messages and round videos without Premium",
+		.titleEn = "Free voice-to-text",
+		.aboutZh = "不需要会员，把语音消息和圆形视频转成文字",
+		.aboutEn = "Transcribe voice and video messages without Premium",
 		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"dictation"_q, // D6, mobile 17
+		.group = Group::AI,
+		.titleZh = "语音输入",
+		.titleEn = "Voice input",
+		.aboutZh = "输入框旁的按钮，说话即可输入文字",
+		.aboutEn = "A button in the message field to type by speaking",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"dictation_ai_tidy"_q, // D6, mobile 17
+		.group = Group::AI,
+		.titleZh = "语音输入 AI 整理",
+		.titleEn = "Tidy voice input with AI",
+		.aboutZh = "去掉口头禅、补全标点，语言不变",
+		.aboutEn = "Remove filler words and add punctuation, same language",
+		.defaultValue = false,
 	});
 
 	// ---- 调试 / Debug (dev builds only)
