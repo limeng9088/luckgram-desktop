@@ -156,4 +156,12 @@ QString Texts::copy() const { return t("复制", "Copy"); }
 QString Texts::copied() const { return t("已复制", "Copied"); }
 QString Texts::cancel() const { return t("取消", "Cancel"); }
 
+QString Texts::fromImage() const { return t("从图片识别", "Scan from a picture"); }
+QString Texts::fromClipboard() const { return t("从剪贴板识别", "Scan from the clipboard"); }
+QString Texts::noCamera() const { return t("没有找到摄像头，可以从图片或剪贴板里的截图识别二维码。", "No camera found. You can read a QR code from a picture or a screenshot in the clipboard."); }
+QString Texts::noCode() const { return t("没有识别到二维码", "No QR code found"); }
+QString Texts::clipboardEmpty() const { return t("剪贴板里没有图片", "There's no picture in the clipboard"); }
+QString Texts::cameraHint() const { return t("把二维码放到摄像头前面", "Hold the QR code up to the camera"); }
+QString Texts::menuAbout() const { return t("主菜单里：扫一扫加好友、代理配置", "In the main menu: scan to add friends, proxy settings"); }
+
 } // namespace Luckgram::Scan

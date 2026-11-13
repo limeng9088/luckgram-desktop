@@ -34,6 +34,8 @@ PRIVATE
     luckgram/discover/luckgram_nearby_logic.h
     luckgram/discover/luckgram_scan_logic.cpp
     luckgram/discover/luckgram_scan_logic.h
+    luckgram/discover/luckgram_scan_ui.cpp
+    luckgram/discover/luckgram_scan_ui.h
     luckgram/discover/luckgram_square_logic.cpp
     luckgram/discover/luckgram_square_logic.h
     luckgram/discover/luckgram_silent_link.cpp

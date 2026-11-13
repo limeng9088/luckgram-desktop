@@ -73,6 +73,10 @@ LUCKGRAM_TEST(ScanProxyStates) {
 	LG_CHECK(StateOf(true, false) == ProxyState::Connecting);
 	LG_CHECK(StateOf(true, true) == ProxyState::Connected);
 	LG_EQUAL(Texts(true).proxyState(ProxyState::Connecting), U("连接中"));
+	LG_EQUAL(Texts(false).proxyState(ProxyState::Off), U("Off"));
+	LG_EQUAL(Texts(true).fromClipboard(), U("从剪贴板识别"));
+	LG_CHECK(Texts(false).noCamera().contains(U("clipboard")));
+	LG_CHECK(!Texts(true).menuAbout().contains(U("⋮")));
 }
 
 LUCKGRAM_TEST(BlocksParsesIdsDedupesAndToleratesObjects) {

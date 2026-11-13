@@ -59,6 +59,15 @@ public:
 	[[nodiscard]] QString copied() const;
 	[[nodiscard]] QString cancel() const;
 
+	// Desktop only (D10 "桌面端差异": camera, picture file, clipboard).
+	[[nodiscard]] QString fromImage() const;
+	[[nodiscard]] QString fromClipboard() const;
+	[[nodiscard]] QString noCamera() const;
+	[[nodiscard]] QString noCode() const;
+	[[nodiscard]] QString clipboardEmpty() const;
+	[[nodiscard]] QString cameraHint() const;
+	[[nodiscard]] QString menuAbout() const;
+
 private:
 	[[nodiscard]] QString t(const char *zh, const char *en) const;
 
