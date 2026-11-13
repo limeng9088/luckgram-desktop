@@ -238,3 +238,46 @@ LUCKGRAM_TEST(TranslateCacheRemove) {
 	LG_CHECK(!c.get(S("a"), 2).has_value());
 	LG_CHECK(c.get(S("b"), 2).has_value());
 }
+
+// specs#105: the 「🌐 中文 ▾」 link, recent languages, chat or default.
+
+LUCKGRAM_TEST(TranslateLanguageLinkRoundTrip) {
+	const auto link = LanguageLink(777000, 42);
+	LG_EQUAL(link, S("internal:luckgram_translate_lang:777000:42"));
+	const auto parsed = ParseLanguageLink(link.mid(9)); // After "internal:".
+	LG_CHECK(parsed.has_value());
+	LG_EQUAL(parsed->peerId, int64_t(777000));
+	LG_EQUAL(parsed->msgId, int64_t(42));
+}
+
+LUCKGRAM_TEST(TranslateLanguageLinkRejectsGarbage) {
+	LG_CHECK(!ParseLanguageLink(S("luckgram_translate_lang:")));
+	LG_CHECK(!ParseLanguageLink(S("luckgram_translate_lang:1")));
+	LG_CHECK(!ParseLanguageLink(S("luckgram_translate_lang:a:2")));
+	LG_CHECK(!ParseLanguageLink(S("luckgram_translate_lang:0:2")));
+	LG_CHECK(!ParseLanguageLink(S("luckgram_translate_lang:1:0")));
+	LG_CHECK(!ParseLanguageLink(S("luckgram_translate_lang:1:2:3")));
+	LG_CHECK(!ParseLanguageLink(S("other:1:2")));
+}
+
+LUCKGRAM_TEST(TranslateRecentNewestFirst) {
+	LG_EQUAL(PushRecent(QStringList(), S("ja")), L({ "ja" }));
+	LG_EQUAL(PushRecent(L({ "en", "ja" }), S("ja")), L({ "ja", "en" }));
+	LG_EQUAL(PushRecent(L({ "en" }), S("  ")), L({ "en" }));
+	LG_EQUAL(
+		PushRecent(L({ "a", "b", "c", "d", "e" }), S("f")),
+		L({ "f", "a", "b", "c", "d" }));
+}
+
+LUCKGRAM_TEST(TranslateScopeChatOrDefault) {
+	LG_EQUAL(ChatOverrideAfter(Scope::ThisChat, S("ja")), S("ja"));
+	LG_CHECK(ChatOverrideAfter(Scope::Default, S("ja")).isEmpty());
+	// Default chosen: the chat follows it, effective language is the new
+	// default.
+	LG_EQUAL(
+		EffectiveLanguage(ChatOverrideAfter(Scope::Default, S("ja")), S("ja")),
+		S("ja"));
+	LG_EQUAL(
+		EffectiveLanguage(ChatOverrideAfter(Scope::ThisChat, S("ja")), S("en")),
+		S("ja"));
+}

@@ -29,9 +29,11 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/layers/generic_box.h"
 #include "ui/layers/show.h"
 #include "ui/toast/toast.h"
+#include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
 #include "window/window_controller.h"
 #include "window/window_session_controller.h"
+#include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 
 #include <translate_provider.h>
@@ -47,6 +49,7 @@ namespace {
 constexpr auto kSaveDelay = crl::time(2000);
 constexpr auto kToLangKey = "translate_in_to_lang";
 constexpr auto kChatToLangPrefix = "translate_in_chat_to_lang.";
+constexpr auto kRecentKey = "translate_in_recent_langs"; // Codes only.
 
 [[nodiscard]] int64 Now() {
 	return QDateTime::currentMSecsSinceEpoch();
@@ -188,15 +191,32 @@ void ShowFailure(const Api::Error &error) {
 	}
 }
 
+[[nodiscard]] QString HeaderFor(const QString &from, const QString &to);
+
 [[nodiscard]] TextWithEntities BuildDisplay(
+		not_null<const HistoryItem*> item,
 		const TextWithEntities &original,
 		const QString &translated,
-		const QString &header) {
-	// 「已翻译 · 英语 → 中文」 and the translation in a quote block below the
-	// original: the desktop form of mobile's separator inside the bubble.
+		const QString &from,
+		const QString &to) {
+	// 「已翻译 · 英语 → 中文  🌐 中文 ▾」 and the translation in a quote block
+	// below the original: the desktop form of mobile's separator inside the
+	// bubble. The 「🌐 中文 ▾」 link changes the language (specs#105).
+	const auto header = HeaderFor(from, to);
 	auto tail = TextWithEntities{ header };
 	tail.entities.push_back(
 		EntityInText(EntityType::Italic, 0, header.size()));
+	const auto button = LanguageButton(LanguageName(to));
+	tail.append(u"  "_q);
+	const auto offset = tail.text.size();
+	tail.append(button);
+	tail.entities.push_back(EntityInText(
+		EntityType::CustomUrl,
+		offset,
+		button.size(),
+		LanguageLink(
+			int64_t(item->history()->peer->id.value),
+			int64_t(item->id.bare))));
 	tail.append(QChar('\n')).append(translated);
 	tail.entities.insert(
 		tail.entities.begin(),
@@ -229,7 +249,7 @@ void Remember(
 	const auto original = item->originalText();
 	store.shown[item->fullId()] = Shown{
 		.original = original.text,
-		.display = BuildDisplay(original, translated, HeaderFor(from, to)),
+		.display = BuildDisplay(item, original, translated, from, to),
 	};
 	if (item->isRegular()) {
 		store.states.put(
@@ -517,9 +537,11 @@ const TextWithEntities *ShownText(not_null<const HistoryItem*> item) {
 	const auto j = store.shown.emplace(item->fullId(), Shown{
 		.original = original.text,
 		.display = BuildDisplay(
+			item,
 			original,
 			saved->text,
-			HeaderFor(languages.from, languages.to)),
+			languages.from,
+			languages.to),
 	}).first;
 	return &j->second.display;
 }
@@ -580,25 +602,136 @@ bool AddMessageMenuAction(
 	return true;
 }
 
+namespace {
+
+[[nodiscard]] QStringList Recent() {
+	return Settings::GetString(QString::fromLatin1(kRecentKey)).split(
+		QChar(','),
+		Qt::SkipEmptyParts);
+}
+
+void PushToRecent(const QString &language) {
+	Settings::SetString(
+		QString::fromLatin1(kRecentKey),
+		PushRecent(Recent(), language).join(QChar(',')));
+}
+
+// specs#105 2: 「仅本聊天 / 设为默认」.
+void AskScope(
+		not_null<Window::SessionController*> controller,
+		const QString &language,
+		Fn<void(Scope)> done) {
+	const auto name = LanguageName(language);
+	controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+		box->setTitle(TrValue("翻译语言", "Translation language"));
+		box->addRow(object_ptr<Ui::FlatLabel>(
+			box,
+			rpl::single(IsChinese()
+				? (u"以后翻译成%1：只用于这个聊天，还是设为默认？"_q).arg(name)
+				: (u"Translate into %1 from now on: in this chat only, "
+					"or by default?"_q).arg(name)),
+			st::boxLabel));
+		box->addButton(TrValue("设为默认", "Set as default"), [=] {
+			done(Scope::Default);
+			box->closeBox();
+		});
+		box->addButton(TrValue("仅本聊天", "This chat only"), [=] {
+			done(Scope::ThisChat);
+			box->closeBox();
+		});
+	}));
+}
+
+} // namespace
+
 void ChooseLanguage(
 		not_null<Window::SessionController*> controller,
 		const QString &current,
 		Fn<void(QString)> chosen) {
+	// specs#105 3: the current and the recent languages go first.
 	auto selected = std::vector<LanguageId>();
+	auto codes = Recent();
 	if (!current.isEmpty()) {
-		selected.push_back(LanguageId::FromName(current));
+		codes.push_front(current);
+	}
+	for (const auto &code : codes) {
+		const auto id = LanguageId::FromName(code);
+		if (id.known() && !ranges::contains(selected, id)) {
+			selected.push_back(id);
+		}
 	}
 	controller->show(Box(
 		Ui::ChooseLanguageBox,
 		TrValue("翻译成", "Translate to"),
 		[=](std::vector<LanguageId> list) {
 			if (!list.empty() && chosen) {
-				chosen(list.front().twoLetterCode());
+				const auto code = list.front().twoLetterCode();
+				PushToRecent(code);
+				chosen(code);
 			}
 		},
 		std::move(selected),
 		false,
 		nullptr));
+}
+
+bool HandleLanguageLink(
+		not_null<Window::SessionController*> controller,
+		const QString &link) {
+	const auto target = ParseLanguageLink(link);
+	if (!target || !InEnabled()) {
+		return false;
+	}
+	const auto session = &controller->session();
+	const auto peerId = PeerId(PeerIdHelper(uint64(target->peerId)));
+	const auto id = FullMsgId(peerId, MsgId(target->msgId));
+	const auto item = session->data().message(id);
+	if (!item) {
+		return false;
+	}
+	const auto peer = item->history()->peer;
+	ChooseLanguage(controller, EffectiveTarget(peer), [=](QString code) {
+		const auto strong = session->data().message(id);
+		if (!strong) {
+			return;
+		}
+		AskScope(controller, code, [=](Scope scope) {
+			if (scope == Scope::Default) {
+				SetDefaultTarget(code);
+			}
+			SetChatTarget(peer, ChatOverrideAfter(scope, code));
+			if (const auto item = session->data().message(id)) {
+				RequestInto(item, code); // Re-translate this one now.
+			}
+		});
+	});
+	return true;
+}
+
+void AddChatMenuAction(
+		not_null<Window::SessionController*> controller,
+		not_null<PeerData*> peer,
+		const Ui::Menu::MenuCallback &addAction) {
+	if (!InEnabled() || peer->isSelf()) {
+		return;
+	}
+	const auto weak = base::make_weak(controller);
+	addAction(Tr("翻译设置…", "Translation settings…"), [=] {
+		const auto strong = weak.get();
+		if (!strong) {
+			return;
+		}
+		// The chat's own reading language (specs#105 1).
+		ChooseLanguage(strong, EffectiveTarget(peer), [=](QString code) {
+			SetChatTarget(peer, code);
+			if (const auto strong = weak.get()) {
+				strong->showToast(IsChinese()
+					? (u"本聊天的译文语言：%1"_q).arg(LanguageName(code))
+					: (u"Translation language in this chat: %1"_q).arg(
+						LanguageName(code)));
+			}
+		});
+	}, &st::menuIconTranslate);
 }
 
 QString LanguageName(const QString &code) {
