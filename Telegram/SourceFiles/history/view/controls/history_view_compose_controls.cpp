@@ -2853,6 +2853,12 @@ void ComposeControls::init() {
 			.show = _show,
 			.history = [=] { return _history; },
 			.topicRootId = [=] { return _topicRootId; },
+			.sendAction = [=]() -> std::optional<Api::SendAction> {
+				if (!_history || !_sendActionFactory) {
+					return std::nullopt;
+				}
+				return _sendActionFactory();
+			},
 		},
 		_send.get(),
 		[=] { updateControlsGeometry(_wrap->size()); });

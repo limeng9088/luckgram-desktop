@@ -7,6 +7,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "base/unique_qptr.h"
 #include "luckgram/ai/ai_writing.h"
+#include "luckgram/quickreplies/quick_replies.h"
 #include "luckgram/transcribe/luckgram_dictation.h"
 #include "luckgram/translate/translate_out.h"
 #include "ui/rp_widget.h"
@@ -20,14 +21,22 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 namespace Luckgram::Compose {
 namespace {
 
-using Factory = Slot(*)(const SlotContext &context);
+using Create = Slot(*)(const SlotContext &context);
 
-// Nearest to the send button first: [D6 translate][D7 ✦][send].
+struct Factory {
+	Create create = nullptr;
+	int plusOrder = 0; // Position in the 「+」 menu, mobile order.
+};
+
+// In the bar nearest to the send button first: [... ✦][send]. The 「+」
+// menu follows mobile specs#94: quick replies, voice input, AI writing,
+// translate.
 [[nodiscard]] std::vector<Factory> Factories() {
 	return {
-		Luckgram::AI::CreateWritingSlot, // D7: ✦ AI.
-		Luckgram::Translate::CreateSendSlot, // D6: send translation.
-		Luckgram::Transcribe::CreateDictationSlot, // D6: voice input.
+		{ Luckgram::AI::CreateWritingSlot, 3 }, // D7: ✦ AI.
+		{ Luckgram::Translate::CreateSendSlot, 4 }, // D6: translation.
+		{ Luckgram::Transcribe::CreateDictationSlot, 2 }, // D6: voice.
+		{ Luckgram::QuickReplies::CreateSlot, 1 }, // D6: quick replies.
 	};
 }
 
@@ -36,6 +45,7 @@ using Factory = Slot(*)(const SlotContext &context);
 struct RightSlots::Entry {
 	base::unique_qptr<Ui::RpWidget> widget;
 	Fn<void(not_null<Ui::DropdownMenu*>)> plus;
+	int plusOrder = 0;
 	bool shown = false;
 };
 
@@ -72,8 +82,15 @@ void RightSlots::fillPlusMenu(not_null<Ui::DropdownMenu*> menu) {
 	if (!CompactEnabled()) {
 		return;
 	}
-	auto separated = false;
+	auto sorted = std::vector<not_null<Entry*>>();
 	for (const auto &entry : _entries) {
+		sorted.push_back(entry.get());
+	}
+	ranges::stable_sort(sorted, std::less<>(), [](not_null<Entry*> e) {
+		return e->plusOrder;
+	});
+	auto separated = false;
+	for (const auto entry : sorted) {
 		if (!entry->plus) {
 			continue;
 		} else if (!separated && !menu->actions().empty()) {
@@ -137,8 +154,8 @@ RightSlots::RightSlots(
 	context.send = send;
 	// The owner lays out right after construction, no callback needed yet.
 	const auto constructing = std::make_shared<bool>(true);
-	for (const auto factory : Factories()) {
-		auto slot = factory(context);
+	for (const auto &factory : Factories()) {
+		auto slot = factory.create(context);
 		if (!slot.widget) {
 			continue;
 		}
@@ -148,6 +165,7 @@ RightSlots::RightSlots(
 		auto entry = std::make_unique<Entry>();
 		entry->widget.reset(widget);
 		entry->plus = std::move(slot.plus);
+		entry->plusOrder = factory.plusOrder;
 		const auto raw = entry.get();
 		_entries.push_back(std::move(entry));
 
