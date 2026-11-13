@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history_item.h"
 
+#include "luckgram/translate/translate_service.h"
+
 #include "api/api_premium.h"
 #include "api/api_sensitive_content.h"
 #include "api/api_transcribes.h"
@@ -4222,6 +4224,8 @@ const TextWithEntities &HistoryItem::translatedText() const {
 		&& translation->used
 		&& (translation->to == history()->translatedTo())) {
 		return translation->text;
+	} else if (const auto luckgram = Luckgram::Translate::ShownText(this)) {
+		return *luckgram; // Spec 01 A.1: translation below the original.
 	} else {
 		return originalText();
 	}

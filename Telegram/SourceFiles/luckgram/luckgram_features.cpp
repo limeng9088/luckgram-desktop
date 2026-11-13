@@ -13,6 +13,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/xray/luckgram_xray.h"
 #include "settings/sections/settings_luckgram_discover.h"
 #include "settings/sections/settings_luckgram_privacy.h"
+#include "settings/sections/settings_luckgram_translate.h"
 #include "settings/sections/settings_privacy_security.h"
 #include "window/window_session_controller.h"
 
@@ -64,6 +65,16 @@ namespace {
 		.aboutZh = "消息菜单里一点就存到收藏夹",
 		.aboutEn = "Save a message to Saved Messages straight from its menu",
 		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"translate_in"_q, // spec 01 A, B
+		.group = Group::MessagesLanguage,
+		.titleZh = "收到消息翻译",
+		.titleEn = "Translate received messages",
+		.aboutZh = "右键或点消息旁的图标，译文显示在原文下方",
+		.aboutEn = "Right-click or click the icon next to a message; the translation appears below the original",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramTranslateIn::Id(); },
 	});
 	// ---- 媒体、通话与存储 / Media, Calls & Storage
 	// ---- 资料与整理 / Profiles & Organization
