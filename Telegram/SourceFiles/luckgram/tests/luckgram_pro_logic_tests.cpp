@@ -248,6 +248,7 @@ LUCKGRAM_TEST(AccountTextsInBothLanguages) {
 		LG_CHECK(!en.error(S(code)).isEmpty());
 	}
 	LG_EQUAL(zh.proUntil(S("2026-12-01")), S("Pro，到期 2026-12-01"));
+	LG_EQUAL(zh.proUntil(QString()), S("Pro")); // pro.free_for_all.
 	LG_EQUAL(zh.stars(100), S("100 ⭐"));
 	LG_EQUAL(en.plan({ .id = S("m"), .days = 30, .stars = 100 }), S("30 days"));
 }
