@@ -137,6 +137,16 @@ void Remove(const QString &key) {
 	state.changes.fire_copy(key);
 }
 
+QStringList KeysWithPrefix(const QString &prefix) {
+	auto result = QStringList();
+	for (const auto &key : Loaded().settings.keys()) {
+		if (key.startsWith(prefix)) {
+			result.push_back(key);
+		}
+	}
+	return result;
+}
+
 rpl::producer<QString> Changes() {
 	return Current().changes.events();
 }

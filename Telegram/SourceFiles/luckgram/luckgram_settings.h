@@ -21,6 +21,7 @@ void SetString(const QString &key, const QString &value);
 void SetInt(const QString &key, int64 value);
 [[nodiscard]] bool Has(const QString &key);
 void Remove(const QString &key);
+[[nodiscard]] QStringList KeysWithPrefix(const QString &prefix);
 
 // Fires the changed key; an empty key means "everything" (remote config
 // merged, all cleared).

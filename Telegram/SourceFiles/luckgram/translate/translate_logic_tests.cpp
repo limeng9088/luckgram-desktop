@@ -306,3 +306,28 @@ LUCKGRAM_TEST(TranslateChatLanguagesDropBadEntries) {
 		{ 5, S("  ") },
 	})).empty());
 }
+
+LUCKGRAM_TEST(TranslateChatLanguagesMergeOnLoad) {
+	const auto merged = MergeChatLanguages(
+		{ { 1, S("ja") }, { 2, S("en") }, { 3, S("de") } },
+		{ { 2, S("fr") }, { 4, S("ko") } },
+		{ 3 });
+	LG_EQUAL(merged.size(), size_t(3));
+	LG_EQUAL(merged.at(1), S("ja"));
+	LG_EQUAL(merged.at(2), S("fr")); // Changed before the load.
+	LG_EQUAL(merged.at(4), S("ko"));
+	LG_CHECK(!merged.contains(3)); // Reset before the load stays reset.
+}
+
+LUCKGRAM_TEST(TranslateLegacyChatKeys) {
+	const auto prefix = S("translate_in_chat_to_lang.5.");
+	LG_EQUAL(
+		LegacyChatPeerId(S("translate_in_chat_to_lang.5.777000"), prefix),
+		std::make_optional(int64_t(777000)));
+	// Another account's key, garbage, no id.
+	LG_CHECK(!LegacyChatPeerId(S("translate_in_chat_to_lang.6.1"), prefix));
+	LG_CHECK(!LegacyChatPeerId(S("translate_in_chat_to_lang.5.x"), prefix));
+	LG_CHECK(!LegacyChatPeerId(S("translate_in_chat_to_lang.5."), prefix));
+	LG_CHECK(!LegacyChatPeerId(S("translate_in_chat_to_lang.5.0"), prefix));
+	LG_CHECK(!LegacyChatPeerId(S("translate_in_to_lang"), prefix));
+}

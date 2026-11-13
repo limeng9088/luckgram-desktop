@@ -186,6 +186,30 @@ std::map<int64_t, QString> DecodeChatLanguages(const QByteArray &data) {
 	return result;
 }
 
+std::map<int64_t, QString> MergeChatLanguages(
+		std::map<int64_t, QString> saved,
+		const std::map<int64_t, QString> &memory,
+		const std::set<int64_t> &removed) {
+	for (const auto peerId : removed) {
+		saved.erase(peerId);
+	}
+	for (const auto &[peerId, language] : memory) {
+		saved[peerId] = language;
+	}
+	return saved;
+}
+
+std::optional<int64_t> LegacyChatPeerId(
+		const QString &key,
+		const QString &prefix) {
+	if (prefix.isEmpty() || !key.startsWith(prefix)) {
+		return std::nullopt;
+	}
+	auto ok = false;
+	const auto peerId = key.mid(prefix.size()).toLongLong(&ok);
+	return (ok && peerId > 0) ? std::make_optional(peerId) : std::nullopt;
+}
+
 QStringList PushRecent(const QStringList &recent, const QString &language) {
 	const auto code = language.trimmed();
 	auto result = QStringList();
