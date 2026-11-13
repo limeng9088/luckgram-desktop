@@ -65,6 +65,9 @@ optionsList = [
     'skip-release',
     'build-stackwalk',
     'qt-asserts',
+    # Luckgram CI (mac-libs): Qt only in Release; the app is built Release
+    # and the Debug Qt would double the Qt build time.
+    'qt-release-only',
 ]
 options = []
 runCommand = []
@@ -322,6 +325,8 @@ def filterByPlatform(commands):
                     continue
             if 'asserts' in scopes:
                 inscope = inscope and 'qt-asserts' in options
+            if 'qtreleaseonly' in scopes:
+                inscope = inscope and 'qt-release-only' in options
             skip = inscope if m.group(1) == '!' else not inscope
         elif not skip and not re.match(r'\s*#', command):
             if m and m.group(2) == 'version':
@@ -1726,6 +1731,8 @@ mac:
     ASSERTS=
 release:
     CONFIGURATIONS=-debug-and-release
+mac_qtreleaseonly:
+    CONFIGURATIONS=-release
 mac_asserts:
     ASSERTS=-force-asserts
 mac:
