@@ -44,6 +44,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/section_widget.h"
 #include "base/platform/base_platform_info.h"
 #include "api/api_text_entities.h"
+#include "luckgram/backup/luckgram_backup.h"
+#include "luckgram/luckgram_settings.h"
 #include "styles/style_layers.h"
 #include "styles/style_intro.h"
 #include "base/qt/qt_common_adapters.h"
@@ -119,6 +121,21 @@ Widget::Widget(
 		appendStep(new QrWidget(this, _account, getData()));
 		break;
 	default: Unexpected("Enter point in Intro::Widget::Widget.");
+	}
+
+	if (Luckgram::Settings::IsEnabled(
+			QString::fromLatin1(Luckgram::Backup::kFeatureKey))) {
+		// Luckgram D12: restore accounts from a .luckgram-backup file.
+		_luckgramRestore.create(
+			this,
+			object_ptr<Ui::RoundButton>(
+				this,
+				rpl::single(Luckgram::Backup::RestoreText()),
+				st::defaultBoxButton));
+		_luckgramRestore->entity()->setClickedCallback([=] {
+			Luckgram::Backup::StartRestore(getData()->controller->uiShow());
+		});
+		_luckgramRestore->show(anim::type::instant);
 	}
 
 	setupStep();
@@ -416,6 +433,9 @@ void Widget::historyMove(StackAction action, Animate animate) {
 
 	auto stepHasCover = getStep()->hasCover();
 	_settings->toggle(!stepHasCover, anim::type::normal);
+	if (_luckgramRestore) {
+		_luckgramRestore->toggle(!stepHasCover, anim::type::normal);
+	}
 	if (_testModeLabel) {
 		_testModeLabel->toggle(!stepHasCover, anim::type::normal);
 	}
@@ -445,6 +465,7 @@ void Widget::fixOrder() {
 	if (_update) _update->raise();
 	if (_changeLanguage) _changeLanguage->raise();
 	_settings->raise();
+	if (_luckgramRestore) _luckgramRestore->raise();
 	_back->raise();
 	floatPlayerRaiseAll();
 	_connecting->raise();
@@ -709,6 +730,9 @@ void Widget::showControls() {
 	_connecting->setForceHidden(false);
 	auto hasCover = getStep()->hasCover();
 	_settings->toggle(!hasCover, anim::type::instant);
+	if (_luckgramRestore) {
+		_luckgramRestore->toggle(!hasCover, anim::type::instant);
+	}
 	if (_testModeLabel) {
 		_testModeLabel->toggle(!hasCover, anim::type::instant);
 	}
@@ -759,6 +783,7 @@ void Widget::hideControls() {
 	_next->hide(anim::type::instant);
 	_connecting->setForceHidden(true);
 	_settings->hide(anim::type::instant);
+	if (_luckgramRestore) _luckgramRestore->hide(anim::type::instant);
 	if (_testModeLabel) _testModeLabel->hide(anim::type::instant);
 	if (_update) _update->hide(anim::type::instant);
 	if (_changeLanguage) _changeLanguage->hide(anim::type::instant);
@@ -830,16 +855,24 @@ void Widget::updateControlsGeometry() {
 		getStep()->hasCover() ? st::introCoverHeight : 0,
 		shown);
 	_settings->moveToRight(skip, controlsTop + skip);
+	// Luckgram D12: 「从备份恢复」 next to 「设置」, the others move left.
+	auto luckgramShift = 0;
+	if (_luckgramRestore) {
+		_luckgramRestore->moveToRight(
+			skip + _settings->width() + skip,
+			_settings->y());
+		luckgramShift = _luckgramRestore->width() + skip;
+	}
 	if (_testModeLabel) {
 		_testModeLabel->moveToRight(
-			skip + _settings->width() + skip,
+			skip + _settings->width() + skip + luckgramShift,
 			_settings->y()
 				+ (_settings->height()
 				- _testModeLabel->height()) / 2);
 	}
 	if (_update) {
 		_update->moveToRight(
-			skip + _settings->width() + skip,
+			skip + _settings->width() + skip + luckgramShift,
 			_settings->y());
 	}
 	_back->moveToLeft(0, controlsTop);

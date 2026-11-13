@@ -364,7 +364,9 @@ void Domain::scheduleUpdateUnreadBadge() {
 	}));
 }
 
-not_null<Main::Account*> Domain::add(MTP::Environment environment) {
+not_null<Main::Account*> Domain::add(
+		MTP::Environment environment,
+		const QByteArray &luckgramAuthorization) {
 	Expects(started());
 	Expects(_accounts.size() < kPremiumMaxAccounts);
 
@@ -399,6 +401,10 @@ not_null<Main::Account*> Domain::add(MTP::Environment environment) {
 	});
 	const auto account = _accounts.back().account.get();
 	account->setMtpMainDcId(mainDcId);
+	if (!luckgramAuthorization.isEmpty()) {
+		// Luckgram D12: before the start, which creates the session.
+		account->setMtpAuthorization(luckgramAuthorization);
+	}
 	_local->startAdded(account, std::move(config));
 	watchSession(account);
 	_accountsChanges.fire({});

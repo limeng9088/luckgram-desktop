@@ -128,6 +128,13 @@ PRIVATE
     luckgram/ai/ai_markdown_logic.h
     luckgram/ai/ai_summary_logic.cpp
     luckgram/ai/ai_summary_logic.h
+    # D12 account backup file
+    luckgram/backup/luckgram_backup.cpp
+    luckgram/backup/luckgram_backup.h
+    luckgram/backup/luckgram_backup_format.cpp
+    luckgram/backup/luckgram_backup_format.h
+    settings/sections/settings_luckgram_backup.cpp
+    settings/sections/settings_luckgram_backup.h
 )
 
 # A generated header rather than a compile definition: switching the option
