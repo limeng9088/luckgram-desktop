@@ -8,6 +8,9 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QByteArray>
 #include <QtCore/QString>
 
+#include <atomic>
+#include <memory>
+
 // D10 / D11: re-encodes a local video to H.264 / AAC MP4 with the bundled
 // FFmpeg (libopenh264 + aac, the encoders round video messages use). The
 // long edge is scaled down to `maxEdge` (even sides, rotation applied), the
@@ -30,6 +33,8 @@ struct TranscodeArgs {
 	// 0 = keep the source bitrate rules (Square::VideoBitrate).
 	int videoBitrate = 0;
 	bool withAudio = true;
+	// Set from the main thread to stop early (the box was closed).
+	std::shared_ptr<std::atomic<bool>> cancelled;
 };
 
 struct TranscodeResult {

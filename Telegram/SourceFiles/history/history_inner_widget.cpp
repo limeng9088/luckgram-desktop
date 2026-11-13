@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_inner_widget.h"
 
 #include "luckgram/luckgram_save_to_saved.h"
+#include "luckgram/translate/translate_service.h"
 
 #include "api/api_polls.h"
 #include "chat_helpers/stickers_emoji_pack.h"
@@ -3739,7 +3740,9 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 								.append('\n')
 								.append(item->originalText()))
 							: item->originalText();
-						if (!translate.text.isEmpty()
+						if (Luckgram::Translate::AddMessageMenuAction(_menu, controller, item)) {
+							// Luckgram spec 01: 「翻译」 / 「撤销翻译」 in the bubble.
+						} else if (!translate.text.isEmpty()
 							&& !Ui::SkipTranslate(translate)) {
 							_menu->addAction(tr::lng_context_translate(tr::now), [=] {
 								_controller->show(Box(

@@ -77,3 +77,33 @@ LUCKGRAM_TEST(StorageCleanupKeepsTelegramFiles) {
 	LG_CHECK(paths.contains(U("/data/A/luckgram_translate_cache0")));
 	LG_CHECK(paths.contains(U("/data/A/luckgram_translate_cache1")));
 }
+
+LUCKGRAM_TEST(StorageAccountNeedsLocalKey) {
+	LG_CHECK(AccountUsable(true, false));
+	LG_CHECK(!AccountUsable(false, false));
+}
+
+LUCKGRAM_TEST(StorageHiddenAccountRefused) {
+	// D8 second space: reading, writing and removing are all refused, so a
+	// hidden account's saved file is never overwritten by an empty state.
+	LG_CHECK(!AccountUsable(true, true));
+	LG_CHECK(!AccountUsable(false, true));
+}
+
+LUCKGRAM_TEST(StorageClearCoversQueuedWrites) {
+	// Logout right after the first save: the file is not on disk yet, but
+	// its queued write must still be removed after it lands.
+	const auto paths = ClearPaths(
+		U("/data/A/"),
+		{ U("maps"), U("luckgram_notess") },
+		{ U("notes"), U("translate_cache") });
+	LG_EQUAL(paths.size(), 6);
+	LG_CHECK(paths.contains(U("/data/A/luckgram_notess")));
+	LG_CHECK(paths.contains(U("/data/A/luckgram_notes0")));
+	LG_CHECK(paths.contains(U("/data/A/luckgram_translate_caches")));
+	LG_CHECK(!paths.contains(U("/data/A/maps")));
+}
+
+LUCKGRAM_TEST(StorageClearWithNothingWritten) {
+	LG_CHECK(ClearPaths(U("/data/A/"), { U("maps") }, {}).isEmpty());
+}

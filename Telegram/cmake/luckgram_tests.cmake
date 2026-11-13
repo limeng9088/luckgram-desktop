@@ -68,6 +68,11 @@ PRIVATE
     luckgram/xray/luckgram_xray_logic.h
     luckgram/tests/luckgram_xray_logic_tests.cpp
 
+    # D6 messages and language (mobile 01, 02, 14, 15, 17)
+    luckgram/translate/translate_logic.cpp
+    luckgram/translate/translate_logic.h
+    luckgram/translate/translate_logic_tests.cpp
+
     # D9 profile details, private notes, keyword folders, shared-group
     # activity, storage options (mobile 05 / 06 / 07 / 08 / 16)
     luckgram/d9/luckgram_cache_logic.cpp
