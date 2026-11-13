@@ -111,6 +111,16 @@ struct LanguageLinkTarget {
 	const QString &key,
 	const QString &prefix);
 
+// 01 C.3: what to translate an outgoing message into: the chat's own
+// choice, else the language of the newest incoming message, else English.
+[[nodiscard]] QString OutLanguage(
+	const QString &chatChosen,
+	const QString &lastIncoming);
+
+// 01 C.1: 「已翻译成 西班牙语 · 」 before the 「撤销」 link.
+[[nodiscard]] QString OutHint(const QString &toName, bool chinese);
+[[nodiscard]] QString UndoLabel(bool chinese);
+
 // specs#105 3: 「最近使用」, newest first, no duplicates, at most kMaxRecent.
 inline constexpr auto kMaxRecent = 5;
 [[nodiscard]] QStringList PushRecent(

@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "menu/menu_send.h"
+#include "luckgram/luckgram_compose_slots.h" // Luckgram D6
 
 #include "menu/menu_checked_action.h"
 
@@ -831,6 +832,9 @@ FillMenuResult FillSendMenu(
 			[=] { action({ .type = ActionType::ChangePrice }, details); },
 			&icons.menuPrice);
 	}
+
+	// Luckgram D6: items of Luckgram compose slots for this send button.
+	Luckgram::Compose::FillSendMenu(menu->parentWidget(), menu);
 
 	if (maybeShow) {
 		return AttachSendMenuEffect(

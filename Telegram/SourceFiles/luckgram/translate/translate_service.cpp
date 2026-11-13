@@ -14,6 +14,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "history/history.h"
+#include "history/view/history_view_element.h"
 #include "history/history_item.h"
 #include "lang/translate_mtproto_provider.h"
 #include "luckgram/luckgram_ai.h"
@@ -60,6 +61,7 @@ constexpr auto kRecentKey = "translate_in_recent_langs"; // Codes only.
 constexpr auto kResultsName = "translate_cache";
 constexpr auto kStatesName = "translate_state";
 constexpr auto kChatLanguagesName = "translate_chat_langs";
+constexpr auto kOutLanguagesName = "translate_out_chat_langs";
 
 struct Shown {
 	QString original; // Shown only while the message text is the same.
@@ -115,6 +117,13 @@ struct Store {
 			chatLanguages,
 			chatLanguagesRemoved);
 		chatLanguagesRemoved.clear();
+		outLanguages = MergeChatLanguages(
+			DecodeChatLanguages(Storage::ReadAccount(
+				session,
+				QString::fromLatin1(kOutLanguagesName))),
+			outLanguages,
+			outLanguagesRemoved);
+		outLanguagesRemoved.clear();
 		if (!legacy.isEmpty()) {
 			save(); // Encrypted copy queued first, then the plain keys go.
 			for (const auto &key : legacy) {
@@ -146,6 +155,10 @@ struct Store {
 			session,
 			QString::fromLatin1(kChatLanguagesName),
 			EncodeChatLanguages(chatLanguages));
+		Storage::WriteAccount(
+			session,
+			QString::fromLatin1(kOutLanguagesName),
+			EncodeChatLanguages(outLanguages));
 	}
 	void flush() {
 		if (saveTimer.isActive()) {
@@ -160,6 +173,8 @@ struct Store {
 	Cache states; // State key -> translated text, from>to languages.
 	std::map<int64_t, QString> chatLanguages; // specs#105, peer id -> code.
 	std::set<int64_t> chatLanguagesRemoved; // Reset before the load.
+	std::map<int64_t, QString> outLanguages; // 01 C.3, peer id -> code.
+	std::set<int64_t> outLanguagesRemoved;
 	std::map<FullMsgId, Shown> shown;
 	std::map<FullMsgId, Detected> detected; // A.2 icon, memory only.
 	base::Timer saveTimer;
@@ -564,6 +579,71 @@ void SetChatTarget(not_null<PeerData*> peer, const QString &language) {
 	}
 }
 
+QString OutChatTarget(not_null<PeerData*> peer) {
+	const auto &languages = GetStore(&peer->session()).outLanguages;
+	const auto i = languages.find(int64_t(peer->id.value));
+	return (i != end(languages)) ? TargetLanguage(i->second) : QString();
+}
+
+void SetOutChatTarget(not_null<PeerData*> peer, const QString &language) {
+	auto &store = GetStore(&peer->session());
+	const auto peerId = int64_t(peer->id.value);
+	const auto code = TargetLanguage(language);
+	if (code.isEmpty()) {
+		store.outLanguages.erase(peerId);
+		if (!store.loaded) {
+			store.outLanguagesRemoved.emplace(peerId);
+		}
+	} else {
+		store.outLanguages[peerId] = code;
+		store.outLanguagesRemoved.erase(peerId);
+	}
+	store.scheduleSave();
+}
+
+QString LastIncomingLanguage(not_null<History*> history) {
+	constexpr auto kMaxChecked = 50;
+	auto checked = 0;
+	for (auto i = history->blocks.rbegin(); i != history->blocks.rend(); ++i) {
+		const auto &messages = (*i)->messages;
+		for (auto j = messages.rbegin(); j != messages.rend(); ++j) {
+			const auto item = (*j)->data();
+			if (item->out() || item->isService()) {
+				continue;
+			} else if (++checked > kMaxChecked) {
+				return QString();
+			}
+			const auto &text = item->originalText().text;
+			if (!text.trimmed().isEmpty()) {
+				const auto language = DetectedLanguage(text);
+				if (!language.isEmpty()) {
+					return language;
+				}
+			}
+		}
+	}
+	return QString();
+}
+
+void TranslateText(
+		not_null<Main::Session*> session,
+		const TextWithEntities &text,
+		const QString &to,
+		Fn<void(TextWithEntities)> done,
+		Fn<void()> fail) {
+	const auto provider = std::make_shared<Provider>(session, kSourceOut);
+	provider->request({
+		.text = text,
+	}, LanguageId::FromName(to), [=, keep = provider](
+			Ui::TranslateProviderResult result) {
+		if (result.text && !result.text->text.trimmed().isEmpty()) {
+			done(std::move(*result.text));
+		} else if (fail) {
+			fail(); // The failure toast is shown by the provider.
+		}
+	});
+}
+
 QString EffectiveTarget(not_null<PeerData*> peer) {
 	return EffectiveLanguage(ChatTarget(peer), DefaultTarget());
 }
@@ -881,6 +961,8 @@ void ClearAll() {
 		store->states = Cache();
 		store->chatLanguages.clear();
 		store->chatLanguagesRemoved.clear();
+		store->outLanguages.clear();
+		store->outLanguagesRemoved.clear();
 		store->shown.clear();
 	}
 }

@@ -82,6 +82,15 @@ namespace {
 		.defaultValue = true,
 		.subpage = [] { return ::Settings::LuckgramTranslateIn::Id(); },
 	});
+	result.push_back({
+		.key = u"translate_out"_q, // spec 01 C
+		.group = Group::MessagesLanguage,
+		.titleZh = "发送前翻译",
+		.titleEn = "Translate before sending",
+		.aboutZh = "输入框旁的翻译按钮，右键发送按钮可选「翻译成…」",
+		.aboutEn = "The translate button next to the input field; right-click the send button for \"Translate to…\"",
+		.defaultValue = true,
+	});
 	// ---- 媒体、通话与存储 / Media, Calls & Storage
 	// ---- 资料与整理 / Profiles & Organization
 	// D12 (mobile 33): the built-in Xray core, default on.

@@ -1373,6 +1373,11 @@ historyAttachEmojiActive: icon {{ "chat/input_smile_face", windowBgActive }};
 historyEmojiCircleLine: 1.5;
 historyEmojiCircleFg: historyComposeIconFg;
 historyEmojiCircleFgOver: historyComposeIconFgOver;
+// Luckgram D6 (spec 01 C): send translation button.
+historyLuckgramTranslate: IconButton(historyAttach) {
+	icon: icon {{ "menu/translate", historyComposeIconFg }};
+	iconOver: icon {{ "menu/translate", historyComposeIconFgOver }};
+}
 historyBotKeyboardShow: IconButton(historyAttach) {
 	icon: icon {{ "chat/input_bot_keyboard", historyComposeIconFg }};
 	iconOver: icon {{ "chat/input_bot_keyboard", historyComposeIconFgOver }};

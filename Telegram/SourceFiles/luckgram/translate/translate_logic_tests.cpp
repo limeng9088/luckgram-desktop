@@ -331,3 +331,20 @@ LUCKGRAM_TEST(TranslateLegacyChatKeys) {
 	LG_CHECK(!LegacyChatPeerId(S("translate_in_chat_to_lang.5.0"), prefix));
 	LG_CHECK(!LegacyChatPeerId(S("translate_in_to_lang"), prefix));
 }
+
+// 01 C: translation before sending.
+
+LUCKGRAM_TEST(TranslateOutLanguageOrder) {
+	LG_EQUAL(OutLanguage(S("es"), S("ja")), S("es"));
+	LG_EQUAL(OutLanguage(QString(), S("ja")), S("ja"));
+	LG_EQUAL(OutLanguage(S("  "), S("pt-BR")), S("pt"));
+	LG_EQUAL(OutLanguage(QString(), QString()), S("en"));
+	LG_EQUAL(OutLanguage(QString(), S("und")), S("en"));
+}
+
+LUCKGRAM_TEST(TranslateOutHint) {
+	LG_EQUAL(OutHint(S("西班牙语"), true) + UndoLabel(true),
+		S("已翻译成 西班牙语 · 撤销"));
+	LG_EQUAL(OutHint(S("Spanish"), false) + UndoLabel(false),
+		S("Translated to Spanish · Undo"));
+}
