@@ -4437,6 +4437,25 @@ void ApiWrap::sendFile(
 	}));
 }
 
+void ApiWrap::luckgramSendFile(
+		const QByteArray &fileContent,
+		const QString &displayName,
+		TextWithTags caption,
+		bool forceFile,
+		uint64 idOverride,
+		const SendAction &action) {
+	_fileLoader->addTask(std::make_unique<FileLoadTask>(FileLoadTask::Args{
+		.session = &session(),
+		.content = fileContent,
+		.type = SendMediaType::File,
+		.to = FileLoadTaskOptions(action),
+		.caption = std::move(caption),
+		.forceFile = forceFile,
+		.idOverride = idOverride,
+		.displayName = displayName,
+	}));
+}
+
 void ApiWrap::sendUploadedPhoto(
 		FullMsgId localId,
 		Api::RemoteFileInfo info,

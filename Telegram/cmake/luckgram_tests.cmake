@@ -45,6 +45,9 @@ PRIVATE
     luckgram/media/luckgram_round_video_logic.cpp
     luckgram/media/luckgram_round_video_logic.h
     luckgram/tests/luckgram_round_video_tests.cpp
+    luckgram/calls/luckgram_call_recording_logic.cpp
+    luckgram/calls/luckgram_call_recording_logic.h
+    luckgram/tests/luckgram_call_recording_tests.cpp
     luckgram/tests/luckgram_nearby_tests.cpp
     luckgram/tests/luckgram_square_tests.cpp
 

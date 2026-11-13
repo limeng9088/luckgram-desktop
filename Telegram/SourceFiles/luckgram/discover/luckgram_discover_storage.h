@@ -10,8 +10,9 @@ class Account;
 } // namespace Main
 
 // D10 user content on disk (square cached pages, names of blocked people,
-// the nearby bio and manual location) goes through D2 Luckgram::Storage at
-// the account level: encrypted with the local key, removed on log out.
+// the nearby bio and manual location; D11 the call recording target chat)
+// goes through D2 Luckgram::Storage at the account level: encrypted with
+// the local key, removed on log out.
 //
 // When the account can't be written (not started yet, or hidden in the
 // second space, D8) the value is kept in memory only. Nothing is cached
