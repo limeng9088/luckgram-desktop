@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_message.h"
+#include "luckgram/translate/translate_service.h" // Luckgram D6
 
 #include "api/api_suggest_post.h"
 #include "api/api_transcribes.h"
@@ -72,6 +73,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_dialogs.h"
 #include "styles/style_iv.h"
 #include "styles/style_polls.h"
+#include "styles/style_menu_icons.h" // Luckgram D6
 
 namespace HistoryView {
 namespace {
@@ -574,6 +576,18 @@ struct Message::LinkRipple {
 	QPoint maskOffset;
 	int cachedWidth = 0;
 };
+
+namespace {
+
+// Luckgram D6 (spec 01 A.2): the one-tap translate icon takes the right
+// action place when the message has no other right action.
+[[nodiscard]] bool LuckgramTranslateIcon(not_null<const Element*> view) {
+	const auto context = view->context();
+	return ((context == Context::History) || (context == Context::Replies))
+		&& Luckgram::Translate::ShowIcon(view->data());
+}
+
+} // namespace
 
 LogEntryOriginal::LogEntryOriginal() = default;
 
@@ -6040,7 +6054,9 @@ std::optional<QSize> Message::rightActionSize() const {
 		? ((_rightAction && _rightAction->second)
 			? QSize(st::historyFastCloseSize, st::historyFastCloseSize * 2)
 			: QSize(st::historyFastCloseSize, st::historyFastCloseSize))
-		: (displayFastShare() || displayGoToOriginal())
+		: (displayFastShare()
+			|| displayGoToOriginal()
+			|| LuckgramTranslateIcon(this))
 		? QSize(st::historyFastShareSize, st::historyFastShareSize)
 		: std::optional<QSize>();
 }
@@ -6164,6 +6180,15 @@ void Message::drawRightAction(
 		st->historyFastMoreIcon().paintInCenter(
 			p,
 			QRect(left, size->width() + top, size->width(), size->width()));
+	} else if (!data()->isSponsored()
+			&& !displayFastShare()
+			&& !displayGoToOriginal()
+			&& LuckgramTranslateIcon(this)) {
+		// Luckgram D6: the one-tap translate icon.
+		st::menuIconTranslate.paintInCenter(
+			p,
+			Rect(left, top, *size),
+			st->msgServiceFg()->c);
 	} else {
 		const auto &icon = data()->isSponsored()
 			? st->historyFastCloseIcon()
@@ -6211,6 +6236,10 @@ ClickHandlerPtr Message::prepareRightActionLink() const {
 	} else if ((context() != Context::SavedSublist)
 		&& displayRightActionComments()) {
 		return createGoToCommentsLink();
+	} else if (!displayFastShare()
+		&& !displayGoToOriginal()
+		&& LuckgramTranslateIcon(this)) {
+		return Luckgram::Translate::IconLink(data()); // Luckgram D6
 	}
 	const auto sessionId = data()->history()->session().uniqueId();
 	const auto owner = &data()->history()->owner();
