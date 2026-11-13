@@ -141,7 +141,8 @@ private:
 
 };
 
-class ModuleTap final : public AudioDeviceModule {
+// Not final: rtc::make_ref_counted derives RefCountedObject<ModuleTap>.
+class ModuleTap : public AudioDeviceModule {
 public:
 	ModuleTap(
 		rtc::scoped_refptr<AudioDeviceModule> inner,
