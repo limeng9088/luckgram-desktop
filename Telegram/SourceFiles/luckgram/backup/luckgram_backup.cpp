@@ -10,13 +10,17 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "core/application.h"
 #include "core/file_utilities.h"
 #include "data/data_session.h"
+#include "data/data_user.h"
 #include "luckgram/luckgram_strings.h"
 #include "luckgram/pro/luckgram_pro_logic.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
+#include "mtproto/mtproto_dc_options.h"
 #include "ui/layers/generic_box.h"
 #include "ui/layers/show.h"
+#include "ui/rp_widget.h"
+#include "ui/ui_utility.h"
 #include "ui/widgets/checkbox.h"
 #include "ui/widgets/fields/password_input.h"
 #include "ui/widgets/labels.h"
@@ -172,13 +176,22 @@ crl::time NextAttemptAt = 0;
 	return result;
 }
 
+// Ui::PasswordInput is a QLineEdit, not an RpWidget: GenericBox::addRow
+// can't take it, so it goes into a row of its own (like webauthn_common).
 [[nodiscard]] not_null<Ui::PasswordInput*> AddPasswordField(
 		not_null<Ui::GenericBox*> box,
 		const QString &placeholder) {
-	return box->addRow(object_ptr<Ui::PasswordInput>(
-		box,
-		st::defaultInputField,
-		rpl::single(placeholder)));
+	const auto &fieldSt = st::defaultInputField;
+	const auto row = box->addRow(object_ptr<Ui::RpWidget>(box));
+	row->resize(row->width(), fieldSt.heightMin);
+	const auto field = Ui::CreateChild<Ui::PasswordInput>(
+		row,
+		fieldSt,
+		rpl::single(placeholder));
+	row->sizeValue() | rpl::on_next([=](QSize size) {
+		field->resize(size.width(), field->height());
+	}, row->lifetime());
+	return field;
 }
 
 // --- Export.
@@ -302,7 +315,7 @@ void RestoreOne(
 		if (ok) {
 			++progress->restored;
 			if (!progress->first) {
-				progress->first = added;
+				progress->first = added.get();
 			}
 		} else {
 			++progress->failed;

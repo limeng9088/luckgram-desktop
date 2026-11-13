@@ -26,7 +26,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <openssl/rand.h>
 
 #ifdef Q_OS_WIN
-#include "base/platform/win/base_windows_h.h"
+#include <windows.h>
 #endif // Q_OS_WIN
 
 namespace Luckgram::Xray {
