@@ -167,6 +167,11 @@ Api::RequestPtr Chat(
 	body.insert(u"task"_q, args.task);
 	body.insert(u"messages"_q, messages);
 	body.insert(u"stream"_q, args.stream);
+	for (auto i = args.extra.begin(); i != args.extra.end(); ++i) {
+		if (!body.contains(i.key())) {
+			body.insert(i.key(), i.value());
+		}
+	}
 
 	const auto stream = args.stream;
 	const auto parser = std::make_shared<SseParser>(onDelta, fail);

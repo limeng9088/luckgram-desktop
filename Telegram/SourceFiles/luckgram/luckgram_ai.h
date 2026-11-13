@@ -7,6 +7,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "luckgram/luckgram_api.h"
 
+#include <QtCore/QJsonObject>
+
 namespace Ui {
 class Show;
 } // namespace Ui
@@ -27,6 +29,10 @@ struct ChatArgs {
 	QString task = u"chat"_q;
 	std::vector<Message> messages;
 	bool stream = true;
+	// D7: extra top-level request fields, e.g. "effect" (writing, mobile
+	// 21) or "agent_id" (market agent, mobile 30). Same rule as Android
+	// LuckgramAI.chat(params): they never replace task, messages or stream.
+	QJsonObject extra;
 };
 
 // POST /v1/ai/chat. onDelta(piece, textSoFar) while streaming (SSE),

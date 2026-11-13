@@ -62,6 +62,19 @@ PRIVATE
     luckgram/pro/luckgram_pro_logic.h
     settings/sections/settings_luckgram_pro.cpp
     settings/sections/settings_luckgram_pro.h
+    # D7 AI: pure logic (also in luckgram_tests)
+    luckgram/ai/ai_agents_logic.cpp
+    luckgram/ai/ai_agents_logic.h
+    luckgram/ai/ai_compose_logic.cpp
+    luckgram/ai/ai_compose_logic.h
+    luckgram/ai/ai_conversation_logic.cpp
+    luckgram/ai/ai_conversation_logic.h
+    luckgram/ai/ai_market_logic.cpp
+    luckgram/ai/ai_market_logic.h
+    luckgram/ai/ai_markdown_logic.cpp
+    luckgram/ai/ai_markdown_logic.h
+    luckgram/ai/ai_summary_logic.cpp
+    luckgram/ai/ai_summary_logic.h
 )
 
 # A generated header rather than a compile definition: switching the option

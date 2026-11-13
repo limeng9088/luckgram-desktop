@@ -17,7 +17,90 @@ namespace {
 	// ---- 消息与语言 / Messages & Language
 	// ---- 媒体、通话与存储 / Media, Calls & Storage
 	// ---- 资料与整理 / Profiles & Organization
-	// ---- AI (switches come with D5-D12; the consent row is always there)
+	// ---- AI. D7 (mobile 18-24, 30): same keys, order, texts and defaults
+	// as Android LuckgramFeatures; the consent row is always there. D6's
+	// voice switches (free_transcribe, dictation...) go in this group too.
+	result.push_back({
+		.key = QString::fromLatin1(kAiAssistant),
+		.group = Group::AI,
+		.titleZh = "AI 助手",
+		.titleEn = "AI assistant",
+		.aboutZh = "聊天列表顶部的「AI」按钮：提问、总结、改写、讲解、解题",
+		.aboutEn = "The \"AI\" button on the chat list: ask, summarize, rewrite, explain, solve",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = QString::fromLatin1(kAiImage),
+		.group = Group::AI,
+		.titleZh = "AI 画图",
+		.titleEn = "AI images",
+		.aboutZh = "在 AI 助手里描述画面生成图片，可发送、保存、重画",
+		.aboutEn = "Describe a picture in the AI assistant; send, save or redraw it",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = QString::fromLatin1(kAiAgents),
+		.group = Group::AI,
+		.titleZh = "AI 智能体",
+		.titleEn = "AI agents",
+		.aboutZh = "AI 助手里的旅行规划师、文案写手等，也能自己创建",
+		.aboutEn = "Travel planner, copywriter and more in the AI assistant, or make your own",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = QString::fromLatin1(kAiAgentMarket),
+		.group = Group::AI,
+		.titleZh = "智能体市场",
+		.titleEn = "Agent market",
+		.aboutZh = "「智能体」里的「市场」：按分类浏览、搜索更多智能体，部分 Pro 专享",
+		.aboutEn = "\"Market\" in Agents: browse and search more agents by category, some for Pro",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = QString::fromLatin1(kAiAssistantRow),
+		.group = Group::AI,
+		.titleZh = "聊天列表置顶「Luckgram AI」",
+		.titleEn = "Pin \"Luckgram AI\" in the chat list",
+		.aboutZh = "在聊天列表顶部显示一行 AI 助手入口",
+		.aboutEn = "Show an AI assistant row at the top of the chat list",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = QString::fromLatin1(kAiWriting),
+		.group = Group::AI,
+		.titleZh = "AI 写作",
+		.titleEn = "AI writing",
+		.aboutZh = "输入框里的 ✦ 按钮：润色、更正式、更友好、更简短、修正语法",
+		.aboutEn = "The ✦ button in the message field: polish, formal, friendly, shorter, grammar",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = QString::fromLatin1(kAiPost),
+		.group = Group::AI,
+		.titleZh = "AI 写帖子",
+		.titleEn = "AI posts",
+		.aboutZh = "有发帖权限的频道里，✦ 菜单的「写帖子」：按频道风格生成帖子",
+		.aboutEn = "\"Write a post\" in the ✦ menu of channels you can post in, in the channel's style",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = QString::fromLatin1(kAiReply),
+		.group = Group::AI,
+		.titleZh = "AI 回复",
+		.titleEn = "AI reply",
+		.aboutZh = "✦ 菜单里的「帮我回复」：根据对话和草稿给出 3 条候选",
+		.aboutEn = "\"Help me reply\" in the ✦ menu: 3 suggestions from the chat and your draft",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = QString::fromLatin1(kAiSummary),
+		.group = Group::AI,
+		.titleZh = "聊天总结",
+		.titleEn = "Chat summary",
+		.aboutZh = "未读多时一键总结要点，点引用跳回原消息，还能就这些消息提问",
+		.aboutEn = "Summarize many unread messages, jump to the source, ask about them",
+		.defaultValue = true,
+	});
 
 	// ---- 调试 / Debug (dev builds only)
 	if (IsDevBuild()) {
