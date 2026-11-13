@@ -47,6 +47,11 @@ PRIVATE
     luckgram/luckgram_privacy_logic.h
     luckgram/tests/luckgram_privacy_tests.cpp
 
+    # D12 built-in Xray: share links, Clash entries, outbounds, config
+    luckgram/xray/luckgram_xray_logic.cpp
+    luckgram/xray/luckgram_xray_logic.h
+    luckgram/tests/luckgram_xray_logic_tests.cpp
+
     # D7 AI (mobile 18-24, 30)
     luckgram/ai/ai_agents_logic.cpp
     luckgram/ai/ai_agents_logic.h
