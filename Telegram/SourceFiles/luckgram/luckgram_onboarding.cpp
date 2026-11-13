@@ -13,6 +13,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "core/version.h"
 #include "lang/lang_instance.h"
 #include "lang/lang_keys.h"
+#include "luckgram/discover/luckgram_nearby_state.h"
 #include "luckgram/luckgram_desktop.h"
 #include "luckgram/luckgram_features.h"
 #include "luckgram/luckgram_onboarding_logic.h"
@@ -360,6 +361,7 @@ void OnMainShown(not_null<Window::SessionController*> controller) {
 	}
 	started = true;
 	base::call_delayed(kAfterLoginDelay, controller, [=] {
+		NearbyState::RestoreReminder(controller); // D10: 25 reminder.
 		if (!CheckPrivacyUpdate(controller)) {
 			ShowOnboarding(controller);
 		}

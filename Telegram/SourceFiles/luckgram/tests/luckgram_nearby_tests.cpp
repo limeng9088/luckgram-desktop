@@ -138,6 +138,10 @@ LUCKGRAM_TEST(NearbyTextsInBothLanguages) {
 	LG_CHECK(en.rateLimited(0).contains(U("1 min")));
 	LG_CHECK(en.locationFailed().contains(U("Click Refresh")));
 	LG_CHECK(zh.introText().contains(U("不离开这台电脑")));
+	LG_CHECK(zh.sourceSystem().contains(U("1 公里")));
+	LG_CHECK(en.sourceManual().contains(U("1 km")));
+	LG_CHECK(zh.pickOnMap() != en.pickOnMap());
+	LG_CHECK(!en.systemLocationFailed().toLower().contains(U("link")));
 }
 
 LUCKGRAM_TEST(NearbyCardNameMatchesIosAndIsCapped) {

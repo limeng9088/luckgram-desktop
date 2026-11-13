@@ -5,6 +5,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/luckgram_features.h"
 
+#include "luckgram/discover/luckgram_nearby_logic.h"
 #include "luckgram/discover/luckgram_square_logic.h"
 #include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_hidden_chats.h"
@@ -79,6 +80,15 @@ namespace {
 		.onToggled = HiddenChats::OnToggled,
 	});
 	// ---- 发现 / Discover (D10)
+	result.push_back({
+		.key = QString::fromLatin1(Nearby::kFeatureKey),
+		.group = Group::Discover,
+		.titleZh = "附近的人",
+		.titleEn = "People Nearby",
+		.aboutZh = "「发现」里的入口：找到附近同样开启的 Luckgram 用户",
+		.aboutEn = "Entry in Discover: find Luckgram users nearby who turned it on",
+		.defaultValue = true,
+	});
 	result.push_back({
 		.key = QString::fromLatin1(Square::kFeatureKey),
 		.group = Group::Discover,
