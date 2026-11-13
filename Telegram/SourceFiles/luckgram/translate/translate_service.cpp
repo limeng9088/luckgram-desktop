@@ -8,6 +8,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "base/call_delayed.h"
 #include "base/timer.h"
 #include "core/application.h"
+#include "core/click_handler_types.h"
 #include "core/core_settings.h"
 #include "data/data_msg_id.h"
 #include "data/data_peer.h"
@@ -59,6 +60,11 @@ constexpr auto kStatesName = "translate_state";
 struct Shown {
 	QString original; // Shown only while the message text is the same.
 	TextWithEntities display;
+};
+
+struct Detected {
+	size_t textHash = 0;
+	QString language;
 };
 
 struct Store {
@@ -117,6 +123,7 @@ struct Store {
 	Cache results;
 	Cache states; // State key -> translated text, from>to languages.
 	std::map<FullMsgId, Shown> shown;
+	std::map<FullMsgId, Detected> detected; // A.2 icon, memory only.
 	base::Timer saveTimer;
 };
 
@@ -526,6 +533,76 @@ const TextWithEntities *ShownText(not_null<const HistoryItem*> item) {
 
 bool IsShown(not_null<const HistoryItem*> item) {
 	return ShownText(item) != nullptr;
+}
+
+bool ShowIcon(not_null<const HistoryItem*> item) {
+	if (!InEnabled()
+		|| item->out()
+		|| item->isService()
+		|| item->isSponsored()
+		|| !item->isRegular()) {
+		return false;
+	}
+	const auto &text = item->originalText().text;
+	if (text.trimmed().isEmpty()) {
+		return false;
+	}
+	// Called on every layout: detect once per message text.
+	constexpr auto kMaxDetected = 4096;
+	auto &detected = GetStore(item).detected;
+	const auto hash = qHash(text);
+	auto i = detected.find(item->fullId());
+	if (i == end(detected) || i->second.textHash != hash) {
+		if (i == end(detected) && detected.size() >= kMaxDetected) {
+			detected.clear();
+		}
+		i = detected.insert_or_assign(item->fullId(), Detected{
+			.textHash = hash,
+			.language = DetectedLanguage(text),
+		}).first;
+	}
+	return ShowButton(
+		true,
+		false,
+		true,
+		i->second.language,
+		DoNotTranslate(),
+		EffectiveTarget(item->history()->peer));
+}
+
+ClickHandlerPtr IconLink(not_null<const HistoryItem*> item) {
+	class Link final : public LambdaClickHandler {
+	public:
+		Link(
+			not_null<Main::Session*> session,
+			FullMsgId id,
+			Fn<void(ClickContext)> handler)
+		: LambdaClickHandler(std::move(handler))
+		, _session(session)
+		, _id(id) {
+		}
+		QString tooltip() const override {
+			const auto item = _session->data().message(_id);
+			return MenuLabel(item && IsShown(item), IsChinese());
+		}
+
+	private:
+		const not_null<Main::Session*> _session;
+		const FullMsgId _id;
+
+	};
+	const auto session = &item->history()->session();
+	const auto id = item->fullId();
+	return std::make_shared<Link>(session, id, [=](ClickContext context) {
+		const auto my = context.other.value<ClickHandlerContext>();
+		const auto controller = my.sessionWindow.get();
+		if (!controller || &controller->session() != session) {
+			return;
+		}
+		if (const auto item = session->data().message(id)) {
+			Toggle(controller, item);
+		}
+	});
 }
 
 void Toggle(

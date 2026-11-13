@@ -7,8 +7,11 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "spellcheck/spellcheck_types.h"
 
+class ClickHandler;
 class HistoryItem;
 class PeerData;
+
+using ClickHandlerPtr = std::shared_ptr<ClickHandler>;
 
 namespace Main {
 class Session;
@@ -50,6 +53,13 @@ void SetChatTarget(not_null<PeerData*> peer, const QString &language);
 [[nodiscard]] const TextWithEntities *ShownText(
 	not_null<const HistoryItem*> item);
 [[nodiscard]] bool IsShown(not_null<const HistoryItem*> item);
+
+// A.2: the one-tap translate icon next to the bubble of someone else's
+// message whose detected language is neither in "不翻译的语言" nor the
+// target (HistoryView::Message right action, when it has no other one).
+// Detection is cached per message and text.
+[[nodiscard]] bool ShowIcon(not_null<const HistoryItem*> item);
+[[nodiscard]] ClickHandlerPtr IconLink(not_null<const HistoryItem*> item);
 
 // Translates the message into its bubble, or undoes it.
 void Toggle(

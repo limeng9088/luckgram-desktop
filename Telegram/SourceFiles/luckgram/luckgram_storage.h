@@ -18,6 +18,8 @@ class Session;
 //
 // Names: lowercase latin, digits, '_' and '-' (IsValidName), stored as
 // "luckgram_<name>". A bad name is refused (Write returns false).
+//
+// Main thread only (like upstream's Storage::Account).
 namespace Luckgram::Storage {
 
 // 1) Account level: messages, translations, AI chats, private notes,
