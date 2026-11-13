@@ -46,6 +46,10 @@ PRIVATE
     luckgram/discover/luckgram_square_ui.h
     luckgram/media/luckgram_image_prepare.cpp
     luckgram/media/luckgram_image_prepare.h
+    luckgram/media/luckgram_round_video.cpp
+    luckgram/media/luckgram_round_video.h
+    luckgram/media/luckgram_round_video_logic.cpp
+    luckgram/media/luckgram_round_video_logic.h
     luckgram/media/luckgram_video_transcode.cpp
     luckgram/media/luckgram_video_transcode.h
     settings/sections/settings_luckgram_discover.cpp

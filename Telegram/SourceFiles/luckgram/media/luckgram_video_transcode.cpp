@@ -382,6 +382,9 @@ QImage Transcoder::frameToImage(AVFrame *frame) {
 	if (_input.rotation) {
 		image = image.transformed(QTransform().rotate(_input.rotation));
 	}
+	if (_args.crop) {
+		image = image.copy(_args.crop->intersected(image.rect()));
+	}
 	return image.scaled(
 		_size,
 		Qt::IgnoreAspectRatio,
@@ -393,11 +396,15 @@ bool Transcoder::handleVideoFrame(AVFrame *frame) {
 	const auto pts = (frame->best_effort_timestamp != AV_NOPTS_VALUE)
 		? frame->best_effort_timestamp
 		: frame->pts;
-	const auto ms = (pts == AV_NOPTS_VALUE)
-		? _lastVideoMs
+	auto ms = (pts == AV_NOPTS_VALUE)
+		? (_lastVideoMs + _args.startMs)
 		: qint64(PtsToTime(pts - std::max<int64_t>(
 			stream->start_time == AV_NOPTS_VALUE ? 0 : stream->start_time,
 			0), stream->time_base));
+	if (ms < _args.startMs) {
+		return true; // Before the chosen part (after a backward seek).
+	}
+	ms -= _args.startMs;
 	if (ms >= _limitMs) {
 		_videoDone = true;
 		return true;
@@ -494,6 +501,18 @@ bool Transcoder::drainAudio(bool flush) {
 bool Transcoder::handleAudioFrame(AVFrame *frame) {
 	if (_audioDone) {
 		return true;
+	} else if (_args.startMs > 0) {
+		const auto stream = _input.format->streams[_input.audioIndex];
+		const auto pts = (frame->best_effort_timestamp != AV_NOPTS_VALUE)
+			? frame->best_effort_timestamp
+			: frame->pts;
+		const auto start = (stream->start_time == AV_NOPTS_VALUE)
+			? int64_t(0)
+			: stream->start_time;
+		if (pts != AV_NOPTS_VALUE
+			&& PtsToTime(pts - start, stream->time_base) < _args.startMs) {
+			return true;
+		}
 	}
 	const auto outSamples = int(av_rescale_rnd(
 		swr_get_delay(_swr, _audioDecoder->sample_rate) + frame->nb_samples,
@@ -596,9 +615,11 @@ TranscodeResult Transcoder::run() {
 		display.width(),
 		display.height(),
 		_args.maxEdge);
-	_size = QSize(
-		std::max(2, scaled.width / 2 * 2),
-		std::max(2, scaled.height / 2 * 2));
+	_size = (_args.squareSide > 0)
+		? QSize(_args.squareSide / 2 * 2, _args.squareSide / 2 * 2)
+		: QSize(
+			std::max(2, scaled.width / 2 * 2),
+			std::max(2, scaled.height / 2 * 2));
 	_durationMs = DurationMs(_input);
 	_limitMs = (_args.maxDurationMs > 0)
 		? _args.maxDurationMs
@@ -626,6 +647,14 @@ TranscodeResult Transcoder::run() {
 		return result;
 	}
 	_audioDone = !_audioDecoder;
+	if (_args.startMs > 0) {
+		av_seek_frame(
+			_input.format.get(),
+			-1,
+			_args.startMs * (AV_TIME_BASE / 1000),
+			AVSEEK_FLAG_BACKWARD);
+		_durationMs = std::max(qint64(0), _durationMs - _args.startMs);
+	}
 
 	auto packet = av_packet_alloc();
 	const auto guard = gsl::finally([&] { av_packet_free(&packet); });
@@ -694,6 +723,89 @@ VideoInfo Probe(const QString &path) {
 		.durationMs = DurationMs(input),
 		.ok = (size.width() > 0 && size.height() > 0),
 	};
+}
+
+QImage ReadFrame(const QString &path, qint64 atMs) {
+	auto input = Input();
+	if (!OpenInput(input, path)) {
+		return QImage();
+	}
+	const auto stream = input.format->streams[input.videoIndex];
+	auto decoder = OpenDecoder(stream);
+	if (!decoder) {
+		return QImage();
+	}
+	if (atMs > 0) {
+		av_seek_frame(
+			input.format.get(),
+			-1,
+			atMs * (AV_TIME_BASE / 1000),
+			AVSEEK_FLAG_BACKWARD);
+	}
+	const auto start = (stream->start_time == AV_NOPTS_VALUE)
+		? int64_t(0)
+		: stream->start_time;
+	auto packet = av_packet_alloc();
+	auto frame = MakeFramePointer();
+	const auto guard = gsl::finally([&] { av_packet_free(&packet); });
+	auto result = QImage();
+	auto sws = (SwsContext*)nullptr;
+	while (result.isNull() && av_read_frame(input.format.get(), packet) >= 0) {
+		if (packet->stream_index == input.videoIndex
+			&& avcodec_send_packet(decoder.get(), packet) >= 0) {
+			while (result.isNull()
+				&& avcodec_receive_frame(decoder.get(), frame.get()) >= 0) {
+				const auto pts = (frame->best_effort_timestamp != AV_NOPTS_VALUE)
+					? frame->best_effort_timestamp
+					: frame->pts;
+				if (pts != AV_NOPTS_VALUE
+					&& PtsToTime(pts - start, stream->time_base) < atMs) {
+					av_frame_unref(frame.get());
+					continue;
+				}
+				auto image = QImage(
+					frame->width,
+					frame->height,
+					QImage::Format_ARGB32);
+				sws = sws_getCachedContext(
+					sws,
+					frame->width,
+					frame->height,
+					AVPixelFormat(frame->format),
+					frame->width,
+					frame->height,
+					AV_PIX_FMT_BGRA,
+					SWS_BICUBIC,
+					nullptr,
+					nullptr,
+					nullptr);
+				if (sws) {
+					uint8_t *data[AV_NUM_DATA_POINTERS] = { image.bits() };
+					int linesize[AV_NUM_DATA_POINTERS] = {
+						int(image.bytesPerLine()),
+					};
+					sws_scale(
+						sws,
+						frame->data,
+						frame->linesize,
+						0,
+						frame->height,
+						data,
+						linesize);
+					result = input.rotation
+						? image.transformed(
+							QTransform().rotate(input.rotation))
+						: image;
+				}
+				av_frame_unref(frame.get());
+			}
+		}
+		av_packet_unref(packet);
+	}
+	if (sws) {
+		sws_freeContext(sws);
+	}
+	return result;
 }
 
 TranscodeResult Transcode(const TranscodeArgs &args, Fn<void(int)> progress) {

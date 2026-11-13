@@ -37,6 +37,9 @@ PRIVATE
     luckgram/media/luckgram_image_prepare.h
     luckgram/tests/luckgram_discover_tests.cpp
     luckgram/tests/luckgram_media_tests.cpp
+    luckgram/media/luckgram_round_video_logic.cpp
+    luckgram/media/luckgram_round_video_logic.h
+    luckgram/tests/luckgram_round_video_tests.cpp
     luckgram/tests/luckgram_nearby_tests.cpp
     luckgram/tests/luckgram_square_tests.cpp
 

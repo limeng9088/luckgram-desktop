@@ -7,6 +7,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "luckgram/discover/luckgram_nearby_logic.h"
 #include "luckgram/discover/luckgram_square_logic.h"
+#include "luckgram/media/luckgram_round_video_logic.h"
 #include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_hidden_chats.h"
 #include "luckgram/luckgram_store_restrictions.h"
@@ -78,6 +79,16 @@ namespace {
 		.defaultValue = true,
 		.subpage = [] { return ::Settings::LuckgramHiddenChatsId(); },
 		.onToggled = HiddenChats::OnToggled,
+	});
+	// D11: 03 (mobile ROUND_VIDEO_FROM_GALLERY, 媒体、通话与存储).
+	result.push_back({
+		.key = QString::fromLatin1(RoundVideo::kFeatureKey),
+		.group = Group::MediaCallsStorage,
+		.titleZh = "视频文件发成圆形视频",
+		.titleEn = "Video file as round video",
+		.aboutZh = "发送文件时选一个视频，在「…」菜单里可作为圆形视频发送",
+		.aboutEn = "Pick one video to send, then send it as a round video from the \"…\" menu",
+		.defaultValue = true,
 	});
 	// ---- 发现 / Discover (D10)
 	result.push_back({
