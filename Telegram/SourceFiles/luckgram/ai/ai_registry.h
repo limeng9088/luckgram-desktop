@@ -107,6 +107,14 @@ void RegisterMessageType(MessageType type);
 // their contextText, unknown types nothing.
 [[nodiscard]] QString ContextTextOf(const Conversations::Message &message);
 
+// The AI page showing this conversation, if one is open (a Host lives only
+// as long as its page). Results that arrive late (23 an image after tens of
+// seconds) go to it when open, otherwise to Store::For(session).save().
+[[nodiscard]] Host *FindOpenHost(const QString &conversationId);
+// Called by the page itself.
+void AddOpenHost(not_null<Host*> host);
+void RemoveOpenHost(not_null<Host*> host);
+
 // Called once before the first use.
 void RegisterAll();
 

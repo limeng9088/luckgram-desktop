@@ -447,6 +447,7 @@ ChatSection::ChatSection(
 , _list(Ui::CreateChild<Ui::VerticalLayout>(this))
 , _streamTimer([=] { showStreamed(); }) {
 	RegisterAll();
+	AddOpenHost(this);
 	const auto &store = Store::For(&controller->session());
 	auto found = std::optional<Conversation>();
 	if (conversationId == QLatin1String(kNewConversation)) {
@@ -494,6 +495,7 @@ ChatSection::ChatSection(
 }
 
 ChatSection::~ChatSection() {
+	RemoveOpenHost(this);
 	if (const auto request = base::take(_request)) {
 		request->cancel();
 	}
