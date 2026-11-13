@@ -170,6 +170,8 @@ public:
 		const QVector<MTPMessage> &messages);
 
 	[[nodiscard]] TextForMimeData getSelectedText() const;
+	// Luckgram D6 (mobile 14): 「全选 X 的消息」, no 100 cap.
+	void luckgramSelectAllFrom(not_null<HistoryItem*> item);
 	[[nodiscard]] Iv::RichPageBlocksSlice getSelectedRichBlocks() const;
 
 	void touchScrollUpdated(const QPoint &screenPos);

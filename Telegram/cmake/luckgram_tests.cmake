@@ -72,6 +72,9 @@ PRIVATE
     luckgram/translate/translate_logic.cpp
     luckgram/translate/translate_logic.h
     luckgram/translate/translate_logic_tests.cpp
+    luckgram/selectall/select_all_logic.cpp
+    luckgram/selectall/select_all_logic.h
+    luckgram/tests/luckgram_select_all_tests.cpp
     luckgram/transcribe/luckgram_transcribe_logic.cpp
     luckgram/transcribe/luckgram_transcribe_logic.h
     luckgram/tests/luckgram_transcribe_tests.cpp

@@ -91,6 +91,15 @@ namespace {
 		.aboutEn = "The translate button next to the input field; right-click the send button for \"Translate to…\"",
 		.defaultValue = true,
 	});
+	result.push_back({
+		.key = u"select_all_from_sender"_q, // D6, mobile 14
+		.group = Group::MessagesLanguage,
+		.titleZh = "全选某人的消息",
+		.titleEn = "Select all from sender",
+		.aboutZh = "右键消息一次选中这个人在本聊天的全部消息",
+		.aboutEn = "Right-click a message to select everything its sender wrote here",
+		.defaultValue = true,
+	});
 	// ---- 媒体、通话与存储 / Media, Calls & Storage
 	// ---- 资料与整理 / Profiles & Organization
 	// D12 (mobile 33): the built-in Xray core, default on.
