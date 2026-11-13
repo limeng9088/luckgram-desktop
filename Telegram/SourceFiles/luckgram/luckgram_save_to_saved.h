@@ -5,6 +5,10 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #pragma once
 
+class ClickHandler;
+class HistoryItem;
+using ClickHandlerPtr = std::shared_ptr<ClickHandler>;
+
 namespace Ui {
 class PopupMenu;
 } // namespace Ui
@@ -49,5 +53,10 @@ void AddListMenuAction(
 	not_null<Ui::PopupMenu*> menu,
 	const HistoryView::ContextMenuRequest &request,
 	not_null<HistoryView::ListWidget*> list);
+
+// 15.3: 「收藏」 below the fast share button of a channel post
+// (HistoryView::Message right action), same rules as the menu item.
+[[nodiscard]] bool ShowFastSave(not_null<HistoryItem*> item);
+[[nodiscard]] ClickHandlerPtr FastSaveLink(not_null<HistoryItem*> item);
 
 } // namespace Luckgram::SaveToSaved

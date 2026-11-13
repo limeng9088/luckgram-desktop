@@ -104,6 +104,10 @@ public:
 	void searchClear();
 	void searchSetText(const QString &query, int cursorPosition = -1);
 
+	// Luckgram D6 (mobile 15): 「收藏」 for the selected messages.
+	[[nodiscard]] rpl::producer<> luckgramSaveSelectionRequest() const {
+		return _luckgramSaveSelection.events();
+	}
 	[[nodiscard]] rpl::producer<> forwardSelectionRequest() const {
 		return _forwardSelection.events();
 	}
@@ -234,6 +238,7 @@ private:
 
 	object_ptr<Ui::RoundButton> _clear;
 	object_ptr<Ui::RoundButton> _forward, _sendNow, _delete;
+	object_ptr<Ui::RoundButton> _luckgramSave; // D6 (mobile 15): 「收藏」.
 	object_ptr<Ui::InputField> _searchField = { nullptr };
 	object_ptr<Ui::FadeWrapScaled<Ui::IconButton>> _chooseFromUser
 		= { nullptr };
@@ -280,6 +285,7 @@ private:
 	base::Timer _onlineUpdater;
 
 	rpl::event_stream<> _forwardSelection;
+	rpl::event_stream<> _luckgramSaveSelection;
 	rpl::event_stream<> _sendNowSelection;
 	rpl::event_stream<> _deleteSelection;
 	rpl::event_stream<> _clearSelection;
