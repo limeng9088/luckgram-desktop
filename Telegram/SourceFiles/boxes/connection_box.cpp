@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "boxes/connection_box.h"
 
+#include "luckgram/proxy/luckgram_proxy_exit.h" // Luckgram D3
+#include "luckgram/proxy/luckgram_proxy_import.h" // Luckgram D3
+
 #include "base/call_delayed.h"
 #include "base/qt/qt_key_modifiers.h"
 #include "base/qthelp_regex.h"
@@ -804,7 +807,11 @@ void ProxyRow::updateFields(View &&view) {
 			view.selected ? 1. : 0.,
 			st::defaultRadio.duration);
 	}
+	const auto hadExit = !_view.luckgramExit.isEmpty(); // Luckgram D3
 	_view = std::move(view);
+	if (hadExit != !_view.luckgramExit.isEmpty() && width() > 0) {
+		resizeToWidth(width()); // The exit line adds / removes a line.
+	}
 	const auto endpoint = _view.web
 		? _view.host
 		: _view.host + ':' + QString::number(_view.port);
@@ -863,6 +870,9 @@ int ProxyRow::resizeGetHeight(int newWidth) {
 		+ st::semiboldFont->height
 		+ st::proxyRowSkip
 		+ st::normalFont->height
+		+ (_view.luckgramExit.isEmpty() // Luckgram D3: exit line.
+			? 0
+			: (st::proxyRowSkip + st::normalFont->height))
 		+ st::proxyRowPadding.bottom();
 	auto right = st::proxyRowPadding.right();
 	_menuToggle->moveToRight(
@@ -952,7 +962,18 @@ void ProxyRow::paintEvent(QPaintEvent *e) {
 			+ st::proxyCheckingSkip;
 	}
 	p.drawTextLeft(statusLeft, top, width(), status);
-	top += st::normalFont->height + st::proxyRowPadding.bottom();
+	top += st::normalFont->height;
+	if (!_view.luckgramExit.isEmpty()) { // Luckgram D3 (mobile #117).
+		top += st::proxyRowSkip;
+		p.setPen(st::proxyRowStatusFg);
+		p.drawTextLeft(
+			left,
+			top,
+			width(),
+			st::normalFont->elided(_view.luckgramExit, availableWidth));
+		top += st::normalFont->height;
+	}
+	top += st::proxyRowPadding.bottom();
 }
 
 void ProxyRow::paintCheck(Painter &p) {
@@ -1250,6 +1271,12 @@ void ProxiesBox::setupContent() {
 			st::boxDividerLabel),
 		st::proxyAboutPadding);
 
+	// Luckgram D3 (mobile #117 / #118): direct exit, link, QR picture.
+	Luckgram::ProxyImport::SetupTop(
+		inner->add(object_ptr<Ui::VerticalLayout>(inner)),
+		uiShow(),
+		_controller);
+
 	_about = inner->add(
 		object_ptr<Ui::DividerLabel>(
 			inner,
@@ -1264,6 +1291,12 @@ void ProxiesBox::setupContent() {
 	inner->add(object_ptr<Ui::FixedHeightWidget>(
 		inner,
 		st::proxyRowPadding.bottom()));
+
+	// Luckgram D3 (mobile #118): the 「订阅」 section.
+	Luckgram::ProxyImport::SetupSubscriptions(
+		inner->add(object_ptr<Ui::VerticalLayout>(inner)),
+		uiShow(),
+		_controller);
 
 	_proxySettings->setChangedCallback([=](ProxyData::Settings value) {
 		if (!_controller->setProxySettings(value)) {
@@ -1833,6 +1866,53 @@ ProxiesBoxController::ProxiesBoxController(not_null<Main::Account*> account)
 
 	for (auto &item : _list) {
 		refreshChecker(item);
+	}
+
+	// Luckgram D3 (mobile #117): the exit line of every row.
+	Luckgram::ProxyExit::Updates(
+	) | rpl::on_next([=] {
+		for (const auto &item : _list) {
+			updateView(item);
+		}
+	}, _lifetime);
+	luckgramCheckExits(false);
+}
+
+std::vector<MTP::ProxyData> ProxiesBoxController::luckgramList() const {
+	auto result = std::vector<ProxyData>();
+	for (const auto &item : _list) {
+		if (!item.deleted) {
+			result.push_back(item.data);
+		}
+	}
+	return result;
+}
+
+void ProxiesBoxController::luckgramAdd(const ProxyData &proxy) {
+	if (contains(proxy)) {
+		return;
+	}
+	_settings.addToList(proxy);
+	_list.push_back({ ++_idCounter, proxy });
+	refreshChecker(_list.back());
+	Luckgram::ProxyExit::Check(&_list.back().data);
+	updateView(_list.back());
+	saveDelayed();
+}
+
+void ProxiesBoxController::luckgramRemove(const ProxyData &proxy) {
+	const auto i = findByProxy(proxy);
+	if (i != end(_list) && !i->deleted) {
+		setDeleted(i->id, true);
+	}
+}
+
+void ProxiesBoxController::luckgramCheckExits(bool force) {
+	Luckgram::ProxyExit::Check(nullptr, force);
+	for (const auto &item : _list) {
+		if (!item.deleted) {
+			Luckgram::ProxyExit::Check(&item.data, force);
+		}
 	}
 }
 
@@ -2435,6 +2515,7 @@ void ProxiesBoxController::replaceItemValue(
 	Assert(replaced);
 	which->data = proxy;
 	refreshChecker(*which);
+	Luckgram::ProxyExit::Check(&which->data); // Luckgram D3: edited.
 
 	applyItem(which->id);
 	saveDelayed();
@@ -2473,6 +2554,7 @@ void ProxiesBoxController::addNewItem(const ProxyData &proxy) {
 
 	_list.push_back({ ++_idCounter, proxy });
 	refreshChecker(_list.back());
+	Luckgram::ProxyExit::Check(&_list.back().data); // Luckgram D3
 	applyItem(_list.back().id);
 }
 
@@ -2586,7 +2668,7 @@ void ProxiesBoxController::updateView(const Item &item) {
 			+ (problem.isEmpty() ? QString() : (u" · "_q + problem));
 		supportsShare = true;
 	}
-	_views.fire({
+	auto view = ItemView{
 		item.id,
 		shownType,
 		(xray
@@ -2607,7 +2689,11 @@ void ProxiesBoxController::updateView(const Item &item) {
 			&& (state == ItemState::WaitingForBrowser
 				|| state == ItemState::Unavailable),
 		state,
-	});
+	};
+	if (!deleted) { // Luckgram D3 (mobile #117).
+		view.luckgramExit = Luckgram::ProxyExit::Text(&item.data);
+	}
+	_views.fire(std::move(view));
 }
 
 void ProxiesBoxController::share(const ProxyData &proxy, bool qr) {

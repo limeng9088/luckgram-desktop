@@ -42,6 +42,14 @@ PRIVATE
     luckgram/pro/luckgram_pro_logic.h
     luckgram/tests/luckgram_pro_logic_tests.cpp
 
+    # D3 proxy import and exit check (mobile specs#117 / #118); the
+    # import logic calls D12's luckgram/xray/luckgram_xray_logic.
+    luckgram/proxy/luckgram_proxy_exit_logic.cpp
+    luckgram/proxy/luckgram_proxy_exit_logic.h
+    luckgram/proxy/luckgram_proxy_import_logic.cpp
+    luckgram/proxy/luckgram_proxy_import_logic.h
+    luckgram/tests/luckgram_proxy_tests.cpp
+
     # D8 double space, hidden chats, store-restricted channels (11, 12, 13)
     luckgram/luckgram_privacy_logic.cpp
     luckgram/luckgram_privacy_logic.h
