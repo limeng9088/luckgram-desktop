@@ -17,6 +17,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
+#include "main/main_session_settings.h" // createSession(): unique_ptr<SessionSettings>
 #include "mtproto/mtproto_config.h"
 #include "mtproto/sender.h"
 #include "storage/storage_account.h"
