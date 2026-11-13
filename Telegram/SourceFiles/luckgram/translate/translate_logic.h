@@ -14,6 +14,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include <cstdint>
 #include <list>
+#include <map>
 #include <optional>
 #include <unordered_map>
 
@@ -86,6 +87,14 @@ struct LanguageLinkTarget {
 };
 [[nodiscard]] std::optional<LanguageLinkTarget> ParseLanguageLink(
 	const QString &link);
+
+// specs#105: each chat's own reading language, peer id -> language code.
+// Kept in the account's encrypted storage (a list of peer ids is user
+// content), as {"<peer id>":"ja",...}. Bad entries are dropped on read.
+[[nodiscard]] QByteArray EncodeChatLanguages(
+	const std::map<int64_t, QString> &languages);
+[[nodiscard]] std::map<int64_t, QString> DecodeChatLanguages(
+	const QByteArray &data);
 
 // specs#105 3: 「最近使用」, newest first, no duplicates, at most kMaxRecent.
 inline constexpr auto kMaxRecent = 5;

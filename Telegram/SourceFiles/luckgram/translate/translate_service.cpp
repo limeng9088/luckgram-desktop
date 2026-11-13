@@ -59,6 +59,7 @@ constexpr auto kRecentKey = "translate_in_recent_langs"; // Codes only.
 // Per account, encrypted with its local key (D2 Luckgram::Storage).
 constexpr auto kResultsName = "translate_cache";
 constexpr auto kStatesName = "translate_state";
+constexpr auto kChatLanguagesName = "translate_chat_langs";
 
 struct Shown {
 	QString original; // Shown only while the message text is the same.
@@ -92,6 +93,14 @@ struct Store {
 		states = Cache::Parse(
 			Storage::ReadAccount(session, QString::fromLatin1(kStatesName)),
 			now);
+		// Choices made before loading are newer than the saved ones.
+		auto saved = DecodeChatLanguages(Storage::ReadAccount(
+			session,
+			QString::fromLatin1(kChatLanguagesName)));
+		for (auto &[peerId, language] : chatLanguages) {
+			saved[peerId] = std::move(language);
+		}
+		chatLanguages = std::move(saved);
 	}
 	void scheduleSave() {
 		if (loaded && !saveTimer.isActive()) {
@@ -113,6 +122,10 @@ struct Store {
 			session,
 			QString::fromLatin1(kStatesName),
 			states.serialize());
+		Storage::WriteAccount(
+			session,
+			QString::fromLatin1(kChatLanguagesName),
+			EncodeChatLanguages(chatLanguages));
 	}
 	void flush() {
 		if (saveTimer.isActive()) {
@@ -125,6 +138,7 @@ struct Store {
 	bool loaded = false;
 	Cache results;
 	Cache states; // State key -> translated text, from>to languages.
+	std::map<int64_t, QString> chatLanguages; // specs#105, peer id -> code.
 	std::map<FullMsgId, Shown> shown;
 	std::map<FullMsgId, Detected> detected; // A.2 icon, memory only.
 	base::Timer saveTimer;
@@ -486,7 +500,8 @@ void SetDefaultTarget(const QString &language) {
 
 namespace {
 
-[[nodiscard]] QString ChatKey(not_null<PeerData*> peer) {
+// #25-#43 kept the chat languages in plain luckgram.json: moved on read.
+[[nodiscard]] QString LegacyChatKey(not_null<PeerData*> peer) {
 	return QString::fromLatin1(kChatToLangPrefix)
 		+ QString::number(peer->session().uniqueId())
 		+ QChar('.')
@@ -496,15 +511,33 @@ namespace {
 } // namespace
 
 QString ChatTarget(not_null<PeerData*> peer) {
-	return TargetLanguage(Settings::GetString(ChatKey(peer)));
+	auto &store = GetStore(&peer->session());
+	const auto peerId = int64_t(peer->id.value);
+	const auto i = store.chatLanguages.find(peerId);
+	if (i != end(store.chatLanguages)) {
+		return TargetLanguage(i->second);
+	}
+	const auto legacyKey = LegacyChatKey(peer);
+	const auto legacy = TargetLanguage(Settings::GetString(legacyKey));
+	if (!legacy.isEmpty() && store.loaded) {
+		store.chatLanguages.emplace(peerId, legacy);
+		store.scheduleSave();
+		Settings::Remove(legacyKey);
+	}
+	return legacy;
 }
 
 void SetChatTarget(not_null<PeerData*> peer, const QString &language) {
-	if (language.trimmed().isEmpty()) {
-		Settings::Remove(ChatKey(peer));
+	auto &store = GetStore(&peer->session());
+	const auto peerId = int64_t(peer->id.value);
+	const auto code = TargetLanguage(language);
+	if (code.isEmpty()) {
+		store.chatLanguages.erase(peerId);
 	} else {
-		Settings::SetString(ChatKey(peer), language.trimmed());
+		store.chatLanguages[peerId] = code;
 	}
+	store.scheduleSave();
+	Settings::Remove(LegacyChatKey(peer));
 }
 
 QString EffectiveTarget(not_null<PeerData*> peer) {
@@ -822,6 +855,7 @@ void ClearAll() {
 		store->saveTimer.cancel();
 		store->results = Cache();
 		store->states = Cache();
+		store->chatLanguages.clear();
 		store->shown.clear();
 	}
 }
