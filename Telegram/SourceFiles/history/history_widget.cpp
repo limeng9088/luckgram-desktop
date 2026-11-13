@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luckgram/luckgram_save_to_saved.h" // Luckgram D6
 
 #include "luckgram/luckgram_compose_slots.h"
+#include "luckgram/luckgram_compose_panel.h" // Luckgram D7
 #include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "luckgram/d9/luckgram_notes_widgets.h" // Luckgram D9
 
@@ -609,6 +610,7 @@ HistoryWidget::HistoryWidget(
 		},
 		_send.get(),
 		[=] { updateFieldSize(); });
+	Luckgram::Compose::AttachPanelHost(_field, _scroll.data(), Luckgram::Compose::PanelAnchor::Bottom); // Luckgram D7
 
 	_fieldCharsCountManager.limitExceeds(
 	) | rpl::on_next([=] {
