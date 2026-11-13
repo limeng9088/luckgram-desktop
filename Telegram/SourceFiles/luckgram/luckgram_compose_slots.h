@@ -39,7 +39,7 @@ struct SlotContext {
 	Fn<MsgId()> topicRootId;
 	// How the field would send now (send as, reply to, topic), or nullopt
 	// before the chat is set up. May be empty.
-	Fn<std::optional<Api::SendAction>()> sendAction;
+	Fn<std::optional<::Api::SendAction>()> sendAction;
 	Ui::RpWidget *send = nullptr; // The send button (AddSendMenuItems).
 };
 

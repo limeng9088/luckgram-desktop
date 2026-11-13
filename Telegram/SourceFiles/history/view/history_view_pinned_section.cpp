@@ -211,7 +211,7 @@ PinnedWidget::PinnedWidget(
 		const auto inner = _inner;
 		if (inner) {
 			auto ids = inner->getSelectedIds();
-			Luckgram::SaveToSaved::Save(controller(), std::move(ids), [=] {
+			Luckgram::SaveToSaved::Save(controller, std::move(ids), [=] {
 				if (inner) {
 					inner->cancelSelection();
 				}

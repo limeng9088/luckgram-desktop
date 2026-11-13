@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luckgram/luckgram_save_to_saved.h"
 #include "luckgram/translate/translate_service.h"
 #include "luckgram/luckgram_strings.h" // Luckgram D6
+#include "ui/toast/toast.h" // Luckgram D6
 #include "luckgram/selectall/select_all.h" // Luckgram D6
 #include "luckgram/selectall/select_all_logic.h" // Luckgram D6
 #include "luckgram/ai/ai_assistant.h" // Luckgram D7
@@ -3857,7 +3858,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						forwardAsGroup(itemId);
 					}, &st::menuIconForward);
 				}
-				Luckgram::SaveToSaved::AddMenuAction(_menu, controller, session().data().itemOrItsGroup(item));
+				Luckgram::SaveToSaved::AddMenuAction(
+					_menu,
+					_controller,
+					session->data().itemOrItsGroup(item));
 				if (HistoryView::CanAddOfferToMessage(item)) {
 					_menu->addAction(tr::lng_context_add_offer(tr::now), [=] {
 						Api::AddOfferToMessage(_controller->uiShow(), itemId);

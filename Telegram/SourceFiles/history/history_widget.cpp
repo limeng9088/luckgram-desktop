@@ -1176,7 +1176,7 @@ HistoryWidget::HistoryWidget(
 	) | rpl::on_next([=] {
 		if (_list) {
 			Luckgram::SaveToSaved::Save(
-				controller(),
+				controller, // The constructor argument.
 				_list->getSelectedForwardItems(),
 				crl::guard(this, [=] { clearSelected(); }));
 		}
