@@ -53,6 +53,13 @@ void sync();
 void finish();
 
 void writeSettings();
+
+// Luckgram D2: the key of the "settings" file and its folder (tdata/), for
+// Luckgram data that has to be read before the local passcode is entered,
+// like proxies, the way upstream keeps its own proxy list. Generates the key
+// like writeBackground() does, nullptr before start().
+[[nodiscard]] MTP::AuthKeyPtr luckgramSettingsKey();
+[[nodiscard]] QString luckgramSettingsPath();
 void rewriteSettingsIfNeeded();
 
 void writeAutoupdatePrefix(const QString &prefix);

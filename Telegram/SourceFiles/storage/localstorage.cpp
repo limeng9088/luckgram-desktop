@@ -516,6 +516,19 @@ void writeSettings() {
 	settings.writeEncrypted(data, SettingsKey);
 }
 
+MTP::AuthKeyPtr luckgramSettingsKey() {
+	if (_basePath.isEmpty()) {
+		return nullptr;
+	} else if (!SettingsKey) {
+		writeSettings();
+	}
+	return SettingsKey;
+}
+
+QString luckgramSettingsPath() {
+	return _basePath;
+}
+
 void rewriteSettingsIfNeeded() {
 	if (_settingsWriteAllowed) {
 		return;
