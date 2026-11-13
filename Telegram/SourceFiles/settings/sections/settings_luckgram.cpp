@@ -5,6 +5,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "settings/sections/settings_luckgram.h"
 
+#include "settings/sections/settings_luckgram_pro.h"
+
 #include "chat_helpers/compose/compose_show.h"
 #include "core/file_utilities.h"
 #include "core/version.h"
@@ -247,12 +249,17 @@ void SetupLuckgramContent(
 		}
 		const auto ai = (group == Features::Group::AI);
 		const auto debug = (group == Features::Group::Debug);
-		if (features.empty() && !ai && !debug) {
+		// D12: 「账号」 / 「Luckgram Pro」 head 账号与隐私 (as on mobile).
+		const auto account = (group == Features::Group::AccountPrivacy);
+		if (features.empty() && !ai && !debug && !account) {
 			continue; // No desktop feature in this group yet.
 		}
 		Ui::AddSubsectionTitle(
 			container,
 			rpl::single(Features::GroupTitle(group)));
+		if (account) {
+			AddLuckgramAccountRows(container, controller);
+		}
 		for (const auto feature : features) {
 			AddFeatureRow(container, controller, *feature);
 		}

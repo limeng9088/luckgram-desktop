@@ -18,6 +18,11 @@ PRIVATE
     luckgram/tests/luckgram_test.h
 
     # D5-D12: logic files and their tests, one block per task.
+
+    # D12 Luckgram Pro, account link
+    luckgram/pro/luckgram_pro_logic.cpp
+    luckgram/pro/luckgram_pro_logic.h
+    luckgram/tests/luckgram_pro_logic_tests.cpp
 )
 
 target_link_libraries(luckgram_tests
