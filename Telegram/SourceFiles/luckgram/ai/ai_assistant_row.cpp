@@ -20,7 +20,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 namespace Luckgram::AI {
 
-void AddChatListRow(
+not_null<Ui::RpWidget*> AddChatListRow(
 		not_null<Ui::VerticalLayout*> list,
 		not_null<Window::SessionController*> controller,
 		rpl::producer<bool> shown) {
@@ -88,6 +88,7 @@ void AddChatListRow(
 		return assistant && row && shown;
 	}), anim::type::instant);
 	wrap->finishAnimating();
+	return wrap;
 }
 
 } // namespace Luckgram::AI

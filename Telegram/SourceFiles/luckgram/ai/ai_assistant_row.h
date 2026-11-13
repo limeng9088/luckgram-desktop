@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #pragma once
 
 namespace Ui {
+class RpWidget;
 class VerticalLayout;
 } // namespace Ui
 
@@ -21,8 +22,9 @@ class SessionController;
 namespace Luckgram::AI {
 
 // Adds the row into the chat list's layout (Dialogs::Widget, one line).
-// shown: the main list without search, folder or forum.
-void AddChatListRow(
+// shown: the main list without search, folder or forum. Returns the row
+// (its height counts in the list's minimum height).
+not_null<Ui::RpWidget*> AddChatListRow(
 	not_null<Ui::VerticalLayout*> list,
 	not_null<Window::SessionController*> controller,
 	rpl::producer<bool> shown);

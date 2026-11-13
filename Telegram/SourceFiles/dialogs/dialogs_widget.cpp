@@ -474,8 +474,9 @@ Widget::Widget(
 	_scroll->setOverscrollPullDistances(st::dialogsStoriesFull.height, 0);
 	_innerList = _scroll->setOwnedWidget(
 		object_ptr<Ui::VerticalLayout>(this));
-	if (_layout != Layout::Child) { // Luckgram D7 (18 需求 1)
-		Luckgram::AI::AddChatListRow(_innerList, controller, rpl::combine(
+	auto luckgramAiRow = (Ui::RpWidget*)nullptr; // Luckgram D7 (18 需求 1)
+	if (_layout != Layout::Child) {
+		luckgramAiRow = Luckgram::AI::AddChatListRow(_innerList, controller, rpl::combine(
 			_openedFolderOrForum.value(),
 			_searchStateForTopBarSuggestion.events_starting_with(false)
 		) | rpl::map([](bool folderOrForum, bool search) {
@@ -495,10 +496,13 @@ Widget::Widget(
 	}, lifetime());
 	rpl::combine(
 		_scroll->heightValue(),
-		_topBarSuggestionHeightChanged.events_starting_with(0)
-	) | rpl::on_next([=](int height, int topBarHeight) {
+		_topBarSuggestionHeightChanged.events_starting_with(0),
+		(luckgramAiRow // Luckgram D7
+			? luckgramAiRow->heightValue()
+			: rpl::producer<int>(rpl::single(0)))
+	) | rpl::on_next([=](int height, int topBarHeight, int aiRowHeight) {
 		_innerList->setMinimumHeight(height);
-		_inner->setMinimumHeight(height - topBarHeight);
+		_inner->setMinimumHeight(height - topBarHeight - aiRowHeight);
 		_inner->refresh();
 	}, _innerList->lifetime());
 	_scroll->widthValue() | rpl::on_next([=](int width) {
