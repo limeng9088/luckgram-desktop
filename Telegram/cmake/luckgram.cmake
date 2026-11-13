@@ -287,6 +287,11 @@ if (WIN32)
     PRIVATE
         luckgram/platform/win/luckgram_update_win.cpp
     )
+elseif (APPLE)
+    nice_target_sources(Telegram ${src_loc}
+    PRIVATE
+        luckgram/platform/mac/luckgram_update_mac.cpp
+    )
 else()
     nice_target_sources(Telegram ${src_loc}
     PRIVATE

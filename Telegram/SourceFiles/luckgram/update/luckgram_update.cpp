@@ -455,7 +455,12 @@ void ShowManual(Manual reason) {
 		}(),
 		.confirmed = [=](Fn<void()> close) {
 			close();
-			OpenDownloadPage();
+			// M2 §6: no write access opens the .dmg (url) itself.
+			if (reason == Manual::NoAccess && IsTrustedUrl(state.url)) {
+				File::OpenUrl(state.url);
+			} else {
+				OpenDownloadPage();
+			}
 		},
 		.confirmText = Tx().openDownloadPage(),
 		.cancelText = Tx().later(),

@@ -5,16 +5,12 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/platform/luckgram_update_platform.h"
 
-// Systems without an in-app install (until M2 adds macOS): the update is
-// only shown and the download page opened.
+// Systems without an in-app install (Linux; Windows and macOS have their
+// own): the update is only shown and the download page opened.
 namespace Luckgram::Update::Platform {
 
 QString Name() {
-#ifdef Q_OS_MAC
-	return u"macos"_q;
-#else // Q_OS_MAC
 	return u"linux"_q;
-#endif // Q_OS_MAC
 }
 
 QString PackageSuffix() {
