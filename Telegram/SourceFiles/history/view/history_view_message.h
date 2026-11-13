@@ -485,6 +485,9 @@ private:
 	[[nodiscard]] bool isCommentsRootView() const;
 
 	[[nodiscard]] bool displayFastShare() const;
+	// Luckgram D6 (mobile 15.3): 「收藏」 below the fast share button.
+	[[nodiscard]] bool luckgramFastSave() const;
+	[[nodiscard]] int rightActionSecondTop() const;
 	[[nodiscard]] bool displayGoToOriginal() const;
 	[[nodiscard]] ClickHandlerPtr fastReplyLink() const;
 	[[nodiscard]] ClickHandlerPtr prepareRightActionLink() const;

@@ -630,8 +630,11 @@ void TranslateText(
 		const TextWithEntities &text,
 		const QString &to,
 		Fn<void(TextWithEntities)> done,
-		Fn<void()> fail) {
-	const auto provider = std::make_shared<Provider>(session, kSourceOut);
+		Fn<void()> fail,
+		const char *source) {
+	const auto provider = std::make_shared<Provider>(
+		session,
+		source ? source : kSourceOut);
 	provider->request({
 		.text = text,
 	}, LanguageId::FromName(to), [=, keep = provider](

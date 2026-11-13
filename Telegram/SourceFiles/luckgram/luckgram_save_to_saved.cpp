@@ -8,6 +8,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "apiwrap.h"
 #include "api/api_common.h"
 #include "chat_helpers/share_message_phrase_factory.h"
+#include "core/click_handler_types.h"
 #include "data/data_session.h"
 #include "data/data_peer.h"
 #include "data/data_user.h"
@@ -61,6 +62,30 @@ bool CanSave(
 	const auto items = Items(&controller->session(), ids);
 	return (items.size() == ids.size())
 		&& ranges::all_of(items, Savable);
+}
+
+bool ShowFastSave(not_null<HistoryItem*> item) {
+	return Settings::IsEnabled(QString::fromLatin1(kFeature))
+		&& Savable(item);
+}
+
+ClickHandlerPtr FastSaveLink(not_null<HistoryItem*> item) {
+	class Link final : public LambdaClickHandler {
+	public:
+		using LambdaClickHandler::LambdaClickHandler;
+		QString tooltip() const override {
+			return Tr("收藏", "Save");
+		}
+	};
+	const auto session = &item->history()->session();
+	const auto id = item->fullId();
+	return std::make_shared<Link>([=](ClickContext context) {
+		const auto my = context.other.value<ClickHandlerContext>();
+		const auto controller = my.sessionWindow.get();
+		if (controller && &controller->session() == session) {
+			Save(controller, { id });
+		}
+	});
 }
 
 void Save(
