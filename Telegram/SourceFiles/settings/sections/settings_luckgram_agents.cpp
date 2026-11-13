@@ -232,7 +232,9 @@ not_null<Ui::RpWidget*> AddColorPicker(
 		object_ptr<Ui::RpWidget>(container),
 		st::boxRowPadding);
 	wrap->resize(wrap->width(), kColorSize + 8);
-	auto buttons = std::vector<not_null<Ui::AbstractButton*>>();
+	// Kept here: Ui::AbstractButton has no Q_OBJECT, so findChildren can't.
+	const auto buttons = std::make_shared<
+		std::vector<not_null<Ui::AbstractButton*>>>();
 	for (const auto color : colors) {
 		const auto button = Ui::CreateChild<Ui::AbstractButton>(wrap);
 		button->resize(kColorSize, kColorSize);
@@ -255,15 +257,15 @@ not_null<Ui::RpWidget*> AddColorPicker(
 		}, button->lifetime());
 		button->setClickedCallback([=] {
 			*chosen = color;
-			for (const auto child : wrap->findChildren<Ui::AbstractButton*>()) {
-				child->update();
+			for (const auto other : *buttons) {
+				other->update();
 			}
 		});
-		buttons.push_back(button);
+		buttons->push_back(button);
 	}
 	wrap->widthValue() | rpl::on_next([=](int width) {
 		auto x = 0;
-		for (const auto button : buttons) {
+		for (const auto button : *buttons) {
 			button->moveToLeft(x, 4, width);
 			x += kColorSize + 8;
 		}
