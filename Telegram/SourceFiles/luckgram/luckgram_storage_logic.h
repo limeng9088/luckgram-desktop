@@ -39,6 +39,15 @@ inline constexpr auto kMaxNameLength = 64;
 	const QString &folder,
 	const QStringList &fileNames);
 
+// Everything to remove when an account is cleared: the Luckgram files on
+// disk now, plus every record written in this run, whose file may not be on
+// disk yet (the write is still queued). Without the second part a write
+// queued just before logout would bring the file back. No duplicates.
+[[nodiscard]] QStringList ClearPaths(
+	const QString &folder,
+	const QStringList &fileNamesOnDisk,
+	const QStringList &namesWritten);
+
 // Account level: whether an account's data may be read, written or removed
 // now. Needs the local key, and the account must not be hidden in the
 // second space (D8). Reads AND writes are refused together: a caller that

@@ -89,3 +89,21 @@ LUCKGRAM_TEST(StorageHiddenAccountRefused) {
 	LG_CHECK(!AccountUsable(true, true));
 	LG_CHECK(!AccountUsable(false, true));
 }
+
+LUCKGRAM_TEST(StorageClearCoversQueuedWrites) {
+	// Logout right after the first save: the file is not on disk yet, but
+	// its queued write must still be removed after it lands.
+	const auto paths = ClearPaths(
+		U("/data/A/"),
+		{ U("maps"), U("luckgram_notess") },
+		{ U("notes"), U("translate_cache") });
+	LG_EQUAL(paths.size(), 6);
+	LG_CHECK(paths.contains(U("/data/A/luckgram_notess")));
+	LG_CHECK(paths.contains(U("/data/A/luckgram_notes0")));
+	LG_CHECK(paths.contains(U("/data/A/luckgram_translate_caches")));
+	LG_CHECK(!paths.contains(U("/data/A/maps")));
+}
+
+LUCKGRAM_TEST(StorageClearWithNothingWritten) {
+	LG_CHECK(ClearPaths(U("/data/A/"), { U("maps") }, {}).isEmpty());
+}
