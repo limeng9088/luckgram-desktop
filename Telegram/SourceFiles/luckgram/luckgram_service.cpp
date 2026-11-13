@@ -75,14 +75,13 @@ void Start() {
 }
 
 void OnLoggedOutCompletely() {
-	if (const auto request = base::take(State().configRequest)) {
-		request->cancel();
-	}
-	NearbyState::OnLoggedOutCompletely(); // D10: card off before the token goes.
-	Settings::ClearAll();
+	// specs#129, as on mobile: the Luckgram switches, the remote config and
+	// the device token belong to the device and stay. Account data went
+	// with each account (Storage::Account::reset()); here only what is
+	// kept in memory or on the server for the last account.
+	NearbyState::OnLoggedOutCompletely(); // D10: my nearby card off.
 	Translate::ClearAll();
-	Api::ForgetToken();
-	LOG(("Luckgram: logged out of every account, local data cleared."));
+	LOG(("Luckgram: logged out of every account, account data cleared."));
 }
 
 void RefreshRemoteConfig(Fn<void(bool)> done) {

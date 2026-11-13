@@ -5,20 +5,20 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #pragma once
 
-// D2: when Luckgram::OnLoggedOutCompletely() runs (Luckgram switches,
-// remote config and the device token go). Pure logic, covered by
-// luckgram_logout_tests.cpp.
+// D2: when Luckgram::OnLoggedOutCompletely() runs (what the last account
+// leaves in memory or on the server: translation caches, the nearby card).
+// Pure logic, covered by luckgram_logout_tests.cpp.
 //
 // Only when an account that was logged in logs out (Account::loggedOut(),
 // user or server) and no other account keeps a session. Never at startup
 // or while nobody ever logged in: settings made before the first login
 // (a proxy needed to reach Telegram at all) must survive restarts.
 //
-// Proxies, subscriptions and Xray nodes are settings level storage
-// (Luckgram::Storage::*Settings, tdata/luckgram_*) and stay in any case:
-// they belong to the device, as on mobile. Account data (notes,
-// translations, quick replies...) goes with its account in
-// Storage::Account::reset().
+// specs#129, as on mobile: the device keeps the Luckgram switches, the
+// remote config, the device token and the settings level storage
+// (proxies, subscriptions, Xray nodes: Luckgram::Storage::*Settings) even
+// after the last logout. Account data (notes, translations, quick
+// replies...) goes with its account in Storage::Account::reset().
 namespace Luckgram::Logout {
 
 enum class Event {
