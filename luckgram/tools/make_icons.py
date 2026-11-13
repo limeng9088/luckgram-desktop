@@ -2,7 +2,8 @@
 """Regenerate Telegram/Resources/art icons from luckgram/branding/icon-1024.png.
 
 Run from the repo root (needs Pillow):
-  python3 luckgram/tools/make_icons.py luckgram/branding/icon-1024.png Telegram/Resources/art
+  python3 luckgram/tools/make_icons.py luckgram/branding/icon-1024.png Telegram/Resources/art luckgram/windows
+The optional third argument also writes the installer wizard images there.
 """
 import sys, os
 from PIL import Image, ImageDraw
@@ -41,4 +42,11 @@ shape(1024, 0.06, round_shape=True).save(os.path.join(art, 'icon_round512@2x.png
 ico = shape(256, 0.06)
 sizes = [(16, 16), (20, 20), (24, 24), (32, 32), (40, 40), (48, 48), (64, 64), (128, 128), (256, 256)]
 ico.save(os.path.join(art, 'icon256.ico'), sizes=sizes)
+if len(sys.argv) > 3:
+    # Inno Setup modern wizard: small image, 100% .. 250% DPI.
+    for px in (55, 69, 83, 110, 138):
+        bmp = Image.new('RGB', (px, px), (255, 255, 255))
+        icon = shape(px, 0.06)
+        bmp.paste(icon, (0, 0), icon)
+        bmp.save(os.path.join(sys.argv[3], f'wizard-small-{px}.bmp'))
 print('ok')

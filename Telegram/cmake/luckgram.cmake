@@ -23,6 +23,8 @@ PRIVATE
     luckgram/luckgram_brand.h
     luckgram/luckgram_desktop.cpp
     luckgram/luckgram_desktop.h
+    luckgram/luckgram_intro.cpp
+    luckgram/luckgram_intro.h
 )
 
 target_compile_definitions(Telegram

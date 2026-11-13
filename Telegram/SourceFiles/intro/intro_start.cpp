@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/labels.h"
 #include "main/main_account.h"
 #include "main/main_app_config.h"
+#include "luckgram/luckgram_intro.h"
 
 namespace Intro {
 namespace details {
@@ -24,8 +25,8 @@ StartWidget::StartWidget(
 	not_null<Data*> data)
 : Step(parent, account, data, true) {
 	setMouseTracking(true);
-	setTitleText(rpl::single(u"Telegram Desktop"_q));
-	setDescriptionText(tr::lng_intro_about());
+	setTitleText(Luckgram::WelcomeTitle());
+	setDescriptionText(Luckgram::WelcomeDescription());
 	show();
 }
 
@@ -35,7 +36,7 @@ void StartWidget::submit() {
 }
 
 rpl::producer<QString> StartWidget::nextButtonText() const {
-	return tr::lng_start_msgs();
+	return Luckgram::WelcomeButton();
 }
 
 rpl::producer<> StartWidget::nextButtonFocusRequests() const {

@@ -50,6 +50,7 @@ MinVersion=10.0
 OutputDir={#OutputDir}
 OutputBaseFilename=Luckgram-Setup-{#MyAppVersion}-{#MyBuildNumber}-x64
 SetupIconFile=..\..\Telegram\Resources\art\icon256.ico
+WizardSmallImageFile=wizard-small-55.bmp,wizard-small-69.bmp,wizard-small-83.bmp,wizard-small-110.bmp,wizard-small-138.bmp
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

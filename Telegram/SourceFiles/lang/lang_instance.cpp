@@ -32,7 +32,7 @@ constexpr auto kLangValuesLimit = 20000;
 
 // Luckgram: built-in values with the product name replaced.
 [[nodiscard]] QString OriginalValue(ushort key) {
-	return Luckgram::RebrandText(GetOriginalValue(key));
+	return Luckgram::RebrandBuiltinValue(key, GetOriginalValue(key));
 }
 
 std::vector<QString> PrepareDefaultValues() {

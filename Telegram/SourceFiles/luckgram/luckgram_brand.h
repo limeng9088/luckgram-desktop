@@ -17,6 +17,11 @@ namespace Luckgram {
 // English strings). Also used by RebrandLangValue.
 [[nodiscard]] QString RebrandText(QString value);
 
+// RebrandText plus, for keys where "Telegram" names this app (tray menu,
+// "Launch Telegram when system starts", ...), every "Telegram" -> "Luckgram".
+// Safe on parsed values. Also used by RebrandLangValue.
+[[nodiscard]] QString RebrandBuiltinValue(ushort key, QString value);
+
 // True if the text contains CJK ideographs (used to pick zh / en texts
 // for keys whose whole sentence Luckgram replaces).
 [[nodiscard]] bool LooksChinese(const QString &value);
