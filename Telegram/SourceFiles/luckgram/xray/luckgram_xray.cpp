@@ -10,6 +10,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "core/core_settings.h"
 #include "luckgram/luckgram_secure_store.h"
 #include "luckgram/luckgram_settings.h"
+#include "luckgram/luckgram_storage.h"
 #include "luckgram/luckgram_strings.h"
 
 #include <QtCore/QCoreApplication>
@@ -22,8 +23,6 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QTcpServer>
 
-#include <openssl/crypto.h>
-#include <openssl/evp.h>
 #include <openssl/rand.h>
 
 #ifdef Q_OS_WIN
@@ -35,8 +34,13 @@ namespace {
 
 constexpr auto kLocalHost = "127.0.0.1";
 constexpr auto kUser = "lg";
-constexpr auto kStoreKey = "_xray_nodes"; // Luckgram settings, encrypted.
-constexpr auto kSecretName = "xray_key"; // SecureStore: the AES key.
+// Settings-level storage (docs/desktop.md): needed before login and before
+// the local passcode, encrypted like upstream's proxy list.
+constexpr auto kStorageName = "xray_nodes";
+// Before luckgram-desktop#35 (never shipped): own AES key in the secure
+// store, data in luckgram.json. Removed when found.
+constexpr auto kOldStoreKey = "_xray_nodes";
+constexpr auto kOldSecretName = "xray_key";
 // The core counts as running once it is still alive after this long.
 constexpr auto kStartedAfter = crl::time(800);
 
@@ -87,79 +91,6 @@ struct State {
 	return result;
 }
 
-// The AES key, made once per install and kept in the secure store.
-[[nodiscard]] QByteArray StoreKey(bool create) {
-	auto key = QByteArray::fromHex(SecureStore::Get(kSecretName).toLatin1());
-	if (key.size() == 32 || !create) {
-		return (key.size() == 32) ? key : QByteArray();
-	}
-	key = RandomBytes(32);
-	if (key.size() == 32) {
-		SecureStore::Set(kSecretName, QString::fromLatin1(key.toHex()));
-	}
-	return key;
-}
-
-// AES-256-GCM: nonce (12) || ciphertext || tag (16). Empty on failure.
-[[nodiscard]] QByteArray Seal(const QByteArray &key, const QByteArray &plain) {
-	const auto nonce = RandomBytes(12);
-	if (key.size() != 32 || nonce.size() != 12) {
-		return QByteArray();
-	}
-	const auto context = EVP_CIPHER_CTX_new();
-	auto out = QByteArray(plain.size() + 16, Qt::Uninitialized);
-	auto length = 0;
-	auto finalLength = 0;
-	const auto u = [](const QByteArray &bytes) {
-		return reinterpret_cast<const unsigned char*>(bytes.constData());
-	};
-	const auto w = reinterpret_cast<unsigned char*>(out.data());
-	const auto ok = context
-		&& EVP_EncryptInit_ex(context, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1
-		&& EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN, 12, nullptr) == 1
-		&& EVP_EncryptInit_ex(context, nullptr, nullptr, u(key), u(nonce)) == 1
-		&& EVP_EncryptUpdate(context, w, &length, u(plain), plain.size()) == 1
-		&& EVP_EncryptFinal_ex(context, w + length, &finalLength) == 1
-		&& EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_GET_TAG, 16, w + length + finalLength) == 1;
-	EVP_CIPHER_CTX_free(context);
-	if (!ok) {
-		return QByteArray();
-	}
-	out.resize(length + finalLength + 16);
-	return nonce + out;
-}
-
-[[nodiscard]] QByteArray Open(const QByteArray &key, const QByteArray &sealed) {
-	if (key.size() != 32 || sealed.size() < 12 + 16) {
-		return QByteArray();
-	}
-	const auto nonce = sealed.left(12);
-	const auto body = sealed.mid(12, sealed.size() - 12 - 16);
-	auto tag = sealed.right(16);
-	const auto context = EVP_CIPHER_CTX_new();
-	auto out = QByteArray(body.size() + 16, Qt::Uninitialized);
-	auto length = 0;
-	auto finalLength = 0;
-	const auto u = [](const QByteArray &bytes) {
-		return reinterpret_cast<const unsigned char*>(bytes.constData());
-	};
-	const auto w = reinterpret_cast<unsigned char*>(out.data());
-	const auto ok = context
-		&& EVP_DecryptInit_ex(context, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1
-		&& EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN, 12, nullptr) == 1
-		&& EVP_DecryptInit_ex(context, nullptr, nullptr, u(key), u(nonce)) == 1
-		&& EVP_DecryptUpdate(context, w, &length, u(body), body.size()) == 1
-		&& EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_TAG, 16, tag.data()) == 1
-		&& EVP_DecryptFinal_ex(context, w + length, &finalLength) == 1;
-	EVP_CIPHER_CTX_free(context);
-	if (!ok) {
-		OPENSSL_cleanse(out.data(), size_t(out.size()));
-		return QByteArray();
-	}
-	out.resize(length + finalLength);
-	return out;
-}
-
 void Save() {
 	auto &data = Data();
 	auto nodes = QJsonArray();
@@ -174,27 +105,24 @@ void Save() {
 		{ u"base"_q, data.portBase },
 		{ u"nodes"_q, nodes },
 	}).toJson(QJsonDocument::Compact);
-	const auto sealed = Seal(StoreKey(true), plain);
-	if (sealed.isEmpty()) {
+	if (!Storage::WriteSettings(QString::fromLatin1(kStorageName), plain)) {
 		LOG(("Luckgram Xray: could not save the nodes."));
-		return;
 	}
-	Settings::SetString(
-		QString::fromLatin1(kStoreKey),
-		QString::fromLatin1(sealed.toBase64()));
 }
 
 void Load() {
 	auto &data = Data();
-	if (data.loaded) {
+	if (data.loaded || !Storage::SettingsAvailable()) {
 		return;
 	}
 	data.loaded = true;
 	data.nodes.clear();
-	const auto stored = Settings::GetString(QString::fromLatin1(kStoreKey));
-	const auto plain = stored.isEmpty()
-		? QByteArray()
-		: Open(StoreKey(false), QByteArray::fromBase64(stored.toLatin1()));
+	if (Settings::Has(QString::fromLatin1(kOldStoreKey))) {
+		Settings::Remove(QString::fromLatin1(kOldStoreKey));
+		SecureStore::Remove(kOldSecretName);
+	}
+	const auto plain = Storage::ReadSettings(
+		QString::fromLatin1(kStorageName));
 	const auto json = QJsonDocument::fromJson(plain).object();
 	data.password = json.value(u"pass"_q).toString();
 	data.portBase = json.value(u"base"_q).toInt();
@@ -206,9 +134,6 @@ void Load() {
 		if (node && local > 0 && !outbound.isEmpty()) {
 			data.nodes.push_back({ *node, local, std::move(outbound) });
 		}
-	}
-	if (!stored.isEmpty() && plain.isEmpty()) {
-		LOG(("Luckgram Xray: stored nodes unreadable."));
 	}
 	if (data.password.isEmpty() || data.portBase < 20000) {
 		data.password = QString::fromLatin1(RandomBytes(18).toBase64(
