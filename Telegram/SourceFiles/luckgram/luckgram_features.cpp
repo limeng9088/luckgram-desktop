@@ -24,6 +24,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/xray/luckgram_xray.h"
 #include "settings/sections/settings_luckgram_discover.h"
 #include "settings/sections/settings_luckgram_privacy.h"
+#include "settings/sections/settings_luckgram_quick_replies.h"
 #include "settings/sections/settings_luckgram_translate.h"
 #include "settings/sections/settings_privacy_security.h"
 #include "window/window_session_controller.h"
@@ -126,6 +127,16 @@ namespace {
 		.aboutZh = "右键消息一次选中这个人在本聊天的全部消息",
 		.aboutEn = "Right-click a message to select everything its sender wrote here",
 		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"quick_replies"_q, // D6, mobile 02
+		.group = Group::MessagesLanguage,
+		.titleZh = "快捷回复",
+		.titleEn = "Quick replies",
+		.aboutZh = "把常用回复存成模板，输入框里点击就填入",
+		.aboutEn = "Save frequent replies as templates and insert them with one click",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramQuickReplies::Id(); },
 	});
 	// ---- 媒体、通话与存储 / Media, Calls & Storage
 	// ---- 资料与整理 / Profiles & Organization

@@ -101,6 +101,10 @@ PRIVATE
     luckgram/luckgram_strings.h
     luckgram/translate/translate_logic.cpp
     luckgram/translate/translate_logic.h
+    luckgram/quickreplies/quick_replies.cpp
+    luckgram/quickreplies/quick_replies.h
+    luckgram/quickreplies/quick_replies_logic.cpp
+    luckgram/quickreplies/quick_replies_logic.h
     luckgram/selectall/select_all.cpp
     luckgram/selectall/select_all.h
     luckgram/selectall/select_all_logic.cpp
@@ -129,6 +133,8 @@ PRIVATE
     luckgram/xray/luckgram_xray.h
     luckgram/xray/luckgram_xray_logic.cpp
     luckgram/xray/luckgram_xray_logic.h
+    settings/sections/settings_luckgram_quick_replies.cpp
+    settings/sections/settings_luckgram_quick_replies.h
     settings/sections/settings_luckgram_translate.cpp
     settings/sections/settings_luckgram_translate.h
     # D7 AI
