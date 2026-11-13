@@ -3,6 +3,7 @@
 
 set(LUCKGRAM_BUILD_NUMBER "0" CACHE STRING "CI run number shown on the about page.")
 set(LUCKGRAM_COMMIT "" CACHE STRING "Git commit shown on the about page.")
+option(LUCKGRAM_CI_BUILD "CI screenshot build only: screenshot mode and Telegram test-server login. Never for releases." OFF)
 option(LUCKGRAM_REQUIRE_API_CREDENTIALS "Fail unless real api_id / api_hash are given (CI)." OFF)
 
 if (LUCKGRAM_REQUIRE_API_CREDENTIALS)
@@ -27,7 +28,22 @@ PRIVATE
     luckgram/luckgram_intro.h
     luckgram/luckgram_screenshots.cpp
     luckgram/luckgram_screenshots.h
+    luckgram/luckgram_ci_login.cpp
+    luckgram/luckgram_ci_login.h
 )
+
+# A generated header rather than a compile definition: switching the option
+# rebuilds only luckgram_ci_login.cpp / luckgram_screenshots.cpp and keeps the precompiled header valid.
+if (LUCKGRAM_CI_BUILD)
+    set(LUCKGRAM_CI_BUILD_VALUE 1)
+else()
+    set(LUCKGRAM_CI_BUILD_VALUE 0)
+endif()
+file(CONFIGURE
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/luckgram_gen/luckgram_ci_config.h
+    CONTENT "#pragma once\n#define LUCKGRAM_CI_BUILD @LUCKGRAM_CI_BUILD_VALUE@\n"
+    @ONLY)
+target_include_directories(Telegram PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/luckgram_gen)
 
 target_compile_definitions(Telegram
 PRIVATE
