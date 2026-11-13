@@ -304,6 +304,12 @@ target_link_libraries(Telegram PRIVATE lib_luckgram_quirc)
 # Call recording (D11): the audio device module wrapper is the only Luckgram
 # code built against tg_owt headers, so it gets its own library and the
 # WebRTC defines stay out of the Telegram target.
+#
+# Headers and defines only, never the WebRTC libraries: linking
+# external_webrtc here put tg_owt a second time at the end of the Telegram
+# link line (upstream only links it through lib_tgcalls), which broke the
+# link order on Windows (LNK2005 libyuv symbols tg_owt.lib vs avif.lib).
+# Telegram gets the WebRTC libraries through lib_tgcalls as upstream does.
 add_library(lib_luckgram_call_tap STATIC)
 init_target(lib_luckgram_call_tap)
 nice_target_sources(lib_luckgram_call_tap ${src_loc}
@@ -312,5 +318,36 @@ PRIVATE
     luckgram/calls/luckgram_call_audio_tap.h
 )
 target_include_directories(lib_luckgram_call_tap PUBLIC ${src_loc})
-target_link_libraries(lib_luckgram_call_tap PRIVATE desktop-app::external_webrtc)
+if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.27)
+    target_link_libraries(lib_luckgram_call_tap
+    PRIVATE
+        $<COMPILE_ONLY:desktop-app::external_webrtc>
+    )
+else()
+    # Usage requirements by hand, from external_webrtc and, when it is a
+    # wrapper around the exported package target, tg_owt::tg_owt.
+    foreach (webrtc_target desktop-app::external_webrtc tg_owt::tg_owt)
+        if (TARGET ${webrtc_target})
+            target_include_directories(lib_luckgram_call_tap SYSTEM
+            PRIVATE
+                $<TARGET_PROPERTY:${webrtc_target},INTERFACE_INCLUDE_DIRECTORIES>
+            )
+            target_compile_definitions(lib_luckgram_call_tap
+            PRIVATE
+                $<TARGET_PROPERTY:${webrtc_target},INTERFACE_COMPILE_DEFINITIONS>
+            )
+            target_compile_options(lib_luckgram_call_tap
+            PRIVATE
+                $<TARGET_PROPERTY:${webrtc_target},INTERFACE_COMPILE_OPTIONS>
+            )
+        endif()
+    endforeach()
+endif()
 target_link_libraries(Telegram PRIVATE lib_luckgram_call_tap)
+
+# Qt6Network.lib (qdnslookup_win) needs the Windows DNS API; the unified
+# build failed with LNK2019 DnsQuery_W / DnsFree / ... A system import
+# library, so linking it costs nothing when nothing uses it.
+if (WIN32)
+    target_link_libraries(Telegram PRIVATE dnsapi)
+endif()
