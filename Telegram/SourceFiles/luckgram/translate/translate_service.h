@@ -54,14 +54,16 @@ void SetOutChatTarget(not_null<PeerData*> peer, const QString &language);
 // The language of the newest incoming message with text, or empty.
 [[nodiscard]] QString LastIncomingLanguage(not_null<History*> history);
 
-// Telegram first, then Luckgram AI (source "translate_out"). On failure
-// the reason toast is shown and `fail` is called.
+// Telegram first, then Luckgram AI (source for the logs, default
+// "translate_out"). On failure the reason toast is shown and `fail` is
+// called.
 void TranslateText(
 	not_null<Main::Session*> session,
 	const TextWithEntities &text,
 	const QString &to,
 	Fn<void(TextWithEntities)> done,
-	Fn<void()> fail);
+	Fn<void()> fail,
+	const char *source = nullptr);
 
 // "不翻译的语言": the upstream "Do not translate" languages.
 [[nodiscard]] QStringList DoNotTranslate();

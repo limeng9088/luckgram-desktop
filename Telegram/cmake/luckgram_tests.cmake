@@ -72,6 +72,9 @@ PRIVATE
     luckgram/translate/translate_logic.cpp
     luckgram/translate/translate_logic.h
     luckgram/translate/translate_logic_tests.cpp
+    luckgram/transcribe/luckgram_transcribe_logic.cpp
+    luckgram/transcribe/luckgram_transcribe_logic.h
+    luckgram/tests/luckgram_transcribe_tests.cpp
 
     # D9 profile details, private notes, keyword folders, shared-group
     # activity, storage options (mobile 05 / 06 / 07 / 08 / 16)
