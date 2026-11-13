@@ -4442,6 +4442,7 @@ void ApiWrap::luckgramSendFile(
 		const QString &displayName,
 		TextWithTags caption,
 		bool forceFile,
+		uint64 idOverride,
 		const SendAction &action) {
 	_fileLoader->addTask(std::make_unique<FileLoadTask>(FileLoadTask::Args{
 		.session = &session(),
@@ -4450,6 +4451,7 @@ void ApiWrap::luckgramSendFile(
 		.to = FileLoadTaskOptions(action),
 		.caption = std::move(caption),
 		.forceFile = forceFile,
+		.idOverride = idOverride,
 		.displayName = displayName,
 	}));
 }

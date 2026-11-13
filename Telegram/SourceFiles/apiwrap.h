@@ -388,6 +388,7 @@ public:
 		const QString &displayName,
 		TextWithTags caption,
 		bool forceFile,
+		uint64 idOverride, // The local document id, to find the message.
 		const SendAction &action);
 
 	void editMedia(

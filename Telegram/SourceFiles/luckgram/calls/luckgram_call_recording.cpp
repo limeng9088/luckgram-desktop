@@ -7,6 +7,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "api/api_common.h"
 #include "apiwrap.h"
+#include "base/random.h"
 #include "base/timer.h"
 #include "base/unique_qptr.h"
 #include "calls/calls_call.h"
@@ -415,6 +416,9 @@ private:
 	const not_null<Main::Session*> _session;
 	History *_history = nullptr;
 	QString _fileName;
+	// The local document id (FileLoadTask idOverride): two recordings with
+	// the same name never get mixed up (review P3).
+	const uint64 _documentId = base::RandomValue<uint64>();
 	QStringList _transcript;
 	QString _partialReason;
 	int _segmentIndex = 0;
@@ -466,7 +470,7 @@ void Uploader::start() {
 			&& item->out()
 			&& (item->history() == _history)
 			&& document
-			&& (document->filename() == _fileName);
+			&& (document->id == _documentId);
 	}) | rpl::on_next([=](not_null<HistoryItem*> item) {
 		_sentId = item->fullId();
 		if (item->isRegular()) {
@@ -492,6 +496,7 @@ void Uploader::start() {
 		_fileName,
 		TextWithTags{ caption },
 		true,
+		_documentId,
 		::Api::SendAction(_history));
 	_data.file = QByteArray(); // FileLoadTask has its own copy.
 	_timeout.callOnce(kUploadTimeout);
