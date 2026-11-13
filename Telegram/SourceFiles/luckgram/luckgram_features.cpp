@@ -22,6 +22,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "settings/sections/settings_luckgram_translate.h"
 #include "settings/sections/settings_privacy_security.h"
 #include "window/window_session_controller.h"
+#include "luckgram/backup/luckgram_backup.h"
+#include "settings/sections/settings_luckgram_backup.h"
 
 namespace Luckgram::Features {
 namespace {
@@ -61,6 +63,17 @@ namespace {
 		.confirmEnable = ::Settings::ConfirmDoubleBottomEnable,
 		.confirmDisable = ::Settings::ConfirmDoubleBottomDisable,
 		.hiddenWhen = [] { return DoubleBottom::ActiveValue(); },
+	});
+	// D12 (mobile 10, specs#150): local backup file, free, default on.
+	result.push_back({
+		.key = QString::fromLatin1(Backup::kFeatureKey),
+		.group = Group::AccountPrivacy,
+		.titleZh = "账号备份",
+		.titleEn = "Account backup",
+		.aboutZh = "把账号导出为加密文件，换手机后导入",
+		.aboutEn = "Export accounts to an encrypted file and import them on a new phone",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramBackup::Id(); },
 	});
 	// ---- 消息与语言 / Messages & Language
 	result.push_back({
