@@ -50,6 +50,8 @@ PRIVATE
     luckgram/media/luckgram_round_video.h
     luckgram/media/luckgram_round_video_logic.cpp
     luckgram/media/luckgram_round_video_logic.h
+    luckgram/calls/luckgram_call_recording_logic.cpp
+    luckgram/calls/luckgram_call_recording_logic.h
     luckgram/media/luckgram_video_transcode.cpp
     luckgram/media/luckgram_video_transcode.h
     settings/sections/settings_luckgram_discover.cpp
