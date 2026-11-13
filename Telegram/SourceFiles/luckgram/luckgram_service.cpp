@@ -8,6 +8,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "base/timer.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_settings.h"
+#include "luckgram/pro/luckgram_pro.h"
 
 #include <QtCore/QDateTime>
 #include <QtCore/QJsonObject>
@@ -63,6 +64,7 @@ void Start() {
 	state.started = true;
 	Api::EnsureRegistered();
 	RefreshRemoteConfig(); // At every launch.
+	Pro::Start(); // D12: Pro state from /v1/me.
 	state.timer.setCallback([] { Check(); });
 	state.timer.callEach(kCheckInterval);
 }

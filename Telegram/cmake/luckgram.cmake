@@ -49,6 +49,13 @@ PRIVATE
     luckgram/luckgram_strings.h
     settings/sections/settings_luckgram.cpp
     settings/sections/settings_luckgram.h
+    # D12 Pro, account link
+    luckgram/pro/luckgram_pro.cpp
+    luckgram/pro/luckgram_pro.h
+    luckgram/pro/luckgram_pro_logic.cpp
+    luckgram/pro/luckgram_pro_logic.h
+    settings/sections/settings_luckgram_pro.cpp
+    settings/sections/settings_luckgram_pro.h
 )
 
 # A generated header rather than a compile definition: switching the option
