@@ -436,6 +436,14 @@ void FieldHost::showUndoHint(const QString &done) {
 
 void RegisterWritingDebugDemo();
 
+bool HidesUpstreamAiButton() {
+	return WritingEnabled();
+}
+
+rpl::producer<bool> HidesUpstreamAiButtonValue() {
+	return Settings::EnabledValue(QString::fromLatin1(Features::kAiWriting));
+}
+
 Compose::Slot CreateWritingSlot(const Compose::SlotContext &context) {
 	auto button = object_ptr<Ui::IconButton>(
 		context.parent,

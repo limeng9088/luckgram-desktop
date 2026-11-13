@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luckgram/luckgram_compose_slots.h"
 #include "luckgram/ai/ai_summary.h" // Luckgram D7
 #include "luckgram/luckgram_compose_panel.h" // Luckgram D7
+#include "luckgram/ai/ai_writing.h" // Luckgram D7
 #include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "luckgram/d9/luckgram_notes_widgets.h" // Luckgram D9
 
@@ -1521,6 +1522,9 @@ void HistoryWidget::initAiButton() {
 		tr::lng_ai_compose_tooltip(tr::rich),
 		"ai_compose_tooltip_hidden"_cs,
 		[=] { return width(); });
+	Luckgram::AI::HidesUpstreamAiButtonValue() | rpl::on_next([=] { // Luckgram D7
+		updateAiButtonVisibility();
+	}, lifetime());
 }
 
 void HistoryWidget::initSendAsFileButton() {
@@ -7601,7 +7605,8 @@ bool HistoryWidget::textExceedsMaxSize() const {
 }
 
 void HistoryWidget::updateAiButtonVisibility() {
-	const auto hidden = !hasEnoughLinesForAi()
+	const auto hidden = Luckgram::AI::HidesUpstreamAiButton() // Luckgram D7
+		|| !hasEnoughLinesForAi()
 		|| !_send->isVisible()
 		|| !_field->isVisible();
 	if (_aiButton->isHidden() == hidden) {
