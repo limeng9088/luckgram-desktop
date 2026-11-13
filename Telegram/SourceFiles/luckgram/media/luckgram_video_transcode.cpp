@@ -630,8 +630,14 @@ TranscodeResult Transcoder::run() {
 	auto packet = av_packet_alloc();
 	const auto guard = gsl::finally([&] { av_packet_free(&packet); });
 	auto ok = true;
+	const auto cancelled = [&] {
+		return _args.cancelled && _args.cancelled->load();
+	};
 	while (ok && !(_videoDone && _audioDone)) {
-		if (av_read_frame(_input.format.get(), packet) < 0) {
+		if (cancelled()) {
+			result.error = u"cancelled"_q;
+			return result;
+		} else if (av_read_frame(_input.format.get(), packet) < 0) {
 			break;
 		}
 		if (packet->stream_index == _input.videoIndex && !_videoDone) {
