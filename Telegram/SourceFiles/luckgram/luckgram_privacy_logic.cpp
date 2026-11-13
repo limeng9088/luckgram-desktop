@@ -204,10 +204,14 @@ std::optional<SecondRecord> DecodeRecord(const QString &value) {
 	if (!ok || iterations <= 0) {
 		return std::nullopt;
 	}
-	const auto decode = [](const QString &part) {
-		return QByteArray::fromBase64Encoding(
+	const auto decode = [](const QString &part) -> std::optional<QByteArray> {
+		const auto result = QByteArray::fromBase64Encoding(
 			part.toLatin1(),
 			QByteArray::AbortOnBase64DecodingErrors);
+		if (result.decodingStatus != QByteArray::Base64DecodingStatus::Ok) {
+			return std::nullopt;
+		}
+		return result.decoded;
 	};
 	const auto salt = decode(parts[2]);
 	const auto nonce = decode(parts[3]);
