@@ -58,6 +58,8 @@ public:
 	[[nodiscard]] virtual std::shared_ptr<ChatHelpers::Show> show() = 0;
 	// The open chat (may be nullptr between chats).
 	[[nodiscard]] virtual History *history() = 0;
+	// The topic / replies thread of the field, 0 for the whole chat.
+	[[nodiscard]] virtual MsgId topicRootId() = 0;
 
 	// The field's text with formatting.
 	[[nodiscard]] virtual TextWithTags text() = 0;

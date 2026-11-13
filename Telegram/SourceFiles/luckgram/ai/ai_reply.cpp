@@ -64,7 +64,10 @@ namespace {
 }
 
 // Recent loaded messages, oldest first, as "name: text" lines (20 需求 2).
-[[nodiscard]] QString Transcript(not_null<History*> history) {
+// In a topic or replies thread only that thread's messages.
+[[nodiscard]] QString Transcript(
+		not_null<History*> history,
+		MsgId topicRootId) {
 	auto lines = QStringList();
 	for (auto b = history->blocks.rbegin(); b != history->blocks.rend(); ++b) {
 		const auto &messages = (*b)->messages;
@@ -74,6 +77,11 @@ namespace {
 			}
 			const auto item = (*m)->data();
 			if (item->isService() || !item->isRegular()) {
+				continue;
+			} else if (topicRootId
+				&& item->id != topicRootId
+				&& item->topicRootId() != topicRootId
+				&& item->replyToTop() != topicRootId) {
 				continue;
 			}
 			const auto text = ItemText(item);
@@ -176,7 +184,10 @@ void Generate(not_null<WritingHost*> host, not_null<PanelState*> state) {
 	args.stream = true;
 	args.messages.push_back({
 		u"user"_q,
-		Reply::Prompt(Transcript(history), state->draft.text, Me()),
+		Reply::Prompt(
+			Transcript(history, host->topicRootId()),
+			state->draft.text,
+			Me()),
 	});
 	const auto list = state->list;
 	state->request = Chat(
