@@ -19,6 +19,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "main/main_session.h"
 #include "main/main_session_settings.h" // createSession(): unique_ptr<SessionSettings>
 #include "mtproto/mtproto_config.h"
+#include "mtproto/mtproto_dc_options.h"
 #include "mtproto/sender.h"
 #include "storage/storage_account.h"
 
@@ -189,6 +190,46 @@ void SendCode(std::shared_ptr<Flow> flow) {
 	}).send();
 }
 
+// Where the account really talks to: the environment, the built-in /
+// configured endpoints of the main DC, and what the server itself says in
+// help.getConfig (test_mode, this_dc). Test numbers have fixed codes only
+// on the test servers.
+void LogConnection(std::shared_ptr<Flow> flow, Fn<void()> next) {
+	const auto &mtp = flow->account->mtp();
+	const auto dc = MainDc(flow->account);
+	auto endpoints = QStringList();
+	const auto variants = mtp.dcOptions().lookup(
+		dc,
+		MTP::DcType::Regular,
+		false);
+	using Variants = MTP::DcOptions::Variants;
+	for (const auto address : { Variants::IPv4, Variants::IPv6 }) {
+		for (const auto &endpoint : variants.data[address][Variants::Tcp]) {
+			endpoints.push_back(u"%1:%2"_q
+				.arg(QString::fromStdString(endpoint.ip))
+				.arg(endpoint.port));
+		}
+	}
+	Log(u"environment %1, dc options test mode %2, main dc %3: %4"_q
+		.arg((mtp.environment() == MTP::Environment::Test)
+			? u"test"_q
+			: u"production"_q)
+		.arg(mtp.dcOptions().isTestMode() ? u"yes"_q : u"no"_q)
+		.arg(dc)
+		.arg(endpoints.isEmpty() ? u"(none)"_q : endpoints.join(u", "_q)));
+	flow->api.request(MTPhelp_GetConfig(
+	)).done([=](const MTPConfig &result) {
+		const auto &data = result.c_config();
+		Log(u"help.getConfig: test_mode %1, this_dc %2"_q
+			.arg(mtpIsTrue(data.vtest_mode()) ? u"true"_q : u"false"_q)
+			.arg(data.vthis_dc().v));
+		next();
+	}).fail([=](const MTP::Error &error) {
+		Log(u"help.getConfig failed: "_q + error.type());
+		next();
+	}).send();
+}
+
 void Start(std::shared_ptr<Flow> flow) {
 	// The number on the DC the account talks to (test DC 1..3), so
 	// auth.sendCode is not migrated and the code is that DC's digit.
@@ -200,7 +241,9 @@ void Start(std::shared_ptr<Flow> flow) {
 	Log(u"test number 99966%1XXXX on test dc %2"_q
 		.arg(flow->dc)
 		.arg(flow->dc));
-	SendCode(flow);
+	LogConnection(flow, [=] {
+		SendCode(flow);
+	});
 }
 
 } // namespace
