@@ -142,3 +142,44 @@ PRIVATE
 if (LUCKGRAM_TESTS)
     include(${CMAKE_CURRENT_LIST_DIR}/luckgram_tests.cmake)
 endif()
+
+# D3 proxy: paste link, QR from a picture, subscriptions, exit country / IP
+# (mobile specs#116-#118).
+nice_target_sources(Telegram ${src_loc}
+PRIVATE
+    luckgram/proxy/luckgram_proxy_exit.cpp
+    luckgram/proxy/luckgram_proxy_exit.h
+    luckgram/proxy/luckgram_proxy_exit_logic.cpp
+    luckgram/proxy/luckgram_proxy_exit_logic.h
+    luckgram/proxy/luckgram_proxy_import.cpp
+    luckgram/proxy/luckgram_proxy_import.h
+    luckgram/proxy/luckgram_proxy_import_logic.cpp
+    luckgram/proxy/luckgram_proxy_import_logic.h
+    luckgram/qr/luckgram_qr_decode.cpp
+    luckgram/qr/luckgram_qr_decode.h
+)
+
+# QR decoding (D3 pictures, D10 camera): vendored quirc 1.2, ISC license,
+# https://github.com/dlbeer/quirc tag v1.2, lib/ files unchanged. C code in
+# its own library so it stays out of the C++ precompiled header.
+add_library(lib_luckgram_quirc STATIC)
+init_target(lib_luckgram_quirc "(external)")
+nice_target_sources(lib_luckgram_quirc ${src_loc}
+PRIVATE
+    luckgram/qr/quirc/decode.c
+    luckgram/qr/quirc/identify.c
+    luckgram/qr/quirc/quirc.c
+    luckgram/qr/quirc/quirc.h
+    luckgram/qr/quirc/quirc_internal.h
+    luckgram/qr/quirc/version_db.c
+)
+target_include_directories(lib_luckgram_quirc PUBLIC ${src_loc}/luckgram/qr/quirc)
+if (MSVC)
+    target_compile_options(lib_luckgram_quirc PRIVATE /W0 /WX-)
+else()
+    target_compile_options(lib_luckgram_quirc PRIVATE -w)
+endif()
+if (LINUX)
+    target_link_libraries(lib_luckgram_quirc PUBLIC m)
+endif()
+target_link_libraries(Telegram PRIVATE lib_luckgram_quirc)
