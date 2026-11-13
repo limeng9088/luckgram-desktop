@@ -21,6 +21,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "history/history_item.h"
 #include "luckgram/ai/ai_compose_logic.h"
 #include "luckgram/calls/luckgram_call_recording_encoder.h"
+#include "luckgram/discover/luckgram_discover_storage.h"
+#include "main/main_account.h"
 #include "luckgram/calls/luckgram_call_recording_logic.h"
 #include "luckgram/luckgram_ai.h"
 #include "luckgram/luckgram_settings.h"
@@ -52,6 +54,10 @@ constexpr auto kUploadTimeout = crl::time(60 * 60 * 1000);
 [[nodiscard]] Texts Tx() {
 	return Texts(IsChinese());
 }
+
+// A peer id shows who you talk to: account storage (D2, local key), like
+// user content (w-1109 rule). TargetKey() is only the plain pre-D2 name.
+constexpr auto kTargetStorageName = "call_recording_target";
 
 [[nodiscard]] QString TargetKey(not_null<Main::Session*> session) {
 	return K(kTargetKey) + QChar('_') + QString::number(session->userId().bare);
@@ -644,7 +650,10 @@ void SetAiTranscript(bool enabled) {
 }
 
 PeerData *Target(not_null<Main::Session*> session) {
-	const auto value = Settings::GetString(TargetKey(session));
+	const auto value = DiscoverStorage::Read(
+		&session->account(),
+		K(kTargetStorageName),
+		TargetKey(session));
 	auto ok = false;
 	const auto serialized = value.toULongLong(&ok);
 	if (!ok || !serialized) {
@@ -656,13 +665,12 @@ PeerData *Target(not_null<Main::Session*> session) {
 }
 
 void SetTarget(not_null<Main::Session*> session, PeerData *peer) {
-	if (!peer || peer->isSelf()) {
-		Settings::Remove(TargetKey(session));
-	} else {
-		Settings::SetString(
-			TargetKey(session),
-			QString::number(SerializePeerId(peer->id)));
-	}
+	DiscoverStorage::Write(
+		&session->account(),
+		K(kTargetStorageName),
+		((!peer || peer->isSelf())
+			? QString()
+			: QString::number(SerializePeerId(peer->id))));
 }
 
 CallAudioTap::AudioDeviceModuleCreator WrapAudioDeviceModule(
