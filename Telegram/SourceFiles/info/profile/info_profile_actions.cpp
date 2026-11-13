@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "info/profile/info_profile_actions.h"
 
+#include "luckgram/d9/luckgram_notes_widgets.h" // Luckgram D9
+#include "luckgram/d9/luckgram_profile_info.h" // Luckgram D9
 #include "api/api_blocked_peers.h"
 #include "api/api_chat_participants.h"
 #include "api/api_credits.h"
@@ -1716,6 +1718,14 @@ Section DetailsFiller::makeInfo() {
 		setupAboutContextMenu(about.text, AboutWithAdvancedValue(user));
 		SetupAboutPeerIdDrag(about.text, user);
 
+		// Luckgram D9 (05): private note under the bio.
+		if (!user->isSelf()) {
+			tracker.track(result->add(Luckgram::Notes::CreateProfileRow(
+				result,
+				controller,
+				user)));
+		}
+
 		const auto usernameLine = addInfoOneLine(
 			UsernamesSubtext(_peer, tr::lng_info_username_label()),
 			UsernameValue(user, true) | rpl::map([=](TextWithEntities u) {
@@ -1778,6 +1788,21 @@ Section DetailsFiller::makeInfo() {
 		fitLabelToButton(qrButton, usernameLine.text, rightSkip);
 		fitLabelToButton(qrButton, usernameLine.subtext, rightSkip);
 		qrButton->setClickedCallback(showQr);
+
+		// Luckgram D9 (07): ID and approximate registration date.
+		const auto luckgramId = addInfoOneLine(
+			Luckgram::ProfileInfo::IdLabelValue(),
+			Luckgram::ProfileInfo::IdTextValue(user),
+			QString(),
+			st::infoProfileLabeledPadding,
+			st::popupMenuWithIcons);
+		Luckgram::ProfileInfo::SetupIdLine(luckgramId.text, controller, user);
+		if (!user->isBot()) {
+			addInfoOneLine(
+				Luckgram::ProfileInfo::RegisteredLabelValue(),
+				Luckgram::ProfileInfo::RegisteredTextValue(user),
+				QString());
+		}
 
 		if (!user->isBot()) {
 			tracker.track(result->add(
@@ -1897,6 +1922,22 @@ Section DetailsFiller::makeInfo() {
 		if (!_topic) {
 			setupAboutContextMenu(about.text, AboutWithAdvancedValue(_peer));
 			SetupAboutPeerIdDrag(about.text, _peer);
+
+			// Luckgram D9 (05, 07): private note and ID.
+			tracker.track(result->add(Luckgram::Notes::CreateProfileRow(
+				result,
+				controller,
+				_peer)));
+			const auto luckgramId = addInfoOneLine(
+				Luckgram::ProfileInfo::IdLabelValue(),
+				Luckgram::ProfileInfo::IdTextValue(_peer),
+				QString(),
+				st::infoProfileLabeledPadding,
+				st::popupMenuWithIcons);
+			Luckgram::ProfileInfo::SetupIdLine(
+				luckgramId.text,
+				controller,
+				_peer);
 		}
 	}
 	raw->toggleOn(tracker.atLeastOneShownValue());

@@ -73,6 +73,20 @@ PRIVATE
     luckgram/translate/translate_logic.h
     luckgram/translate/translate_logic_tests.cpp
 
+    # D9 profile details, private notes, keyword folders, shared-group
+    # activity, storage options (mobile 05 / 06 / 07 / 08 / 16)
+    luckgram/d9/luckgram_cache_logic.cpp
+    luckgram/d9/luckgram_cache_logic.h
+    luckgram/d9/luckgram_keyword_logic.cpp
+    luckgram/d9/luckgram_keyword_logic.h
+    luckgram/d9/luckgram_notes_text.cpp
+    luckgram/d9/luckgram_notes_text.h
+    luckgram/d9/luckgram_profile_info_logic.cpp
+    luckgram/d9/luckgram_profile_info_logic.h
+    luckgram/d9/luckgram_shared_activity_logic.cpp
+    luckgram/d9/luckgram_shared_activity_logic.h
+    luckgram/tests/luckgram_d9_tests.cpp
+
     # D7 AI (mobile 18-24, 30)
     luckgram/ai/ai_agents_logic.cpp
     luckgram/ai/ai_agents_logic.h

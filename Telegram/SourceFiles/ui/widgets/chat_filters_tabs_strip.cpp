@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "ui/widgets/chat_filters_tabs_strip.h"
 
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "api/api_chat_filters_remove_manager.h"
 #include "boxes/choose_filter_box.h"
 #include "boxes/filters/edit_filter_box.h"
@@ -120,6 +121,13 @@ void ShowMenu(
 			tr::lng_filters_setup_menu(tr::now),
 			std::move(openFiltersSettings),
 			&st::menuIconEdit);
+		if (Luckgram::Keywords::Enabled()) {
+			// Luckgram D9 (06 §1): new keyword folder.
+			addAction(
+				Luckgram::Keywords::MenuNewFolder(),
+				[=] { Luckgram::Keywords::ShowCreate(controller); },
+				&st::menuIconAddToFolder);
+		}
 
 		MarkAsReadMenu::AddChatListAction(
 			controller,

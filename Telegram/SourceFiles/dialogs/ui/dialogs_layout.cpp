@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/ui/dialogs_layout.h"
 
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "base/options.h"
 #include "base/unixtime.h"
 #include "core/ui_integration.h"
@@ -1232,6 +1233,10 @@ void RowPainter::Paint(
 			const auto monoforum = (peer && context.st->topicsHeight)
 				? peer->monoforum()
 				: nullptr;
+			// Luckgram D9 (06): keyword folder highlight.
+			view->setLuckgramHighlight(Luckgram::Keywords::HighlightKeywords(
+				&entry->session(),
+				context.filter));
 			if (!view->prepared(item, forum, monoforum)) {
 				view->prepare(
 					item,

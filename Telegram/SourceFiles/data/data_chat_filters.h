@@ -216,6 +216,10 @@ public:
 	[[nodiscard]] rpl::producer<bool> tagsEnabledChanges() const;
 	void requestToggleTags(bool value, Fn<void()> fail);
 
+	// Luckgram D9 (06): local keyword folders changed (created, edited,
+	// removed, switch toggled): re-arrange them in list() and refill them.
+	void luckgramRefreshLocal();
+
 private:
 	struct MoreChatsData {
 		std::vector<not_null<PeerData*>> missing;
@@ -226,6 +230,7 @@ private:
 
 	void load(bool force);
 	void received(const QVector<MTPDialogFilter> &list);
+	bool luckgramArrangeLocal(); // Luckgram D9 (06)
 	bool applyOrder(const QVector<MTPint> &order);
 	bool applyChange(ChatFilter &filter, ChatFilter &&updated);
 	void applyInsert(ChatFilter filter, int position);

@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "info/profile/info_profile_shared_media_classic.h"
 
+#include "luckgram/d9/luckgram_shared_activity.h" // Luckgram D9
+#include "ui/layers/generic_box.h" // Luckgram D9
 #include "core/ui_integration.h"
 #include "data/components/recent_shared_media_gifts.h"
 #include "data/data_channel.h"
@@ -360,6 +362,26 @@ object_ptr<Ui::SlideWrap<Ui::RpWidget>> SetupSharedMediaClassic(
 		addSimilarPeersButton(channel, st::infoIconMediaChannel);
 	} else if (const auto user = peer->asUser()) {
 		addCommonGroupsButton(user, st::infoIconMediaGroup);
+		// Luckgram D9 (16): 「动态」, the user's messages in common groups.
+		if (!topic && !sublist && Luckgram::SharedActivity::AppliesTo(user)) {
+			const auto button = Media::AddCountedButton(
+				content,
+				Luckgram::SharedActivity::EnabledValue(
+				) | rpl::map([](bool enabled) { return enabled ? 1 : 0; }),
+				[](int) { return Luckgram::SharedActivity::Title(); },
+				tracker)->entity();
+			const auto window = controller->parentController();
+			button->addClickHandler([=] {
+				window->show(Box(
+					Luckgram::SharedActivity::ActivityBox,
+					window,
+					user));
+			});
+			object_ptr<FloatingIcon>(
+				button,
+				st::infoIconMediaGroup,
+				st::infoSharedMediaButtonIconPosition);
+		}
 	}
 
 	auto result = object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
