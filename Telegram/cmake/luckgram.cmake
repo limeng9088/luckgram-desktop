@@ -139,6 +139,8 @@ PRIVATE
     luckgram/ai/ai_market.cpp
     luckgram/ai/ai_market.h
     luckgram/ai/ai_assistant.cpp
+    luckgram/ai/ai_assistant_row.cpp
+    luckgram/ai/ai_assistant_row.h
     luckgram/ai/ai_assistant.h
     luckgram/ai/ai_registry.cpp
     luckgram/ai/ai_registry.h
