@@ -72,6 +72,12 @@ PRIVATE
     luckgram/translate/translate_logic.cpp
     luckgram/translate/translate_logic.h
     luckgram/translate/translate_logic_tests.cpp
+    luckgram/selectall/select_all_logic.cpp
+    luckgram/selectall/select_all_logic.h
+    luckgram/tests/luckgram_select_all_tests.cpp
+    luckgram/transcribe/luckgram_transcribe_logic.cpp
+    luckgram/transcribe/luckgram_transcribe_logic.h
+    luckgram/tests/luckgram_transcribe_tests.cpp
 
     # D9 profile details, private notes, keyword folders, shared-group
     # activity, storage options (mobile 05 / 06 / 07 / 08 / 16)
@@ -110,6 +116,11 @@ PRIVATE
     luckgram/ai/ai_market_logic_tests.cpp
     luckgram/ai/ai_markdown_logic_tests.cpp
     luckgram/ai/ai_summary_logic_tests.cpp
+
+    # D12 account backup file (PBKDF2 / AES-GCM: OpenSSL, linked below)
+    luckgram/backup/luckgram_backup_format.cpp
+    luckgram/backup/luckgram_backup_format.h
+    luckgram/tests/luckgram_backup_format_tests.cpp
     luckgram/ai/ai_text_logic_tests.cpp
 )
 
@@ -117,6 +128,8 @@ target_link_libraries(luckgram_tests
 PRIVATE
     desktop-app::external_qt
     desktop-app::external_qt_static_plugins # JPEG / PNG (D10 media tests).
+
+    desktop-app::external_openssl # D12 backup format.
 )
 
 set_target_properties(luckgram_tests PROPERTIES

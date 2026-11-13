@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history_widget.h"
+#include "luckgram/luckgram_save_to_saved.h" // Luckgram D6
 
 #include "luckgram/luckgram_compose_slots.h"
 #include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
@@ -604,6 +605,7 @@ HistoryWidget::HistoryWidget(
 			.field = _field,
 			.show = controller->uiShow(),
 			.history = [=] { return _history; },
+			.topicRootId = [] { return MsgId(); }, // Whole chat.
 		},
 		_send.get(),
 		[=] { updateFieldSize(); });
@@ -1159,6 +1161,15 @@ HistoryWidget::HistoryWidget(
 	_topBar->forwardSelectionRequest(
 	) | rpl::on_next([=] {
 		forwardSelected();
+	}, _topBar->lifetime());
+	_topBar->luckgramSaveSelectionRequest( // Luckgram D6 (mobile 15)
+	) | rpl::on_next([=] {
+		if (_list) {
+			Luckgram::SaveToSaved::Save(
+				controller(),
+				_list->getSelectedForwardItems(),
+				crl::guard(this, [=] { clearSelected(); }));
+		}
 	}, _topBar->lifetime());
 	_topBar->deleteSelectionRequest(
 	) | rpl::on_next([=] {
@@ -3875,6 +3886,10 @@ void HistoryWidget::refreshAttachBotsMenu() {
 		}));
 	if (!_attachBotsMenu) {
 		return;
+	}
+	if (_luckgramSlots) { // Luckgram D6 (specs#94): the 「+」 menu.
+		Luckgram::Compose::SetupPlusIcon(_attachToggle.data());
+		_luckgramSlots->fillPlusMenu(_attachBotsMenu.get());
 	}
 	_attachBotsMenu->setOrigin(
 		Ui::PanelAnimation::Origin::BottomLeft);

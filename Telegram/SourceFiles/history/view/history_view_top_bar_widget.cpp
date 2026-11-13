@@ -6,6 +6,9 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_top_bar_widget.h"
+#include "luckgram/luckgram_save_to_saved.h" // Luckgram D6
+#include "luckgram/luckgram_settings.h" // Luckgram D6
+#include "luckgram/luckgram_strings.h" // Luckgram D6
 
 #include "history/history.h"
 #include "history/view/history_view_send_action.h"
@@ -123,6 +126,10 @@ TopBarWidget::TopBarWidget(
 , _forward(this, tr::lng_selected_forward(), st::defaultActiveButton)
 , _sendNow(this, tr::lng_selected_send_now(), st::defaultActiveButton)
 , _delete(this, tr::lng_selected_delete(), st::defaultActiveButton)
+, _luckgramSave(
+	this,
+	Luckgram::TrValue("收藏", "Save"),
+	st::defaultActiveButton)
 , _back(this, st::historyTopBarBack)
 , _cancelChoose(this, st::topBarCloseChoose)
 , _call(this, st::topBarCall)
@@ -138,6 +145,7 @@ TopBarWidget::TopBarWidget(
 	_forward->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
 	_sendNow->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
 	_delete->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
+	_luckgramSave->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
 
 	Lang::Updated(
 	) | rpl::on_next([=] {
@@ -146,6 +154,10 @@ TopBarWidget::TopBarWidget(
 
 	_forward->setClickedCallback([=] { _forwardSelection.fire({}); });
 	_forward->setWidthChangedCallback([=] { updateControlsGeometry(); });
+	_luckgramSave->setClickedCallback([=] {
+		_luckgramSaveSelection.fire({});
+	});
+	_luckgramSave->setWidthChangedCallback([=] { updateControlsGeometry(); });
 	_sendNow->setClickedCallback([=] { _sendNowSelection.fire({}); });
 	_sendNow->setWidthChangedCallback([=] { updateControlsGeometry(); });
 	_delete->setClickedCallback([=] { _deleteSelection.fire({}); });
@@ -1162,6 +1174,7 @@ void TopBarWidget::updateControlsGeometry() {
 	auto buttonsLeft = st::topBarActionSkip
 		+ (_controller->adaptive().isOneColumn() ? 0 : st::lineWidth);
 	auto buttonsWidth = (_forward->isHidden() ? 0 : _forward->contentWidth())
+		+ (_luckgramSave->isHidden() ? 0 : _luckgramSave->contentWidth())
 		+ (_sendNow->isHidden() ? 0 : _sendNow->contentWidth())
 		+ (_delete->isHidden() ? 0 : _delete->contentWidth())
 		+ _clear->width();
@@ -1172,6 +1185,7 @@ void TopBarWidget::updateControlsGeometry() {
 		-2 * st::defaultActiveButton.width);
 	auto buttonFullWidth = std::min(-(widthLeft / 2), 0);
 	_forward->setFullWidth(buttonFullWidth);
+	_luckgramSave->setFullWidth(buttonFullWidth);
 	_sendNow->setFullWidth(buttonFullWidth);
 	_delete->setFullWidth(buttonFullWidth);
 
@@ -1180,6 +1194,11 @@ void TopBarWidget::updateControlsGeometry() {
 	_forward->moveToLeft(buttonsLeft, selectedButtonsTop);
 	if (!_forward->isHidden()) {
 		buttonsLeft += _forward->width() + st::topBarActionSkip;
+	}
+
+	_luckgramSave->moveToLeft(buttonsLeft, selectedButtonsTop);
+	if (!_luckgramSave->isHidden()) {
+		buttonsLeft += _luckgramSave->width() + st::topBarActionSkip;
 	}
 
 	_sendNow->moveToLeft(buttonsLeft, selectedButtonsTop);
@@ -1196,6 +1215,7 @@ void TopBarWidget::updateControlsGeometry() {
 			: st::buttonRadius;
 		const auto buttons = std::array{
 			_forward.data(),
+			_luckgramSave.data(),
 			_sendNow.data(),
 			_delete.data(),
 		};
@@ -1343,6 +1363,15 @@ void TopBarWidget::updateControlsVisibility() {
 	_clear->setVisible(visible);
 	_delete->setVisible(_canDelete && visible);
 	_forward->setVisible(_canForward && visible);
+	{ // Luckgram D6 (mobile 15): not in Saved Messages itself.
+		const auto peer = _activeChat.key.peer();
+		_luckgramSave->setVisible(_canForward
+			&& visible
+			&& peer
+			&& !peer->isSelf()
+			&& Luckgram::Settings::IsEnabled(QString::fromLatin1(
+				Luckgram::SaveToSaved::kFeature)));
+	}
 	_sendNow->setVisible(_canSendNow && visible);
 
 

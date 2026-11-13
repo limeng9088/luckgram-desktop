@@ -22,6 +22,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "settings/sections/settings_luckgram_translate.h"
 #include "settings/sections/settings_privacy_security.h"
 #include "window/window_session_controller.h"
+#include "luckgram/backup/luckgram_backup.h"
+#include "settings/sections/settings_luckgram_backup.h"
 
 namespace Luckgram::Features {
 namespace {
@@ -62,6 +64,17 @@ namespace {
 		.confirmDisable = ::Settings::ConfirmDoubleBottomDisable,
 		.hiddenWhen = [] { return DoubleBottom::ActiveValue(); },
 	});
+	// D12 (mobile 10, specs#150): local backup file, free, default on.
+	result.push_back({
+		.key = QString::fromLatin1(Backup::kFeatureKey),
+		.group = Group::AccountPrivacy,
+		.titleZh = "账号备份",
+		.titleEn = "Account backup",
+		.aboutZh = "把账号导出为加密文件，换手机后导入",
+		.aboutEn = "Export accounts to an encrypted file and import them on a new phone",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramBackup::Id(); },
+	});
 	// ---- 消息与语言 / Messages & Language
 	result.push_back({
 		.key = u"save_to_saved"_q, // spec 15
@@ -70,6 +83,15 @@ namespace {
 		.titleEn = "Save in one tap",
 		.aboutZh = "消息菜单里一点就存到收藏夹",
 		.aboutEn = "Save a message to Saved Messages straight from its menu",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"compact_input_bar"_q, // specs#94
+		.group = Group::MessagesLanguage,
+		.titleZh = "精简输入栏",
+		.titleEn = "Compact input bar",
+		.aboutZh = "输入栏只留表情、语音和「+」，附件和 Luckgram 功能都在「+」菜单里",
+		.aboutEn = "Keep only emoji, voice and \"+\" in the input bar; attachments and Luckgram tools live in the \"+\" menu",
 		.defaultValue = true,
 	});
 	result.push_back({
@@ -89,6 +111,15 @@ namespace {
 		.titleEn = "Translate before sending",
 		.aboutZh = "输入框旁的翻译按钮，右键发送按钮可选「翻译成…」",
 		.aboutEn = "The translate button next to the input field; right-click the send button for \"Translate to…\"",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"select_all_from_sender"_q, // D6, mobile 14
+		.group = Group::MessagesLanguage,
+		.titleZh = "全选某人的消息",
+		.titleEn = "Select all from sender",
+		.aboutZh = "右键消息一次选中这个人在本聊天的全部消息",
+		.aboutEn = "Right-click a message to select everything its sender wrote here",
 		.defaultValue = true,
 	});
 	// ---- 媒体、通话与存储 / Media, Calls & Storage
@@ -257,6 +288,33 @@ namespace {
 		.aboutZh = "未读多时一键总结要点，点引用跳回原消息，还能就这些消息提问",
 		.aboutEn = "Summarize many unread messages, jump to the source, ask about them",
 		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"free_transcribe"_q, // D6, mobile 17
+		.group = Group::AI,
+		.titleZh = "免费语音转文字",
+		.titleEn = "Free voice-to-text",
+		.aboutZh = "不需要会员，把语音消息和圆形视频转成文字",
+		.aboutEn = "Transcribe voice and video messages without Premium",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"dictation"_q, // D6, mobile 17
+		.group = Group::AI,
+		.titleZh = "语音输入",
+		.titleEn = "Voice input",
+		.aboutZh = "输入框旁的按钮，说话即可输入文字",
+		.aboutEn = "A button in the message field to type by speaking",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"dictation_ai_tidy"_q, // D6, mobile 17
+		.group = Group::AI,
+		.titleZh = "语音输入 AI 整理",
+		.titleEn = "Tidy voice input with AI",
+		.aboutZh = "去掉口头禅、补全标点，语言不变",
+		.aboutEn = "Remove filler words and add punctuation, same language",
+		.defaultValue = false,
 	});
 
 	// ---- 调试 / Debug (dev builds only)

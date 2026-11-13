@@ -9,6 +9,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "luckgram/luckgram_save_to_saved.h"
 #include "luckgram/translate/translate_service.h"
+#include "luckgram/luckgram_strings.h" // Luckgram D6
+#include "luckgram/selectall/select_all.h" // Luckgram D6
+#include "luckgram/selectall/select_all_logic.h" // Luckgram D6
 #include "luckgram/ai/ai_assistant.h" // Luckgram D7
 
 #include "api/api_polls.h"
@@ -3259,6 +3262,15 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					}
 				}
 			}, &st::menuIconSelect);
+			// Luckgram D6 (mobile 14): 「全选 X 的消息」 under 「选择」.
+			const auto title = Luckgram::SelectAll::MenuTitleFor(item);
+			if (!title.isEmpty()) {
+				_menu->addAction(title, [=] {
+					if (const auto item = session->data().message(itemId)) {
+						luckgramSelectAllFrom(item);
+					}
+				}, &st::menuIconSelect);
+			}
 			const auto collectBetween = [=](
 					not_null<HistoryItem*> from,
 					not_null<HistoryItem*> to,
@@ -4052,6 +4064,65 @@ bool HistoryInner::showCopyRestrictionForSelected() {
 		? _selectedTextItem
 		: _widgetSelection->item();
 	return textItem && showCopyRestriction(textItem);
+}
+
+void HistoryInner::luckgramSelectAllFrom(not_null<HistoryItem*> item) {
+	clearTextSelection();
+	changeSelection(&_selected, item, SelectAction::Select);
+	_accessibilitySelectionAnchor = nullptr;
+	repaintItem(item);
+	_widget->updateTopBarSelection();
+	if (_selected.empty()) {
+		return;
+	}
+	const auto chinese = Luckgram::IsChinese();
+	const auto show = _controller->uiShow();
+	show->showToast(Luckgram::SelectAll::LoadingText(chinese));
+	const auto weak = QPointer<HistoryInner>(this);
+	Luckgram::SelectAll::Start(item, {
+		.page = [=](std::vector<not_null<HistoryItem*>> items) {
+			const auto strong = weak.data();
+			if (!strong || strong->_selected.empty()) {
+				return false; // Left the selection: cancel.
+			}
+			for (const auto &item : items) {
+				const auto history = item->history();
+				if (history == strong->_history
+					|| history == strong->_migrated) {
+					strong->_selected.emplace(item);
+				}
+			}
+			strong->update();
+			strong->_widget->updateTopBarSelection();
+			return true;
+		},
+		.finished = [=](bool complete, int) {
+			const auto strong = weak.data();
+			if (!strong || strong->_selected.empty()) {
+				return;
+			}
+			const auto count = int(strong->_selected.size());
+			if (!complete) {
+				show->showToast(
+					Luckgram::SelectAll::FailedText(count, chinese));
+				return;
+			}
+			auto text = TextWithEntities{
+				Luckgram::SelectAll::DoneText(count, chinese),
+			};
+			text.append(u"  "_q).append(Ui::Text::Link(
+				Luckgram::SelectAll::CopyText(chinese)));
+			show->showToast({
+				.text = std::move(text),
+				.filter = [=](const ClickHandlerPtr &, Qt::MouseButton) {
+					if (const auto strong = weak.data()) {
+						strong->copySelectedText(); // By date, as upstream.
+					}
+					return true;
+				},
+			});
+		},
+	});
 }
 
 void HistoryInner::copySelectedText(bool withImageText) {

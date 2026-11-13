@@ -6,9 +6,15 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_compose_slots.h"
 
 #include "base/unique_qptr.h"
+#include "luckgram/transcribe/luckgram_dictation.h"
 #include "luckgram/translate/translate_out.h"
 #include "ui/rp_widget.h"
+#include "luckgram/luckgram_settings.h"
+#include "ui/widgets/buttons.h"
+#include "ui/widgets/dropdown_menu.h"
 #include "ui/widgets/popup_menu.h"
+#include "styles/style_chat_helpers.h"
+#include "styles/style_menu_icons.h"
 
 namespace Luckgram::Compose {
 namespace {
@@ -20,6 +26,7 @@ using Factory = Slot(*)(const SlotContext &context);
 	return {
 		// D7: ✦ AI.
 		Luckgram::Translate::CreateSendSlot, // D6: send translation.
+		Luckgram::Transcribe::CreateDictationSlot, // D6: voice input.
 	};
 }
 
@@ -27,8 +34,49 @@ using Factory = Slot(*)(const SlotContext &context);
 
 struct RightSlots::Entry {
 	base::unique_qptr<Ui::RpWidget> widget;
+	Fn<void(not_null<Ui::DropdownMenu*>)> plus;
 	bool shown = false;
 };
+
+bool CompactEnabled() {
+	return Settings::IsEnabled(QString::fromLatin1(kCompactFeature));
+}
+
+rpl::producer<bool> CompactValue() {
+	return Settings::EnabledValue(QString::fromLatin1(kCompactFeature));
+}
+
+void SetupPlusIcon(not_null<Ui::IconButton*> attach) {
+	if (attach->property("luckgramPlus").toBool()) {
+		return; // Once per button.
+	}
+	attach->setProperty("luckgramPlus", true);
+	CompactValue() | rpl::on_next([=](bool compact) {
+		if (compact) {
+			attach->setIconOverride(
+				&st::historyLuckgramPlusIcon,
+				&st::historyLuckgramPlusIconOver);
+		} else {
+			attach->setIconOverride(nullptr, nullptr);
+		}
+	}, attach->lifetime());
+}
+
+void RightSlots::fillPlusMenu(not_null<Ui::DropdownMenu*> menu) {
+	if (!CompactEnabled()) {
+		return;
+	}
+	auto separated = false;
+	for (const auto &entry : _entries) {
+		if (!entry->plus) {
+			continue;
+		} else if (!separated && !menu->actions().empty()) {
+			menu->addSeparator();
+			separated = true;
+		}
+		entry->plus(menu);
+	}
+}
 
 struct SendMenuItems {
 	uint64 id = 0;
@@ -93,14 +141,20 @@ RightSlots::RightSlots(
 		widget->hide();
 		auto entry = std::make_unique<Entry>();
 		entry->widget.reset(widget);
+		entry->plus = std::move(slot.plus);
 		const auto raw = entry.get();
 		_entries.push_back(std::move(entry));
 
 		rpl::combine(
 			std::move(slot.wanted),
-			send->shownValue()
-		) | rpl::map([](bool wanted, bool sendShown) {
-			return wanted && sendShown;
+			send->shownValue(),
+			CompactValue()
+		) | rpl::map([hasPlus = bool(raw->plus)](
+				bool wanted,
+				bool sendShown,
+				bool compact) {
+			// specs#94: in the 「+」 menu instead while the bar is compact.
+			return wanted && sendShown && !(compact && hasPlus);
 		}) | rpl::distinct_until_changed(
 		) | rpl::on_next([=](bool shown) {
 			raw->shown = shown;
