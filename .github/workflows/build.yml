@@ -412,6 +412,7 @@ jobs:
             -D TDESKTOP_API_ID=%TG_API_ID% ^
             -D TDESKTOP_API_HASH=%TG_API_HASH% ^
             -D LUCKGRAM_REQUIRE_API_CREDENTIALS=ON ^
+            -D LUCKGRAM_CI_TEST_LOGIN=OFF ^
             -D LUCKGRAM_BUILD_NUMBER=%LUCKGRAM_BUILD% ^
             -D LUCKGRAM_COMMIT=${{ github.sha }} ^
             -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON ^
@@ -505,6 +506,8 @@ jobs:
           # The exe must not carry the upstream test api_id.
           $bytes = [IO.File]::ReadAllText("$env:GITHUB_WORKSPACE\stage\Luckgram\Luckgram.exe", [Text.Encoding]::ASCII)
           if ($bytes.Contains("344583e45741c457fe1862106095a5eb")) { Write-Error "upstream test api_hash found in Luckgram.exe"; exit 1 }
+          # Nor the CI-only test-server login (luckgram_ci_login.cpp).
+          if ($bytes.Contains("LuckgramCiTestLogin")) { Write-Error "CI test login code found in Luckgram.exe"; exit 1 }
 
       - name: Upload installer.
         uses: actions/upload-artifact@v7
@@ -520,6 +523,36 @@ jobs:
           path: dist/Luckgram-*-portable.zip
           if-no-files-found: error
 
+      # Self-hosted only: relinks a copy with the CI-only Telegram test-server
+      # login (LUCKGRAM_CI_TEST_LOGIN, see luckgram_ci_login.h) for the
+      # logged-in screenshots, then switches the option off again. The
+      # release files above are already staged and checked.
+      - name: Test-login build for screenshots (CI only).
+        if: env.SELF_HOSTED == 'true'
+        continue-on-error: true
+        env:
+          _CL_: ${{ format('/MP{0}', vars.WIN_CL_MP || '4') }}
+        run: |
+          set OUT=%TBUILD%\luckgram-desktop\out
+          set APP=%RUNNER_TEMP%\shots-app
+          if exist "%APP%" rmdir /s /q "%APP%"
+          cmake -D LUCKGRAM_CI_TEST_LOGIN=ON %OUT%
+          if errorlevel 1 exit /b 1
+          cmake --build %OUT% --config Release --target Telegram --parallel 2
+          set RC=%errorlevel%
+          if %RC%==0 (
+            mkdir "%APP%\modules\x64\d3d"
+            copy /y "%OUT%\Release\Telegram.exe" "%APP%\Luckgram.exe"
+            copy /y "%OUT%\Release\modules\x64\d3d\d3dcompiler_47.dll" "%APP%\modules\x64\d3d\"
+          )
+          cmake -D LUCKGRAM_CI_TEST_LOGIN=OFF %OUT%
+          exit /b %RC%
+
+      - name: Switch the test login off again.
+        if: always() && env.SELF_HOSTED == 'true'
+        run: |
+          if exist "%TBUILD%\luckgram-desktop\out\CMakeCache.txt" cmake -D LUCKGRAM_CI_TEST_LOGIN=OFF %TBUILD%\luckgram-desktop\out
+
       # Renders the logged-out screens (welcome, tray menu, about, settings) in
       # English and Simplified Chinese; see luckgram_screenshots.h. Never fails
       # the build.
@@ -532,14 +565,17 @@ jobs:
           Remove-Item -Recurse -Force $shots, $work -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $shots, $work | Out-Null
           $env:LUCKGRAM_SCREENSHOTS = $shots
-          $p = Start-Process -PassThru -FilePath "$env:GITHUB_WORKSPACE\stage\Luckgram\Luckgram.exe" -ArgumentList '-workdir', "`"$work`""
-          if (-not $p.WaitForExit(180000)) {
+          $exe = "$env:RUNNER_TEMP\shots-app\Luckgram.exe"
+          if (-not (Test-Path $exe)) { $exe = "$env:GITHUB_WORKSPACE\stage\Luckgram\Luckgram.exe" }
+          Write-Host "Using $exe"
+          $p = Start-Process -PassThru -FilePath $exe -ArgumentList '-workdir', "`"$work`""
+          if (-not $p.WaitForExit(300000)) {
             Write-Host 'Timed out, stopping the started process.'
             Stop-Process -Id $p.Id -Force
           }
           Get-ChildItem $shots | Select-Object Name, Length
           Get-ChildItem -Recurse "$work" -Filter 'log*.txt' | ForEach-Object {
-            Select-String -Path $_.FullName -Pattern 'Luckgram Screenshots' | ForEach-Object { $_.Line }
+            Select-String -Path $_.FullName -Pattern 'Luckgram Screenshots|LuckgramCiTestLogin' | ForEach-Object { $_.Line }
           }
 
       - name: Upload screenshots.

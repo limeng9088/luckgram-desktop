@@ -10,6 +10,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "lang/lang_cloud_manager.h"
 #include "lang/lang_keys.h"
 #include "logs.h"
+#include "luckgram/luckgram_ci_login.h"
 #include "luckgram/luckgram_desktop.h"
 #include "mainwindow.h"
 #include "ui/layers/generic_box.h"
@@ -28,6 +29,7 @@ constexpr auto kStartDelay = 8000;
 constexpr auto kStepDelay = 1500;
 constexpr auto kLangWaitStep = 1000;
 constexpr auto kLangWaitSteps = 45;
+constexpr auto kMainUiDelay = 10000;
 
 struct Step {
 	int delay = 0;
@@ -152,6 +154,44 @@ void CaptureSet(const QString &dir, const QString &prefix, Fn<void()> done) {
 	RunSteps(steps, 0);
 }
 
+void CaptureLoggedIn(const QString &dir, Fn<void()> done) {
+	const auto base = dir + u"/zh-"_q;
+	auto steps = std::make_shared<std::vector<Step>>();
+	steps->push_back({ kMainUiDelay, [] {
+		if (const auto window = PrimaryWindow()) {
+			window->widget()->showNormal();
+			window->widget()->resize(1200, 760);
+		}
+	} });
+	steps->push_back({ kStepDelay, [=] {
+		GrabWindow(base + u"5-main.png"_q);
+	} });
+	steps->push_back({ 0, [] {
+		if (const auto window = PrimaryWindow()) {
+			window->showSettings();
+		}
+	} });
+	steps->push_back({ kStepDelay * 2, [=] {
+		GrabWindow(base + u"6-settings.png"_q);
+		if (const auto window = PrimaryWindow()) {
+			window->hideSettingsAndLayer(anim::type::instant);
+		}
+	} });
+	steps->push_back({ 0, [] {
+		if (const auto menu = TrayMenu()) {
+			menu->popup(QPoint(200, 200));
+		}
+	} });
+	steps->push_back({ kStepDelay, [=] {
+		if (const auto menu = TrayMenu()) {
+			Save(base + u"7-tray-menu.png"_q, Opaque(menu->menu()->grab()));
+			menu->hide();
+		}
+	} });
+	steps->push_back({ kStepDelay, done });
+	RunSteps(steps, 0);
+}
+
 void WaitForChinese(int left, Fn<void()> done) {
 	if (ChineseReady() || left <= 0) {
 		Log(u"language %1, ready: %2"_q
@@ -180,8 +220,21 @@ void RunScreenshotsIfRequested() {
 				QString::fromLatin1(kChineseLangPackId));
 			WaitForChinese(kLangWaitSteps, [=] {
 				CaptureSet(dir, u"zh"_q, [=] {
-					Log(u"done"_q);
-					Core::Quit();
+					const auto quit = [] {
+						Log(u"done"_q);
+						Core::Quit();
+					};
+					if (!CiTestLoginAvailable()) {
+						quit();
+						return;
+					}
+					CiTestLogin([=](bool ok) {
+						if (ok) {
+							CaptureLoggedIn(dir, quit);
+						} else {
+							quit();
+						}
+					});
 				});
 			});
 		});
