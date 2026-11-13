@@ -5,29 +5,26 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/ai/ai_store.h"
 
+#include "luckgram/luckgram_double_bottom.h"
+#include "luckgram/luckgram_storage.h"
 #include "main/main_session.h"
-#include "settings.h"
 
 #include <QtCore/QDateTime>
-#include <QtCore/QDir>
-#include <QtCore/QFile>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
-#include <QtCore/QSaveFile>
 #include <QtCore/QUuid>
 
 namespace Luckgram::AI {
 namespace {
 
-constexpr auto kFolder = "tdata/luckgram_ai/";
+// Account storage "luckgram_ai_conversations" (D2 luckgram_storage.h).
+const auto kStorageName = QStringLiteral("ai_conversations");
 
-[[nodiscard]] std::map<uint64, std::unique_ptr<Store>> &Stores() {
-	static auto result = std::map<uint64, std::unique_ptr<Store>>();
+[[nodiscard]] auto &Stores() {
+	static auto result = base::flat_map<
+		not_null<Main::Session*>,
+		std::unique_ptr<Store>>();
 	return result;
-}
-
-[[nodiscard]] QString Folder() {
-	return cWorkingDir() + QString::fromLatin1(kFolder);
 }
 
 } // namespace
@@ -41,61 +38,72 @@ QString NewId() {
 }
 
 Store &Store::For(not_null<Main::Session*> session) {
-	const auto userId = session->userId().bare;
 	auto &stores = Stores();
-	auto i = stores.find(userId);
+	auto i = stores.find(session);
 	if (i == end(stores)) {
-		i = stores.emplace(userId, std::make_unique<Store>(userId)).first;
+		i = stores.emplace(session, std::make_unique<Store>(session)).first;
+		session->lifetime().add([=] {
+			Stores().remove(session);
+		});
 	}
 	return *i->second;
 }
 
-void Store::ClearAll() {
-	for (const auto &[userId, store] : Stores()) {
-		store->_list.clear();
-		store->_changes.fire(QString());
-	}
-	QDir(Folder()).removeRecursively();
-}
-
-Store::Store(uint64 userId) : _userId(userId) {
+Store::Store(not_null<Main::Session*> session) : _session(session) {
 	load();
-}
-
-QString Store::path() const {
-	return Folder() + QString::number(_userId) + QStringLiteral(".json");
+	// D8 second space: the storage of a hidden account comes and goes.
+	DoubleBottom::ActiveChanges(
+	) | rpl::start_with_next([=] {
+		load();
+	}, _lifetime);
 }
 
 void Store::load() {
-	auto file = QFile(path());
-	if (!file.open(QIODevice::ReadOnly)) {
+	if (_loaded || !Storage::AccountAvailable(_session)) {
 		return;
 	}
-	const auto object = QJsonDocument::fromJson(file.readAll()).object();
+	_loaded = true;
+	const auto bytes = Storage::ReadAccount(_session, kStorageName);
+	const auto object = QJsonDocument::fromJson(bytes).object();
 	const auto list = object.value(QStringLiteral("conversations")).toArray();
+	auto stored = std::vector<Conversation>();
 	for (const auto &value : list) {
 		if (value.isObject()) {
-			_list.push_back(Conversation::FromJson(value.toObject()));
+			stored.push_back(Conversation::FromJson(value.toObject()));
+		}
+	}
+	for (auto &conversation : stored) {
+		if (!_removedUnsaved.contains(conversation.id)
+			&& !ranges::contains(_list, conversation.id, &Conversation::id)) {
+			_list.push_back(std::move(conversation));
 		}
 	}
 	Conversations::SortForHistory(_list);
+	_removedUnsaved.clear();
+	if (base::take(_unsaved)) {
+		write();
+	}
+	_changes.fire(QString());
 }
 
-void Store::write() const {
+void Store::write() {
+	if (!_loaded) {
+		// Not read yet: writing now would drop what is stored.
+		_unsaved = true;
+		return;
+	}
 	auto list = QJsonArray();
 	for (const auto &conversation : _list) {
 		list.push_back(conversation.toJson());
 	}
 	auto object = QJsonObject();
 	object.insert(QStringLiteral("conversations"), list);
-	QDir().mkpath(Folder());
-	auto file = QSaveFile(path());
-	if (!file.open(QIODevice::WriteOnly)) {
-		LOG(("Luckgram Error: could not write %1").arg(path()));
-		return;
+	const auto bytes = QJsonDocument(object).toJson(QJsonDocument::Compact);
+	if (!Storage::WriteAccount(_session, kStorageName, bytes)) {
+		// Storage went away (account hidden): memory only until load().
+		_unsaved = true;
+		_loaded = false;
 	}
-	file.write(QJsonDocument(object).toJson(QJsonDocument::Compact));
-	file.commit();
 }
 
 std::vector<Store::Conversation> Store::list() const {
@@ -193,7 +201,10 @@ void Store::save(const Conversation &conversation) {
 void Store::remove(const QString &id) {
 	const auto was = _list.size();
 	_list.erase(ranges::remove(_list, id, &Conversation::id), end(_list));
-	if (_list.size() != was) {
+	if (_list.size() != was || !_loaded) {
+		if (!_loaded) {
+			_removedUnsaved.emplace(id);
+		}
 		write();
 		_changes.fire_copy(id);
 	}
