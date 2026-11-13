@@ -38,6 +38,8 @@ PRIVATE
     luckgram/discover/luckgram_nearby_state.h
     luckgram/discover/luckgram_scan_logic.cpp
     luckgram/discover/luckgram_scan_logic.h
+    luckgram/discover/luckgram_scan_ui.cpp
+    luckgram/discover/luckgram_scan_ui.h
     luckgram/discover/luckgram_square_logic.cpp
     luckgram/discover/luckgram_square_logic.h
     luckgram/discover/luckgram_square_compose.cpp
@@ -48,6 +50,18 @@ PRIVATE
     luckgram/discover/luckgram_square_ui.h
     luckgram/media/luckgram_image_prepare.cpp
     luckgram/media/luckgram_image_prepare.h
+    luckgram/media/luckgram_round_video.cpp
+    luckgram/media/luckgram_round_video.h
+    luckgram/media/luckgram_round_video_logic.cpp
+    luckgram/media/luckgram_round_video_logic.h
+    luckgram/calls/luckgram_call_recording.cpp
+    luckgram/calls/luckgram_call_recording.h
+    luckgram/calls/luckgram_call_recording_encoder.cpp
+    luckgram/calls/luckgram_call_recording_encoder.h
+    luckgram/calls/luckgram_call_recording_logic.cpp
+    luckgram/calls/luckgram_call_recording_logic.h
+    settings/sections/settings_luckgram_call_recording.cpp
+    settings/sections/settings_luckgram_call_recording.h
     luckgram/media/luckgram_video_transcode.cpp
     luckgram/media/luckgram_video_transcode.h
     settings/sections/settings_luckgram_discover.cpp
@@ -65,6 +79,8 @@ PRIVATE
     luckgram/luckgram_ai.h
     luckgram/luckgram_api.cpp
     luckgram/luckgram_api.h
+    luckgram/luckgram_compose_panel.cpp
+    luckgram/luckgram_compose_panel.h
     luckgram/luckgram_compose_slots.cpp
     luckgram/luckgram_compose_slots.h
     luckgram/luckgram_features.cpp
@@ -108,6 +124,8 @@ PRIVATE
     luckgram/pro/luckgram_pro_logic.h
     settings/sections/settings_luckgram_pro.cpp
     settings/sections/settings_luckgram_pro.h
+    settings/sections/settings_luckgram_agents.cpp
+    settings/sections/settings_luckgram_agents.h
     # D12 built-in Xray
     luckgram/xray/luckgram_xray.cpp
     luckgram/xray/luckgram_xray.h
@@ -116,6 +134,10 @@ PRIVATE
     settings/sections/settings_luckgram_translate.cpp
     settings/sections/settings_luckgram_translate.h
     # D7 AI
+    luckgram/ai/ai_agents.cpp
+    luckgram/ai/ai_agents.h
+    luckgram/ai/ai_market.cpp
+    luckgram/ai/ai_market.h
     luckgram/ai/ai_assistant.cpp
     luckgram/ai/ai_assistant.h
     luckgram/ai/ai_image.cpp
@@ -124,6 +146,18 @@ PRIVATE
     luckgram/ai/ai_registry.h
     luckgram/ai/ai_store.cpp
     luckgram/ai/ai_store.h
+    # D7 AI: chat summary (19)
+    luckgram/ai/ai_summary.cpp
+    luckgram/ai/ai_summary.h
+    # D7 AI: ✦ writing menu
+    luckgram/ai/ai_reply.cpp
+    luckgram/ai/ai_reply.h
+    luckgram/ai/ai_post.cpp
+    luckgram/ai/ai_post.h
+    luckgram/ai/ai_writing.cpp
+    luckgram/ai/ai_writing.h
+    luckgram/ai/ai_writing_registry.cpp
+    luckgram/ai/ai_writing_registry.h
     # D7 AI: pure logic (also in luckgram_tests)
     luckgram/ai/ai_agents_logic.cpp
     luckgram/ai/ai_agents_logic.h
@@ -235,3 +269,17 @@ if (LINUX)
     target_link_libraries(lib_luckgram_quirc PUBLIC m)
 endif()
 target_link_libraries(Telegram PRIVATE lib_luckgram_quirc)
+
+# Call recording (D11): the audio device module wrapper is the only Luckgram
+# code built against tg_owt headers, so it gets its own library and the
+# WebRTC defines stay out of the Telegram target.
+add_library(lib_luckgram_call_tap STATIC)
+init_target(lib_luckgram_call_tap)
+nice_target_sources(lib_luckgram_call_tap ${src_loc}
+PRIVATE
+    luckgram/calls/luckgram_call_audio_tap.cpp
+    luckgram/calls/luckgram_call_audio_tap.h
+)
+target_include_directories(lib_luckgram_call_tap PUBLIC ${src_loc})
+target_link_libraries(lib_luckgram_call_tap PRIVATE desktop-app::external_webrtc)
+target_link_libraries(Telegram PRIVATE lib_luckgram_call_tap)

@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_compose_slots.h"
 
 #include "base/unique_qptr.h"
+#include "luckgram/ai/ai_writing.h"
 #include "luckgram/transcribe/luckgram_dictation.h"
 #include "luckgram/translate/translate_out.h"
 #include "ui/rp_widget.h"
@@ -24,7 +25,7 @@ using Factory = Slot(*)(const SlotContext &context);
 // Nearest to the send button first: [D6 translate][D7 ✦][send].
 [[nodiscard]] std::vector<Factory> Factories() {
 	return {
-		// D7: ✦ AI.
+		Luckgram::AI::CreateWritingSlot, // D7: ✦ AI.
 		Luckgram::Translate::CreateSendSlot, // D6: send translation.
 		Luckgram::Transcribe::CreateDictationSlot, // D6: voice input.
 	};
@@ -62,7 +63,12 @@ void SetupPlusIcon(not_null<Ui::IconButton*> attach) {
 	}, attach->lifetime());
 }
 
+void RightSlots::setPlusMenu(bool exists) {
+	_plusMenu = exists;
+}
+
 void RightSlots::fillPlusMenu(not_null<Ui::DropdownMenu*> menu) {
+	setPlusMenu(CompactEnabled());
 	if (!CompactEnabled()) {
 		return;
 	}
@@ -148,13 +154,18 @@ RightSlots::RightSlots(
 		rpl::combine(
 			std::move(slot.wanted),
 			send->shownValue(),
-			CompactValue()
+			CompactValue(),
+			_plusMenu.value()
 		) | rpl::map([hasPlus = bool(raw->plus)](
 				bool wanted,
 				bool sendShown,
-				bool compact) {
-			// specs#94: in the 「+」 menu instead while the bar is compact.
-			return wanted && sendShown && !(compact && hasPlus);
+				bool compact,
+				bool plusMenu) {
+			// specs#94: in the 「+」 menu instead while the bar is compact
+			// and the chat has that menu.
+			return wanted
+				&& sendShown
+				&& !(compact && hasPlus && plusMenu);
 		}) | rpl::distinct_until_changed(
 		) | rpl::on_next([=](bool shown) {
 			raw->shown = shown;

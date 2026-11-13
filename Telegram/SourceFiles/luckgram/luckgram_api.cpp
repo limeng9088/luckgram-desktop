@@ -368,6 +368,9 @@ QString ErrorText(const QString &code) {
 		return Tr("你没有同意使用 AI 服务。", "You didn't allow the AI service.");
 	} else if (code == QString::fromLatin1(kCancelled)) {
 		return Tr("已取消。", "Cancelled.");
+	} else if (code == u"agent_unavailable"_q) {
+		// D7 (mobile 30): a market agent taken down.
+		return Tr("这个智能体已下架。", "This agent is no longer available.");
 	}
 	return Tr("AI 服务暂时不可用，请稍后再试。", "The AI service is temporarily unavailable. Please try again later.");
 }

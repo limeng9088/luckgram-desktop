@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/controls/history_view_compose_controls.h"
 
 #include "luckgram/luckgram_compose_slots.h"
+#include "luckgram/luckgram_compose_panel.h" // Luckgram D7
 
 #include "history/view/controls/history_view_bot_menu_button.h"
 
@@ -2855,6 +2856,7 @@ void ComposeControls::init() {
 		},
 		_send.get(),
 		[=] { updateControlsGeometry(_wrap->size()); });
+	Luckgram::Compose::AttachPanelHost(_field, _wrap.get(), Luckgram::Compose::PanelAnchor::Top); // Luckgram D7
 	if (_attachBotsMenu) {
 		updateAttachBotsMenu(); // Luckgram D6: with the 「+」 items now.
 	}
@@ -5730,6 +5732,9 @@ bool ComposeControls::updateSendAsButton(
 
 void ComposeControls::updateAttachBotsMenu() {
 	_attachBotsMenu = nullptr;
+	if (_luckgramSlots) {
+		_luckgramSlots->setPlusMenu(false); // Luckgram D6, until built.
+	}
 	if (!_features.attachBotsMenu
 		|| !_features.attachments
 		|| !_history

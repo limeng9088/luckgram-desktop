@@ -116,6 +116,10 @@ namespace Luckgram::Notes {
 class NoteBar;
 } // namespace Luckgram::Notes
 
+namespace Luckgram::AI {
+class SummaryBar;
+} // namespace Luckgram::AI
+
 namespace Luckgram::Keywords {
 class JumpBar;
 } // namespace Luckgram::Keywords
@@ -652,6 +656,7 @@ private:
 	void setupTranslateBar();
 	void setupLuckgramNoteBar(); // Luckgram D9 (05)
 	void setupLuckgramJumpBar(); // Luckgram D9 (06)
+	void setupLuckgramSummaryBar(); // Luckgram D7 (19)
 	void setupPinnedTracker();
 	void checkPinnedBarState();
 	void clearHidingPinnedBar();
@@ -861,6 +866,8 @@ private:
 	// Luckgram D9 (06): 「跳到下一个」 in chats opened from a keyword folder.
 	std::unique_ptr<Luckgram::Keywords::JumpBar> _luckgramJumpBar;
 	int _luckgramJumpBarHeight = 0;
+	std::unique_ptr<Luckgram::AI::SummaryBar> _luckgramSummaryBar; // D7
+	int _luckgramSummaryBarHeight = 0;
 
 	std::unique_ptr<HistoryView::PinnedTracker> _pinnedTracker;
 	std::unique_ptr<Ui::PinnedBar> _pinnedBar;

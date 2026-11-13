@@ -9,6 +9,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luckgram/luckgram_save_to_saved.h" // Luckgram D6
 
 #include "luckgram/luckgram_compose_slots.h"
+#include "luckgram/ai/ai_summary.h" // Luckgram D7
+#include "luckgram/luckgram_compose_panel.h" // Luckgram D7
 #include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "luckgram/d9/luckgram_notes_widgets.h" // Luckgram D9
 
@@ -609,6 +611,7 @@ HistoryWidget::HistoryWidget(
 		},
 		_send.get(),
 		[=] { updateFieldSize(); });
+	Luckgram::Compose::AttachPanelHost(_field, _scroll.data(), Luckgram::Compose::PanelAnchor::Bottom); // Luckgram D7
 
 	_fieldCharsCountManager.limitExceeds(
 	) | rpl::on_next([=] {
@@ -2272,6 +2275,9 @@ void HistoryWidget::orderWidgets() {
 	if (_luckgramJumpBar) {
 		_luckgramJumpBar->raise();
 	}
+	if (_luckgramSummaryBar) {
+		_luckgramSummaryBar->raise();
+	}
 	if (_sponsoredMessageBar) {
 		_sponsoredMessageBar->raise();
 	}
@@ -3454,6 +3460,7 @@ void HistoryWidget::showHistory(
 		_translateBar = nullptr;
 		_luckgramNoteBar = nullptr;
 		_luckgramJumpBar = nullptr;
+		_luckgramSummaryBar = nullptr;
 		_pinnedTracker = nullptr;
 		_groupCallBar = nullptr;
 		_requestsBar = nullptr;
@@ -3661,6 +3668,7 @@ void HistoryWidget::showHistory(
 		setupTranslateBar();
 		setupLuckgramNoteBar();
 		setupLuckgramJumpBar();
+		setupLuckgramSummaryBar();
 		setupPinnedTracker();
 		setupGroupCallBar();
 		setupRequestsBar();
@@ -3868,6 +3876,9 @@ void HistoryWidget::injectSponsoredMessages() const {
 
 void HistoryWidget::refreshAttachBotsMenu() {
 	_attachBotsMenu = nullptr;
+	if (_luckgramSlots) {
+		_luckgramSlots->setPlusMenu(false); // Luckgram D6, until built.
+	}
 	if (!_history) {
 		return;
 	}
@@ -6408,6 +6419,9 @@ void HistoryWidget::showAnimated(
 	if (_luckgramJumpBar) {
 		_luckgramJumpBar->finishAnimating();
 	}
+	if (_luckgramSummaryBar) {
+		_luckgramSummaryBar->finishAnimating();
+	}
 	if (_groupCallBar) {
 		_groupCallBar->finishAnimating();
 	}
@@ -6462,6 +6476,9 @@ void HistoryWidget::showFinished() {
 	if (_luckgramJumpBar) {
 		_luckgramJumpBar->finishAnimating();
 	}
+	if (_luckgramSummaryBar) {
+		_luckgramSummaryBar->finishAnimating();
+	}
 	if (_groupCallBar) {
 		_groupCallBar->finishAnimating();
 	}
@@ -6503,6 +6520,9 @@ void HistoryWidget::doneShow() {
 	}
 	if (_luckgramJumpBar) {
 		_luckgramJumpBar->finishAnimating();
+	}
+	if (_luckgramSummaryBar) {
+		_luckgramSummaryBar->finishAnimating();
 	}
 	if (_groupCallBar) {
 		_groupCallBar->finishAnimating();
@@ -8471,8 +8491,14 @@ void HistoryWidget::updateControlsGeometry() {
 		_luckgramJumpBar->move(0, luckgramJumpBarTop);
 		_luckgramJumpBar->resizeToWidth(innerWidth);
 	}
-	const auto sponsoredMessageBarTop = luckgramJumpBarTop
+	const auto luckgramSummaryBarTop = luckgramJumpBarTop
 		+ (_luckgramJumpBar ? _luckgramJumpBar->height() : 0);
+	if (_luckgramSummaryBar) {
+		_luckgramSummaryBar->move(0, luckgramSummaryBarTop);
+		_luckgramSummaryBar->resizeToWidth(innerWidth);
+	}
+	const auto sponsoredMessageBarTop = luckgramSummaryBarTop
+		+ (_luckgramSummaryBar ? _luckgramSummaryBar->height() : 0);
 	if (_sponsoredMessageBar) {
 		_sponsoredMessageBar->move(0, sponsoredMessageBarTop);
 		_sponsoredMessageBar->resizeToWidth(innerWidth);
@@ -8771,6 +8797,9 @@ void HistoryWidget::updateHistoryGeometry(
 	}
 	if (_luckgramJumpBar) {
 		newScrollHeight -= _luckgramJumpBar->height();
+	}
+	if (_luckgramSummaryBar) {
+		newScrollHeight -= _luckgramSummaryBar->height();
 	}
 	if (_sponsoredMessageBar) {
 		newScrollHeight -= _sponsoredMessageBar->height();
@@ -9971,6 +10000,39 @@ void HistoryWidget::setupLuckgramJumpBar() {
 		updateControlsGeometry();
 		_topDelta = 0;
 	}, _luckgramJumpBar->lifetime());
+
+	orderWidgets();
+}
+
+void HistoryWidget::setupLuckgramSummaryBar() {
+	Expects(_history != nullptr);
+
+	_luckgramSummaryBar = std::make_unique<Luckgram::AI::SummaryBar>(
+		_topBars.get(),
+		controller(),
+		_history);
+
+	controller()->adaptive().oneColumnValue(
+	) | rpl::on_next([=, raw = _luckgramSummaryBar.get()](bool one) {
+		raw->setShadowGeometryPostprocess([=](QRect geometry) {
+			if (!one) {
+				geometry.setLeft(geometry.left() + st::lineWidth);
+			}
+			return geometry;
+		});
+	}, _luckgramSummaryBar->lifetime());
+
+	_luckgramSummaryBarHeight = 0;
+	_luckgramSummaryBar->heightValue(
+	) | rpl::on_next([=](int height) {
+		_topDelta = _preserveScrollTop
+			? 0
+			: (height - _luckgramSummaryBarHeight);
+		_luckgramSummaryBarHeight = height;
+		updateHistoryGeometry();
+		updateControlsGeometry();
+		_topDelta = 0;
+	}, _luckgramSummaryBar->lifetime());
 
 	orderWidgets();
 }

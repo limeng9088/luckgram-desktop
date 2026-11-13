@@ -5,6 +5,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/ai/ai_assistant.h"
 
+#include "luckgram/ai/ai_agents.h"
+
 #include "base/timer.h"
 #include "chat_helpers/compose/compose_show.h"
 #include "data/data_document.h"
@@ -1186,6 +1188,7 @@ void AddMainMenuEntry(
 	wrap->entity()->setClickedCallback([=] {
 		OpenAssistant(controller);
 	});
+	Agents::AddPinnedMenuEntries(menu, controller); // 22 需求 5.
 }
 
 void AddAskAiAction(

@@ -285,3 +285,48 @@ LUCKGRAM_TEST(AccountsLimitTexts) {
 	LG_EQUAL(Texts(false).accountsLimitReached(10, true), S("Free accounts can log in to at most 10 accounts. Upgrade to Pro for unlimited accounts"));
 	LG_EQUAL(Texts(true).accountsLimitReached(100, false), S("这台设备最多可登录 100 个账号"));
 }
+
+// D12 Pro community: ported from Android ProCommunityLogicTest.
+LUCKGRAM_TEST(CommunityInviteLinkIsJoin) {
+	const auto i = ParseCommunityInvite(J(R"({"invite_link":"https://t.me/+AbC123","expires_at":"2026-11-04T00:00:00Z"})"));
+	LG_CHECK(i.kind == CommunityInvite::Kind::Join);
+	LG_EQUAL(i.link, S("https://t.me/+AbC123"));
+}
+
+LUCKGRAM_TEST(CommunityAlreadyMemberInBody) {
+	const auto i = ParseCommunityInvite(J(R"({"already_member":true,"chat_id":-1001234567890})"));
+	LG_CHECK(i.kind == CommunityInvite::Kind::AlreadyMember);
+	LG_EQUAL(i.channelId, int64_t(1234567890LL));
+	LG_CHECK(i.link.isEmpty());
+}
+
+LUCKGRAM_TEST(CommunityAlreadyMemberAsErrorKeepsLink) {
+	const auto i = CommunityAlreadyMember(J(R"({"code":"already_member","chat_link":"https://t.me/c/1234567890"})"));
+	LG_CHECK(i.kind == CommunityInvite::Kind::AlreadyMember);
+	LG_EQUAL(i.link, S("https://t.me/c/1234567890"));
+	LG_EQUAL(i.channelId, int64_t(0));
+	LG_CHECK(CommunityAlreadyMember(QJsonObject()).kind
+		== CommunityInvite::Kind::AlreadyMember);
+}
+
+LUCKGRAM_TEST(CommunityNonTelegramOrMissingLinkIsBad) {
+	LG_CHECK(ParseCommunityInvite(J(R"({"invite_link":"https://luckgram.cc/+x"})")).kind
+		== CommunityInvite::Kind::BadAnswer);
+	LG_CHECK(ParseCommunityInvite(J("{}")).kind
+		== CommunityInvite::Kind::BadAnswer);
+}
+
+LUCKGRAM_TEST(CommunityLinksAndChannelIds) {
+	LG_CHECK(IsOpenableTelegramLink(S("https://t.me/+x")));
+	LG_CHECK(IsOpenableTelegramLink(S("tg://join?invite=x")));
+	LG_CHECK(!IsOpenableTelegramLink(S("https://t.me/")));
+	LG_CHECK(!IsOpenableTelegramLink(S("http://t.me/+x")));
+	LG_CHECK(!IsOpenableTelegramLink(QString()));
+	LG_EQUAL(CommunityChannelId(-1001234567890LL), int64_t(1234567890LL));
+	LG_EQUAL(CommunityChannelId(42), int64_t(42));
+	LG_EQUAL(CommunityChannelId(-42), int64_t(0));
+	LG_EQUAL(CommunityChannelId(0), int64_t(0));
+	LG_CHECK(ShowCommunityRow(true, true));
+	LG_CHECK(!ShowCommunityRow(false, true));
+	LG_CHECK(!ShowCommunityRow(true, false));
+}

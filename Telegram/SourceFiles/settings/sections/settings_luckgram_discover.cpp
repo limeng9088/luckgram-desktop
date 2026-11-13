@@ -25,6 +25,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/discover/luckgram_discover_logic.h"
 #include "luckgram/discover/luckgram_discover_storage.h"
 #include "luckgram/discover/luckgram_nearby_logic.h"
+#include "luckgram/discover/luckgram_scan_ui.h"
 #include "luckgram/discover/luckgram_square_compose.h"
 #include "luckgram/discover/luckgram_square_ui.h"
 #include "luckgram/luckgram_api.h"
@@ -1210,6 +1211,7 @@ void AddLuckgramDiscoverMenuItem(
 	wrap->entity()->setClickedCallback([=] {
 		controller->showSettings(LuckgramDiscover::Id());
 	});
+	Luckgram::ScanUi::AddMainMenuItems(menu, controller); // 扫一扫, 代理配置.
 }
 
 } // namespace Settings

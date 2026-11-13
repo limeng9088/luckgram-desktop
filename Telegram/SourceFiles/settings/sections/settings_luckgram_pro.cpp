@@ -221,6 +221,15 @@ void LuckgramPro::rebuild() {
 		}
 		Ui::AddDividerText(container, rpl::single(texts.proInfo()));
 	}
+	if (Pro::ShowCommunityRowNow()) {
+		// D12 (mobile 31): its own section under the plans, like mobile;
+		// free users get the upgrade box on click.
+		Ui::AddSkip(container);
+		AddActionRow(container, texts.communityJoin(), [=] {
+			Pro::JoinCommunity(_controller);
+		});
+		Ui::AddDividerText(container, rpl::single(texts.communityInfo()));
+	}
 	Ui::AddSkip(container);
 	container->resizeToWidth(width());
 }
