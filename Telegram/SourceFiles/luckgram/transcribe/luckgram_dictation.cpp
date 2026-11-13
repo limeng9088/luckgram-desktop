@@ -20,11 +20,13 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/layers/generic_box.h"
 #include "ui/painter.h"
 #include "ui/widgets/buttons.h"
+#include "ui/widgets/dropdown_menu.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/labels.h"
 #include "styles/style_chat_helpers.h"
 #include "styles/style_basic.h"
 #include "styles/style_layers.h"
+#include "styles/style_menu_icons.h"
 
 #include <QtCore/QPointer>
 
@@ -268,7 +270,7 @@ Compose::Slot CreateDictationSlot(const Compose::SlotContext &context) {
 	const auto raw = button.data();
 	const auto field = QPointer<Ui::InputField>(context.field.get());
 	const auto show = context.show;
-	raw->setClickedCallback([=] {
+	const auto start = [=] {
 		if (!Settings::IsEnabled(QString::fromLatin1(kDictationFeature))) {
 			return;
 		}
@@ -288,11 +290,21 @@ Compose::Slot CreateDictationSlot(const Compose::SlotContext &context) {
 				show->showBox(Box(DictationBox, insert));
 			});
 		});
-	});
+	};
+	raw->setClickedCallback(start);
 	return {
 		.widget = std::move(button),
 		.wanted = Settings::EnabledValue(
 			QString::fromLatin1(kDictationFeature)),
+		// specs#94: 「语音输入」 in the 「+」 menu (compact bar).
+		.plus = [=](not_null<Ui::DropdownMenu*> menu) {
+			if (Settings::IsEnabled(QString::fromLatin1(kDictationFeature))) {
+				menu->addAction(
+					Tr("语音输入", "Voice input"),
+					start,
+					&st::luckgramMenuIconDictation);
+			}
+		},
 	};
 }
 
