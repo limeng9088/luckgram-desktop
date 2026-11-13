@@ -17,9 +17,12 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "lang/translate_mtproto_provider.h"
 #include "luckgram/luckgram_ai.h"
 #include "luckgram/luckgram_api.h"
+#include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_settings.h"
+#include "luckgram/luckgram_storage.h"
 #include "luckgram/luckgram_strings.h"
 #include "luckgram/translate/translate_logic.h"
+#include "main/main_account.h"
 #include "main/main_session.h"
 #include "spellcheck/platform/platform_language.h"
 #include "ui/boxes/choose_language_box.h"
@@ -34,11 +37,9 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <translate_provider.h>
 
 #include <QtCore/QDateTime>
-#include <QtCore/QFile>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
-#include <QtCore/QSaveFile>
 
 namespace Luckgram::Translate {
 namespace {
@@ -51,26 +52,9 @@ constexpr auto kChatToLangPrefix = "translate_in_chat_to_lang.";
 	return QDateTime::currentMSecsSinceEpoch();
 }
 
-[[nodiscard]] QString ResultsPath() {
-	return cWorkingDir() + u"tdata/luckgram_translate_cache.json"_q;
-}
-
-[[nodiscard]] QString StatesPath() {
-	return cWorkingDir() + u"tdata/luckgram_translate_state.json"_q;
-}
-
-[[nodiscard]] QByteArray ReadFile(const QString &path) {
-	auto file = QFile(path);
-	return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-}
-
-void WriteFile(const QString &path, const QByteArray &data) {
-	auto file = QSaveFile(path);
-	if (file.open(QIODevice::WriteOnly)) {
-		file.write(data);
-		file.commit();
-	}
-}
+// Per account, encrypted with its local key (D2 Luckgram::Storage).
+constexpr auto kResultsName = "translate_cache";
+constexpr auto kStatesName = "translate_state";
 
 struct Shown {
 	QString original; // Shown only while the message text is the same.
@@ -78,31 +62,57 @@ struct Shown {
 };
 
 struct Store {
-	Store() : saveTimer([=] { save(); }) {
+	explicit Store(not_null<Main::Session*> session)
+	: session(session)
+	, saveTimer([=] { save(); }) {
 	}
 
+	// Loads once the account storage is usable: not before its local key
+	// exists, not while it is hidden in the second space (D8). Until then
+	// everything stays in memory and nothing is written, so the saved file
+	// is never replaced by a partial state.
 	void ensureLoaded() {
-		if (loaded) {
+		if (loaded || !Storage::AccountAvailable(session)) {
 			return;
 		}
 		loaded = true;
 		const auto now = Now();
-		results = Cache::Parse(ReadFile(ResultsPath()), now);
-		states = Cache::Parse(ReadFile(StatesPath()), now);
+		results = Cache::Parse(
+			Storage::ReadAccount(session, QString::fromLatin1(kResultsName)),
+			now);
+		states = Cache::Parse(
+			Storage::ReadAccount(session, QString::fromLatin1(kStatesName)),
+			now);
 	}
 	void scheduleSave() {
-		if (!saveTimer.isActive()) {
+		if (loaded && !saveTimer.isActive()) {
 			saveTimer.callOnce(kSaveDelay);
 		}
 	}
 	void save() {
+		if (!loaded) {
+			return;
+		}
 		const auto now = Now();
 		results.prune(now);
 		states.prune(now);
-		WriteFile(ResultsPath(), results.serialize());
-		WriteFile(StatesPath(), states.serialize());
+		Storage::WriteAccount(
+			session,
+			QString::fromLatin1(kResultsName),
+			results.serialize());
+		Storage::WriteAccount(
+			session,
+			QString::fromLatin1(kStatesName),
+			states.serialize());
+	}
+	void flush() {
+		if (saveTimer.isActive()) {
+			saveTimer.cancel();
+			save();
+		}
 	}
 
+	const not_null<Main::Session*> session;
 	bool loaded = false;
 	Cache results;
 	Cache states; // State key -> translated text, from>to languages.
@@ -110,10 +120,49 @@ struct Store {
 	base::Timer saveTimer;
 };
 
-[[nodiscard]] Store &GetStore() {
-	static const auto result = new Store();
-	result->ensureLoaded();
+using StoreMap = std::map<not_null<Main::Session*>, std::unique_ptr<Store>>;
+
+[[nodiscard]] StoreMap &Stores() {
+	static const auto result = new StoreMap();
 	return *result;
+}
+
+void SubscribeToSecondSpace() {
+	static auto lifetime = (rpl::lifetime*)nullptr;
+	if (lifetime) {
+		return;
+	}
+	lifetime = new rpl::lifetime();
+	// Second space switched: load what was not readable before.
+	DoubleBottom::ActiveChanges(
+	) | rpl::on_next([](bool) {
+		for (const auto &entry : Stores()) {
+			entry.second->ensureLoaded();
+		}
+	}, *lifetime);
+}
+
+[[nodiscard]] Store &GetStore(not_null<Main::Session*> session) {
+	auto &stores = Stores();
+	auto i = stores.find(session);
+	if (i == end(stores)) {
+		SubscribeToSecondSpace();
+		i = stores.emplace(session, std::make_unique<Store>(session)).first;
+		session->lifetime().add([=] {
+			auto &stores = Stores();
+			const auto j = stores.find(session);
+			if (j != end(stores)) {
+				j->second->flush();
+				stores.erase(j);
+			}
+		});
+	}
+	i->second->ensureLoaded();
+	return *i->second;
+}
+
+[[nodiscard]] Store &GetStore(not_null<const HistoryItem*> item) {
+	return GetStore(&item->history()->session());
 }
 
 [[nodiscard]] QString StateKeyFor(not_null<const HistoryItem*> item) {
@@ -176,7 +225,7 @@ void Remember(
 		const QString &translated,
 		const QString &from,
 		const QString &to) {
-	auto &store = GetStore();
+	auto &store = GetStore(item);
 	const auto original = item->originalText();
 	store.shown[item->fullId()] = Shown{
 		.original = original.text,
@@ -195,6 +244,7 @@ void Remember(
 
 // Luckgram AI translation (POST /v1/ai/chat task=translate).
 void ViaAi(
+		not_null<Main::Session*> session,
 		const char *source,
 		const QString &text,
 		const QString &to,
@@ -205,7 +255,7 @@ void ViaAi(
 		fail({ .code = u"invalid_request"_q });
 		return;
 	}
-	auto &store = GetStore();
+	auto &store = GetStore(session);
 	const auto key = Cache::Key(lang, text);
 	if (const auto hit = store.results.get(key, Now())) {
 		done(hit->text, hit->fromLang);
@@ -217,6 +267,7 @@ void ViaAi(
 		return;
 	}
 	const auto name = QString::fromLatin1(source);
+	const auto weak = base::make_weak(session);
 	const auto send = [=] {
 		auto message = QJsonObject();
 		message.insert(u"role"_q, u"user"_q);
@@ -244,8 +295,11 @@ void ViaAi(
 			const auto from = AiLanguage(
 				json.value(u"from_lang"_q).toString());
 			LOG(("Luckgram translate: Luckgram AI ok, source=%1").arg(name));
-			GetStore().results.put(key, result, from, Now());
-			GetStore().scheduleSave();
+			if (const auto strong = weak.get()) {
+				auto &store = GetStore(strong);
+				store.results.put(key, result, from, Now());
+				store.scheduleSave();
+			}
 			done(result, from);
 		}, [=](Api::Error error) {
 			LOG(("Luckgram translate: Luckgram AI failed, source=%1 code=%2"
@@ -300,6 +354,7 @@ public:
 			}
 		}
 		const auto target = to.twoLetterCode();
+		const auto session = _session;
 		const auto fallback = [=](QString reason) {
 			if (!*alive || state->finished) {
 				return;
@@ -307,7 +362,7 @@ public:
 			state->finished = true;
 			LOG(("Luckgram translate: telegram failed, source=%1 error=%2"
 				" -> Luckgram AI").arg(name, reason));
-			ViaAi(source, text, target, [=](QString result, QString) {
+			ViaAi(session, source, text, target, [=](QString result, QString) {
 				if (*alive) {
 					done({ .text = TextWithEntities{ result } });
 				}
@@ -438,7 +493,7 @@ QStringList DoNotTranslate() {
 }
 
 const TextWithEntities *ShownText(not_null<const HistoryItem*> item) {
-	auto &store = GetStore();
+	auto &store = GetStore(item);
 	if ((store.shown.empty() && !store.states.size())
 		|| item->isService()
 		|| !InEnabled()) {
@@ -476,7 +531,7 @@ bool IsShown(not_null<const HistoryItem*> item) {
 void Toggle(
 		not_null<Window::SessionController*> controller,
 		not_null<HistoryItem*> item) {
-	auto &store = GetStore();
+	auto &store = GetStore(item);
 	if (IsShown(item)) {
 		store.shown.erase(item->fullId());
 		if (item->isRegular()) {
@@ -551,13 +606,14 @@ QString LanguageName(const QString &code) {
 }
 
 void ClearAll() {
-	auto &store = GetStore();
-	store.saveTimer.cancel();
-	store.results = Cache();
-	store.states = Cache();
-	store.shown.clear();
-	QFile::remove(ResultsPath());
-	QFile::remove(StatesPath());
+	// The encrypted files go with each account (Storage::Account::reset).
+	for (const auto &entry : Stores()) {
+		const auto store = entry.second.get();
+		store->saveTimer.cancel();
+		store->results = Cache();
+		store->states = Cache();
+		store->shown.clear();
+	}
 }
 
 } // namespace Luckgram::Translate
