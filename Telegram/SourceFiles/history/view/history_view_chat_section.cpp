@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_chat_section.h"
+#include "luckgram/luckgram_save_to_saved.h" // Luckgram D6
 
 #include "history/admin_log/history_admin_log_section.h"
 #include "history/view/controls/history_view_top_controls.h"
@@ -506,6 +507,18 @@ ChatWidget::ChatWidget(
 	_topBar->forwardSelectionRequest(
 	) | rpl::on_next([=] {
 		confirmForwardSelected();
+	}, _topBar->lifetime());
+	_topBar->luckgramSaveSelectionRequest( // Luckgram D6 (mobile 15)
+	) | rpl::on_next([=] {
+		const auto inner = _inner;
+		if (inner) {
+			auto ids = inner->getSelectedIds();
+			Luckgram::SaveToSaved::Save(controller(), std::move(ids), [=] {
+				if (inner) {
+					inner->cancelSelection();
+				}
+			});
+		}
 	}, _topBar->lifetime());
 	_topBar->clearSelectionRequest(
 	) | rpl::on_next([=] {

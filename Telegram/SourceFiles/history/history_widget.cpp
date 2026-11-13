@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history_widget.h"
+#include "luckgram/luckgram_save_to_saved.h" // Luckgram D6
 
 #include "luckgram/luckgram_compose_slots.h"
 #include "luckgram/luckgram_compose_panel.h" // Luckgram D7
@@ -1162,6 +1163,15 @@ HistoryWidget::HistoryWidget(
 	_topBar->forwardSelectionRequest(
 	) | rpl::on_next([=] {
 		forwardSelected();
+	}, _topBar->lifetime());
+	_topBar->luckgramSaveSelectionRequest( // Luckgram D6 (mobile 15)
+	) | rpl::on_next([=] {
+		if (_list) {
+			Luckgram::SaveToSaved::Save(
+				controller(),
+				_list->getSelectedForwardItems(),
+				crl::guard(this, [=] { clearSelected(); }));
+		}
 	}, _topBar->lifetime());
 	_topBar->deleteSelectionRequest(
 	) | rpl::on_next([=] {
