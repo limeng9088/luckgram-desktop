@@ -93,6 +93,9 @@ private:
 struct UnavailableReason {
 	QString reason;
 	QString text;
+	// Luckgram D8 (mobile 13): restriction_reason platform, so the
+	// store_restrictions_off switch can skip ios / android entries live.
+	QString platform;
 
 	friend inline bool operator==(
 		const UnavailableReason &,

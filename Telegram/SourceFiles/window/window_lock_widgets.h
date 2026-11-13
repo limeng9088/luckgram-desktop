@@ -97,6 +97,7 @@ private:
 	void systemUnlockDone(base::SystemUnlockResult result);
 	void changed();
 	void submit();
+	void submitMain(); // Luckgram D8: upstream submit().
 	void error();
 	void setDeriving(bool deriving);
 

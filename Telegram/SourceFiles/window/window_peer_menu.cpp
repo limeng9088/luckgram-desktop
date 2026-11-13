@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_peer_menu.h"
+#include "luckgram/luckgram_hidden_chats.h" // Luckgram D8
 
 #include "base/call_delayed.h"
 #include "menu/menu_check_item.h"
@@ -1915,6 +1916,12 @@ void Filler::fillContextMenuActions() {
 	addUngroup();
 	addHidePromotion();
 	addToggleArchive();
+	if (history && !_topic) { // Luckgram D8 (mobile 12): 「隐藏」.
+		Luckgram::HiddenChats::AddContextMenuAction(
+			_controller,
+			history,
+			_addAction);
+	}
 	addTogglePin();
 	if (ViewProfileInChatsListContextMenu.value()) {
 		addInfo();

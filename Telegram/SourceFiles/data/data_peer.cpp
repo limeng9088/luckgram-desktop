@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "data/data_peer.h"
 
+#include "luckgram/luckgram_privacy_logic.h" // Luckgram D8
+#include "luckgram/luckgram_store_restrictions.h" // Luckgram D8
+
 #include "api/api_sensitive_content.h"
 #include "data/data_user.h"
 #include "data/data_chat.h"
@@ -117,11 +120,14 @@ QString UnavailableReason::Compute(
 		not_null<Main::Session*> session,
 		const std::vector<UnavailableReason> &list) {
 	const auto &skip = IgnoredReasons(session);
+	const auto storeOff = Luckgram::StoreRestrictionsOff(); // Luckgram D8
 	auto &&filtered = ranges::views::all(
 		list
 	) | ranges::views::filter([&](const Data::UnavailableReason &reason) {
 		return !reason.sensitive()
-			&& !ranges::contains(skip, reason.reason);
+			&& !ranges::contains(skip, reason.reason)
+			&& (reason.platform.isEmpty()
+				|| Luckgram::Privacy::Applies(reason.platform, storeOff));
 	});
 	const auto first = filtered.begin();
 	return (first != filtered.end()) ? first->text : QString();
@@ -152,11 +158,19 @@ std::vector<UnavailableReason> UnavailableReason::Extract(
 #elif defined OS_WIN_STORE // OS_MAC_STORE
 				|| (platform == "ms"_q)
 #endif // OS_MAC_STORE || OS_WIN_STORE
-				|| (platform == "all"_q);
+				|| (platform == "all"_q)
+				// Luckgram D8 (mobile 13): keep every entry the mobile apps
+				// obey (all / ios / android, also combined); Compute()
+				// decides with the store_restrictions_off switch.
+				|| Luckgram::Privacy::Applies(qs(data.vplatform()), false);
 		});
 	}) | ranges::views::transform([](const MTPRestrictionReason &restriction) {
 		return restriction.match([&](const MTPDrestrictionReason &data) {
-			return UnavailableReason{ qs(data.vreason()), qs(data.vtext()) };
+			return UnavailableReason{
+				qs(data.vreason()),
+				qs(data.vtext()),
+				qs(data.vplatform()),
+			};
 		});
 	}) | ranges::to_vector;
 }

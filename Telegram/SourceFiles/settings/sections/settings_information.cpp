@@ -1114,6 +1114,13 @@ void AccountsList::rebuild() {
 	// Luckgram D3 #6: no account is locked above the limit.
 	const auto premiumLimit = ::Main::Domain::kPremiumMaxAccounts;
 	const auto list = _controller->session().domain().orderedAccounts();
+	// Luckgram D8 (mobile 11): orderedAccounts() skips the accounts the
+	// second space hides, drop their rows too.
+	for (auto &[account, button] : _watched) {
+		if (!ranges::contains(list, account)) {
+			button = nullptr;
+		}
+	}
 	for (const auto &account : list) {
 		auto i = _watched.find(account);
 		Assert(i != _watched.end());

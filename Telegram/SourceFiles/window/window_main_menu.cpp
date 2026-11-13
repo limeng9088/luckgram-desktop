@@ -6,6 +6,8 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_main_menu.h"
+#include "luckgram/luckgram_double_bottom.h" // Luckgram D8
+#include "luckgram/luckgram_hidden_chats.h" // Luckgram D8
 
 #include "core/version.h" // AppName (Luckgram)
 #include "apiwrap.h"
@@ -722,6 +724,8 @@ void MainMenu::setupMenu() {
 		)->setClickedCallback([=] {
 			controller->showPeerHistory(controller->session().user());
 		});
+		// Luckgram D8 (mobile 12): the desktop way into hidden chats.
+		Luckgram::HiddenChats::AddMainMenuEntry(_menu, controller);
 		const auto session = &controller->session();
 		const auto wallet = _menu->add(
 			object_ptr<Ui::SlideWrap<Ui::SettingsButton>>(
@@ -975,8 +979,9 @@ OthersUnreadState OtherAccountsUnreadStateCurrent(
 	auto counter = 0;
 	auto allMuted = true;
 	for (const auto &[index, account] : domain.accounts()) {
-		if (account.get() == current) {
-			continue;
+		if (account.get() == current
+			|| Luckgram::DoubleBottom::IsAccountHidden(account.get())) {
+			continue; // Luckgram D8 (mobile 11): hidden accounts too.
 		} else if (const auto session = account->maybeSession()) {
 			counter += session->data().unreadWithMentionsBadge();
 			if (!session->data().unreadWithMentionsBadgeMuted()) {

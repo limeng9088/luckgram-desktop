@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history.h"
+#include "luckgram/luckgram_hidden_chats.h" // Luckgram D8
 
 #include "history/view/history_view_element.h"
 #include "history/view/history_view_item_preview.h"
@@ -3464,6 +3465,8 @@ bool History::trackUnreadMessages() const {
 bool History::shouldBeInChatList() const {
 	if (peer->migrateTo() || !folderKnown()) {
 		return false;
+	} else if (Luckgram::HiddenChats::IsHidden(this)) {
+		return false; // Luckgram D8 (mobile 12): no list, folder or counter.
 	} else if (const auto community = peer->asChannel()
 		; community && community->isCommunity()) {
 		return !(community->flags() & ChannelDataFlag::Forbidden)
