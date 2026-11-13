@@ -86,6 +86,15 @@ namespace {
 		.defaultValue = true,
 	});
 	result.push_back({
+		.key = u"compact_input_bar"_q, // specs#94
+		.group = Group::MessagesLanguage,
+		.titleZh = "精简输入栏",
+		.titleEn = "Compact input bar",
+		.aboutZh = "输入栏只留表情、语音和「+」，附件和 Luckgram 功能都在「+」菜单里",
+		.aboutEn = "Keep only emoji, voice and \"+\" in the input bar; attachments and Luckgram tools live in the \"+\" menu",
+		.defaultValue = true,
+	});
+	result.push_back({
 		.key = u"translate_in"_q, // spec 01 A, B
 		.group = Group::MessagesLanguage,
 		.titleZh = "收到消息翻译",
