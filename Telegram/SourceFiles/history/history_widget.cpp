@@ -3889,6 +3889,10 @@ void HistoryWidget::refreshAttachBotsMenu() {
 	if (!_attachBotsMenu) {
 		return;
 	}
+	if (_luckgramSlots) { // Luckgram D6 (specs#94): the 「+」 menu.
+		Luckgram::Compose::SetupPlusIcon(_attachToggle.data());
+		_luckgramSlots->fillPlusMenu(_attachBotsMenu.get());
+	}
 	_attachBotsMenu->setOrigin(
 		Ui::PanelAnimation::Origin::BottomLeft);
 	if (!ChatHelpers::ShowPanelOnClick()) {
