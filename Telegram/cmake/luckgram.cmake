@@ -135,6 +135,8 @@ PRIVATE
     luckgram/backup/luckgram_backup_format.h
     settings/sections/settings_luckgram_backup.cpp
     settings/sections/settings_luckgram_backup.h
+    luckgram/ai/ai_text_logic.cpp
+    luckgram/ai/ai_text_logic.h
 )
 
 # A generated header rather than a compile definition: switching the option
