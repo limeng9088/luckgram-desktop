@@ -14,7 +14,11 @@
 #   self-hosted            runs-on [self-hosted, luckgram-win]. TBuild stays in the
 #                          runner workspace between runs (no cache upload/download,
 #                          prepare.py and the app build are incremental), nothing on
-#                          the machine is deleted. Only pushes to this repository and
+#                          the machine is deleted. The libs job is skipped: the build
+#                          job runs prepare.py itself, so libraries and app are on the
+#                          same machine (several machines may carry the label, each
+#                          with its own TBuild; a new one builds them once, ~70 min).
+#                          Only pushes to this repository and
 #                          PRs from branches of this repository run there; PRs from
 #                          forks are skipped (public repo). Put the runner work folder
 #                          on a large disk (E:), see luckgram/windows/RUNNER.md.
@@ -86,9 +90,11 @@ jobs:
   libs:
     name: Libraries
     needs: credentials
-    # Self-hosted: never run code from fork PRs on our machine.
-    if: (!(inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ${{ (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) && fromJSON('["self-hosted","luckgram-win"]') || 'windows-latest' }}
+    # Hosted only. Self-hosted builds the libraries inside the build job, so
+    # libraries and app are always on the same machine (several machines
+    # carry the luckgram-win label, each with its own TBuild).
+    if: (!(inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')))
+    runs-on: windows-latest
     timeout-minutes: 355
     outputs:
       cache-key: ${{ steps.key.outputs.done }}
@@ -285,8 +291,13 @@ jobs:
 
   build:
     name: Luckgram x64
-    needs: libs
-    if: (!(inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    needs: [credentials, libs]
+    # Self-hosted: never run code from fork PRs on our machines.
+    if: >-
+      !cancelled()
+      && needs.credentials.result == 'success'
+      && (needs.libs.result == 'success' || (needs.libs.result == 'skipped' && (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted'))))
+      && (!(inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ${{ (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) && fromJSON('["self-hosted","luckgram-win"]') || 'windows-latest' }}
     timeout-minutes: 355
     defaults:
@@ -365,6 +376,31 @@ jobs:
           arch: x64
           sdk: ${{ env.SDK }}
           toolset: '14.44'
+
+      - name: ATL for the 14.44 toolset (self-hosted).
+        if: env.SELF_HOSTED == 'true'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath
+          $atl = Get-ChildItem "$vs\VC\Tools\MSVC\14.44.*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
+          if (-not $atl) {
+            Write-Error "ATL for MSVC 14.44 missing in $vs. Add component Microsoft.VisualStudio.Component.VC.14.44.17.14.ATL with the Visual Studio Installer."
+            exit 1
+          }
+          Write-Host "ATL: $($atl.FullName)"
+
+      - name: Libraries (self-hosted, same machine as the app).
+        if: env.SELF_HOSTED == 'true'
+        timeout-minutes: 200
+        run: |
+          git config --global user.email >nul 2>&1 || git config --global user.email "ci@luckgram.invalid"
+          git config --global user.name >nul 2>&1 || git config --global user.name "Luckgram CI"
+          nuget sources Disable -Name "Microsoft Visual Studio Offline Packages" >nul 2>&1
+          nuget sources Add -Source https://api.nuget.org/v3/index.json >nul 2>&1
+          echo Machine: %COMPUTERNAME% (runner %RUNNER_NAME%)
+          call %TBUILD%\luckgram-desktop\Telegram\build\prepare\win.bat silent %QT%
+          if %errorlevel% neq 0 exit /b %errorlevel%
 
       - name: Configure.
         env:

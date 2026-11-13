@@ -1,6 +1,6 @@
 # Self-hosted Windows runner (luckgram-win)
 
-`.github/workflows/build.yml` runs the **Libraries** and **Luckgram x64** jobs on
+`.github/workflows/build.yml` runs the **Luckgram x64** job on
 `[self-hosted, luckgram-win]` when the repository variable `WIN_RUNNER` is
 `self-hosted` (Settings → Secrets and variables → Actions → Variables).
 Delete the variable (or set anything else) to go back to GitHub hosted runners.
@@ -8,9 +8,14 @@ Delete the variable (or set anything else) to go back to GitHub hosted runners.
 On the self-hosted runner:
 
 - Only pushes to this repository, manual runs, and PRs whose branch is in this
-  repository run. PRs from forks skip both jobs (the repository is public).
+  repository run. PRs from forks skip the job (the repository is public).
 - `TBuild` (libraries, ~60 GB with Qt Debug + Release) and `out/` stay in the
   runner workspace between runs, so later runs are incremental. No cache upload.
+- The **Libraries** job is skipped; **Luckgram x64** runs `prepare.py` itself
+  (about a minute when nothing changed), so libraries and app are always built
+  on the same machine. Several machines can carry the `luckgram-win` label
+  (aws-win, aws-win-2); each has its own `TBuild`, and a new machine builds the
+  libraries once (~70 min on r7i.2xlarge).
 - The workflow never deletes anything outside its workspace and never edits the
   machine's CMake or Visual Studio. A missing component fails the job with
   its name.
