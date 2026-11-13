@@ -111,7 +111,7 @@ void RestoreDraft(
 }
 
 // The WritingHost of one message field (21 需求 6).
-class FieldHost final : public WritingHost, public base::has_weak_ptr {
+class FieldHost final : public WritingHost {
 public:
 	explicit FieldHost(const Compose::SlotContext &context);
 	~FieldHost();
