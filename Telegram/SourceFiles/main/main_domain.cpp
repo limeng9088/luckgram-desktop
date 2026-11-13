@@ -44,16 +44,11 @@ Domain::Domain(const QString &dataName)
 		_lastMaxAccounts = maxAccounts();
 	}, _lifetime);
 	// Luckgram D8 (mobile 11): entering / leaving the second space changes
-	// what the account lists and the badge show; a new main passcode makes
-	// the sealed second-space record useless.
+	// what the account lists and the badge show.
 	Luckgram::DoubleBottom::ActiveChanges(
 	) | rpl::on_next([=] {
 		_accountsChanges.fire({});
 		scheduleUpdateUnreadBadge();
-	}, _lifetime);
-	_local->localPasscodeChanged(
-	) | rpl::on_next([] {
-		Luckgram::DoubleBottom::OnMainPasscodeChanged();
 	}, _lifetime);
 
 	_active.changes(
@@ -116,6 +111,21 @@ Storage::StartResult Domain::startWith(
 		Assert(!started());
 	}
 	return result;
+}
+
+bool Domain::luckgramStartWithLocalKey(const QByteArray &key) {
+	if (started() || _passcodeDeriving) {
+		return false;
+	}
+	const auto result = _local->luckgramStartWithLocalKey(key);
+	if (result != Storage::StartResult::Success) {
+		Assert(!started());
+		return false;
+	}
+	activateAfterStarting();
+	Wallet::DropUnusedPasscode();
+	crl::on_main(&Core::App(), [=] { suggestExportIfNeeded(); });
+	return true;
 }
 
 bool Domain::tryPasscode(

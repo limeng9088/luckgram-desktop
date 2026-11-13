@@ -329,6 +329,37 @@ Domain::Domain(not_null<Main::Domain*> owner, const QString &dataName)
 
 Domain::~Domain() = default;
 
+StartResult Domain::luckgramStartWithLocalKey(const QByteArray &key) {
+	if (key.size() != MTP::AuthKey::kSize) {
+		return StartResult::IncorrectPasscode;
+	}
+	auto data = MTP::AuthKey::Data();
+	bytes::copy(data, bytes::make_span(key));
+	auto none = PasscodeDerivation(nullptr, QByteArray());
+	const auto modern = startModern(
+		none,
+		std::make_shared<MTP::AuthKey>(data));
+	OPENSSL_cleanse(data.data(), data.size());
+	if (modern != StartModernResult::Success) {
+		_localKey = nullptr;
+		return StartResult::IncorrectPasscode;
+	}
+	if (_keyDataDirty || _oldVersion < AppVersion) {
+		writeAccounts();
+	}
+	return StartResult::Success;
+}
+
+QByteArray Domain::luckgramLocalKey() const {
+	if (!_localKey) {
+		return QByteArray();
+	}
+	const auto data = _localKey->data();
+	return QByteArray(
+		reinterpret_cast<const char*>(data.data()),
+		int(data.size()));
+}
+
 StartResult Domain::start(PasscodeDerivation derived) {
 	const auto modern = startModern(derived);
 	if (modern == StartModernResult::Success) {
@@ -490,7 +521,8 @@ void Domain::migrateFromLegacy(const QByteArray &passcode) {
 }
 
 Domain::StartModernResult Domain::startModern(
-		PasscodeDerivation &derived) {
+		PasscodeDerivation &derived,
+		MTP::AuthKeyPtr known) {
 	const auto name = ComputeKeyName(_dataName);
 
 	FileReadDescriptor file;
@@ -522,82 +554,92 @@ Domain::StartModernResult Domain::startModern(
 			CreateLocalKey(QByteArray(), _keyData->openSalt))
 		: nullptr;
 
-	auto wrapKey = MTP::AuthKeyPtr();
-	auto localKeyEncrypted = QByteArray();
-	if (_keyData->legacy) {
-		const auto blob = PasscodeWrap{
-			.salt = _keyData->openSalt,
-			.keyEncrypted = _keyData->openKeyEncrypted,
-		};
-		wrapKey = derived.keyFor(blob);
-		if (!wrapKey) {
-			return StartModernResult::IncorrectPasscode;
-		}
-		localKeyEncrypted = blob.keyEncrypted;
-	} else {
-		// A passcode wrap is live only while its generation equals the
-		// committed one. That drops a staged wrap left above committed by a
-		// crash in the middle of a passcode change and a stale wrap left
-		// below it, and it is also what turns an interrupted creation of a
-		// first passcode back into the "no passcode" file it was before.
-		auto live = std::vector<PasscodeWrap>();
-		for (auto &wrap : _keyData->passcodeWraps) {
-			if (wrap.generation == _keyData->committed) {
-				live.push_back(std::move(wrap));
-			}
-		}
-		if (live.size() != _keyData->passcodeWraps.size()) {
-			_keyDataDirty = true;
-		}
-		_keyData->passcodeWraps = std::move(live);
-
-		if (derived.empty()) {
-			if (_keyData->openKeyEncrypted.isEmpty()) {
-				LOG(("App Info: the app lock is on, a passcode is needed."));
-				return StartModernResult::IncorrectPasscode;
-			}
-			wrapKey = CreateLocalKey(QByteArray(), _keyData->openSalt);
-			localKeyEncrypted = _keyData->openKeyEncrypted;
-		} else if (_keyData->passcodeWraps.size() != 1) {
-			LOG(("App Info: no passcode wrap to open the local key with."));
-			return StartModernResult::IncorrectPasscode;
-		} else {
-			const auto &wrap = _keyData->passcodeWraps.front();
-			wrapKey = derived.keyFor(wrap);
-			if (!wrapKey) {
-				LOG(("App Error: passcode KDF family %1 is unavailable."
-					).arg(wrap.kdf.kind));
-				return StartModernResult::IncorrectPasscode;
-			}
-			localKeyEncrypted = wrap.keyEncrypted;
-		}
-	}
-
-	EncryptedDescriptor keyInnerData, info;
-	if (!DecryptLocal(keyInnerData, localKeyEncrypted, wrapKey)) {
-		LOG(("App Info: could not decrypt pass-protected key from info file, "
-			"maybe bad password..."));
+	EncryptedDescriptor info;
+	const auto withKnownKey = (known != nullptr); // Luckgram D8
+	if (known && _keyData->legacy) {
+		// Luckgram D8: a legacy file needs the passcode to migrate.
 		return StartModernResult::IncorrectPasscode;
 	}
-	// An authentic envelope that does not hold a local key cannot be told
-	// from an overwritten open field by the empty start alone, so while a
-	// live passcode wrap survives, asking for it beats resetting what that
-	// passcode still opens, and the file stays untouched for the typed
-	// retry. Nothing is published yet here - the candidate key and its
-	// verified-open claim are settled below - so returning is all this
-	// refusal has to do.
-	auto key = Serialize::read<MTP::AuthKey::Data>(keyInnerData.stream);
-	if (keyInnerData.stream.status() != QDataStream::Ok
-		|| !keyInnerData.stream.atEnd()) {
-		if (derived.empty() && _keyData->passcodeWraps.size() == 1) {
-			LOG(("App Info: the open wrap does not hold a local key, "
-				"a passcode is needed."));
+	if (known) { // Luckgram D8: the second space brings its own key.
+		_localKey = std::move(known);
+	} else {
+		auto wrapKey = MTP::AuthKeyPtr();
+		auto localKeyEncrypted = QByteArray();
+		if (_keyData->legacy) {
+			const auto blob = PasscodeWrap{
+				.salt = _keyData->openSalt,
+				.keyEncrypted = _keyData->openKeyEncrypted,
+			};
+			wrapKey = derived.keyFor(blob);
+			if (!wrapKey) {
+				return StartModernResult::IncorrectPasscode;
+			}
+			localKeyEncrypted = blob.keyEncrypted;
+		} else {
+			// A passcode wrap is live only while its generation equals the
+			// committed one. That drops a staged wrap left above committed by a
+			// crash in the middle of a passcode change and a stale wrap left
+			// below it, and it is also what turns an interrupted creation of a
+			// first passcode back into the "no passcode" file it was before.
+			auto live = std::vector<PasscodeWrap>();
+			for (auto &wrap : _keyData->passcodeWraps) {
+				if (wrap.generation == _keyData->committed) {
+					live.push_back(std::move(wrap));
+				}
+			}
+			if (live.size() != _keyData->passcodeWraps.size()) {
+				_keyDataDirty = true;
+			}
+			_keyData->passcodeWraps = std::move(live);
+
+			if (derived.empty()) {
+				if (_keyData->openKeyEncrypted.isEmpty()) {
+					LOG(("App Info: the app lock is on, a passcode is needed."));
+					return StartModernResult::IncorrectPasscode;
+				}
+				wrapKey = CreateLocalKey(QByteArray(), _keyData->openSalt);
+				localKeyEncrypted = _keyData->openKeyEncrypted;
+			} else if (_keyData->passcodeWraps.size() != 1) {
+				LOG(("App Info: no passcode wrap to open the local key with."));
+				return StartModernResult::IncorrectPasscode;
+			} else {
+				const auto &wrap = _keyData->passcodeWraps.front();
+				wrapKey = derived.keyFor(wrap);
+				if (!wrapKey) {
+					LOG(("App Error: passcode KDF family %1 is unavailable."
+						).arg(wrap.kdf.kind));
+					return StartModernResult::IncorrectPasscode;
+				}
+				localKeyEncrypted = wrap.keyEncrypted;
+			}
+		}
+
+		EncryptedDescriptor keyInnerData;
+		if (!DecryptLocal(keyInnerData, localKeyEncrypted, wrapKey)) {
+			LOG(("App Info: could not decrypt pass-protected key from info file, "
+				"maybe bad password..."));
 			return StartModernResult::IncorrectPasscode;
 		}
-		LOG(("App Error: could not read pass-protected key from info file"));
-		return StartModernResult::Failed;
+		// An authentic envelope that does not hold a local key cannot be told
+		// from an overwritten open field by the empty start alone, so while a
+		// live passcode wrap survives, asking for it beats resetting what that
+		// passcode still opens, and the file stays untouched for the typed
+		// retry. Nothing is published yet here - the candidate key and its
+		// verified-open claim are settled below - so returning is all this
+		// refusal has to do.
+		auto key = Serialize::read<MTP::AuthKey::Data>(keyInnerData.stream);
+		if (keyInnerData.stream.status() != QDataStream::Ok
+			|| !keyInnerData.stream.atEnd()) {
+			if (derived.empty() && _keyData->passcodeWraps.size() == 1) {
+				LOG(("App Info: the open wrap does not hold a local key, "
+					"a passcode is needed."));
+				return StartModernResult::IncorrectPasscode;
+			}
+			LOG(("App Error: could not read pass-protected key from info file"));
+			return StartModernResult::Failed;
+		}
+		_localKey = std::make_shared<MTP::AuthKey>(key);
 	}
-	_localKey = std::make_shared<MTP::AuthKey>(key);
 	_keyData->openKeyVerified = openKey && openKey->equals(_localKey);
 	openKey = nullptr;
 
@@ -614,7 +656,8 @@ Domain::StartModernResult Domain::startModern(
 	// stays untouched for the typed retry. With no passcode wrap there is no
 	// secret left to ask for, so the scratch recovery keeps that case.
 	if (!DecryptLocal(info, infoEncrypted, _localKey)) {
-		if (derived.empty() && _keyData->passcodeWraps.size() == 1) {
+		if ((derived.empty() && _keyData->passcodeWraps.size() == 1)
+			|| withKnownKey) { // Luckgram D8: a wrong sealed key.
 			LOG(("App Info: the open wrap does not open the accounts info, "
 				"a passcode is needed."));
 			_localKey = nullptr;

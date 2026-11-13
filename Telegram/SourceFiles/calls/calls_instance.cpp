@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "calls/calls_instance.h"
 
+#include "luckgram/luckgram_double_bottom.h" // Luckgram D8
+
 #include "calls/calls_call.h"
 #include "calls/group/calls_group_common.h"
 #include "calls/group/calls_choose_join_as.h"
@@ -702,7 +704,10 @@ void Instance::handleCallUpdate(
 		}
 
 		const auto &config = session->serverConfig();
-		if (inCall() || inGroupCall() || !user || user->isSelf()) {
+		if (inCall() || inGroupCall() || !user || user->isSelf()
+			// Luckgram D8 (mobile 11): an account the second space hides
+			// must not ring or show a panel; the caller just sees "busy".
+			|| Luckgram::DoubleBottom::IsAccountHidden(&session->account())) {
 			const auto flags = phoneCall.is_video()
 				? MTPphone_DiscardCall::Flag::f_video
 				: MTPphone_DiscardCall::Flag(0);
@@ -1174,7 +1179,10 @@ void Instance::showConferenceInvite(
 	if (!conferenceId
 		|| call->state != Data::CallState::Invitation
 		|| user->isSelf()
-		|| user->session().appConfig().callsDisabledForSession()) {
+		|| user->session().appConfig().callsDisabledForSession()
+		// Luckgram D8 (mobile 11): no invite panel for hidden accounts.
+		|| Luckgram::DoubleBottom::IsAccountHidden(
+			&user->session().account())) {
 		return;
 	} else if (_currentCall
 		&& _currentCall->conferenceId() == conferenceId) {

@@ -119,7 +119,6 @@ PRIVATE
     settings/sections/settings_luckgram_privacy.cpp
     settings/sections/settings_luckgram_privacy.h
 )
-include(cmake/test_luckgram_privacy.cmake)
 
 if (LUCKGRAM_TESTS)
     include(${CMAKE_CURRENT_LIST_DIR}/luckgram_tests.cmake)

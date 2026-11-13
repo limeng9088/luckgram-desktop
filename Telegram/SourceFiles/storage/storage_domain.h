@@ -128,6 +128,14 @@ public:
 	~Domain();
 
 	[[nodiscard]] StartResult start(PasscodeDerivation derived);
+	// Luckgram D8 (mobile 11): the second space starts with the local key
+	// it sealed under the second passcode; only opening the accounts info
+	// proves the key. Never starts from scratch: anything but Success is
+	// IncorrectPasscode and leaves the files untouched.
+	[[nodiscard]] StartResult luckgramStartWithLocalKey(
+		const QByteArray &key);
+	// The local key bytes, for sealing them (only after a start).
+	[[nodiscard]] QByteArray luckgramLocalKey() const;
 	void startAdded(
 		not_null<Main::Account*> account,
 		std::unique_ptr<MTP::Config> config);
@@ -187,7 +195,9 @@ private:
 		Empty,
 	};
 
-	[[nodiscard]] StartModernResult startModern(PasscodeDerivation &derived);
+	[[nodiscard]] StartModernResult startModern(
+		PasscodeDerivation &derived,
+		MTP::AuthKeyPtr known = nullptr); // Luckgram D8: known local key.
 	void startWithSingleAccount(
 		const QByteArray &passcode,
 		std::unique_ptr<Main::Account> account);

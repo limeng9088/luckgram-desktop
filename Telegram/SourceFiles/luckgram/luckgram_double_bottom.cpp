@@ -25,7 +25,6 @@ namespace {
 
 constexpr auto kRecordKey = "double_bottom.record";
 constexpr auto kVisibleKey = "double_bottom.visible";
-constexpr auto kResetNoticeKey = "double_bottom.reset_notice";
 constexpr auto kIterations = 100000; // Upstream kStrongIterationsCount.
 constexpr auto kKeySize = 32;
 
@@ -221,10 +220,6 @@ bool Configured() {
 		&& !VisibleUserIds().empty();
 }
 
-bool NeedsNewSecondPasscode() {
-	return Settings::GetBool(Name(kResetNoticeKey), false);
-}
-
 bool Active() {
 	return ActiveState().current();
 }
@@ -280,35 +275,32 @@ bool TryUnlock(const QString &passcode, Fn<void(bool)> done) {
 			done = std::move(done)]() mutable {
 		auto key = DeriveKey(typed, record.salt, record.iterations);
 		Cleanse(typed);
-		auto main = Open(key, record.nonce, record.sealed);
+		auto local = Open(key, record.nonce, record.sealed);
 		Cleanse(key);
-		crl::on_main([main = std::move(main), done = std::move(done)]() mutable {
-			if (!main || Core::Quitting()) {
+		crl::on_main([
+				local = std::move(local),
+				done = std::move(done)]() mutable {
+			if (!local || Core::Quitting()) {
 				done(false);
 				return;
 			}
 			auto &domain = Core::App().domain();
 			if (domain.started()) {
 				// The record opened: this is the second passcode.
-				Cleanse(*main);
+				Cleanse(*local);
 				SetActive(true);
 				done(true);
 				return;
 			}
-			// Locked since launch: the main passcode opens the data, the
+			// Locked since launch: the sealed local key opens the data, the
 			// space is set first so nothing of a hidden account shows up.
 			SetActive(true);
-			const auto started = domain.tryPasscode(*main, [=](bool correct) {
-				if (!correct) {
-					SetActive(false);
-				}
-				done(correct);
-			});
-			Cleanse(*main);
+			const auto started = domain.luckgramStartWithLocalKey(*local);
+			Cleanse(*local);
 			if (!started) {
 				SetActive(false);
-				done(false);
 			}
+			done(started);
 		});
 	});
 	return true;
@@ -343,11 +335,14 @@ void ApplySpace() {
 	}
 }
 
-void SetSecondPasscode(
-		const QString &second,
-		const QString &main,
-		Fn<void(bool ok)> done) {
+void SetSecondPasscode(const QString &second, Fn<void(bool ok)> done) {
 	using namespace Luckgram::Privacy;
+	const auto domain = StartedDomain();
+	auto plain = domain ? domain->local().luckgramLocalKey() : QByteArray();
+	if (plain.isEmpty()) {
+		done(false);
+		return;
+	}
 	auto salt = QByteArray(kSaltSize, Qt::Uninitialized);
 	auto nonce = QByteArray(kNonceSize, Qt::Uninitialized);
 	const auto random = (RAND_bytes(
@@ -361,7 +356,6 @@ void SetSecondPasscode(
 		return;
 	}
 	auto typed = second.toUtf8();
-	auto plain = main.toUtf8();
 	crl::async([=, typed = std::move(typed), plain = std::move(plain)]() mutable {
 		auto key = DeriveKey(typed, salt, kIterations);
 		Cleanse(typed);
@@ -379,7 +373,6 @@ void SetSecondPasscode(
 				.sealed = sealed,
 				.iterations = kIterations,
 			}));
-			Settings::Remove(Name(kResetNoticeKey));
 			done(true);
 		});
 	});
@@ -388,21 +381,8 @@ void SetSecondPasscode(
 void TurnOff() {
 	Settings::Remove(Name(kRecordKey));
 	Settings::Remove(Name(kVisibleKey));
-	Settings::Remove(Name(kResetNoticeKey));
 	Settings::SetEnabled(Name(kFeatureKey), false);
 	VisibleStream().fire({});
-	SetActive(false);
-}
-
-void OnMainPasscodeChanged() {
-	if (!HasSecondPasscode()) {
-		return;
-	}
-	// The sealed main passcode is stale now; the visible list stays so the
-	// user only has to type a new second passcode.
-	Settings::Remove(Name(kRecordKey));
-	Settings::SetBool(Name(kResetNoticeKey), true);
-	Settings::SetEnabled(Name(kFeatureKey), false);
 	SetActive(false);
 }
 

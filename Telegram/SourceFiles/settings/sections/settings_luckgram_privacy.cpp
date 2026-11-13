@@ -79,8 +79,8 @@ void SetSecondPasscode(
 	const auto show = controller->uiShow();
 	Luckgram::PrivacyUi::AskNewSecondPasscode(show, crl::guard(controller, [=](
 			QString second,
-			QString main) {
-		DoubleBottom::SetSecondPasscode(second, main, crl::guard(controller, [=](
+			QString) {
+		DoubleBottom::SetSecondPasscode(second, crl::guard(controller, [=](
 				bool ok) {
 			if (!ok) {
 				show->showToast(Tr(
@@ -147,14 +147,9 @@ void FillDoubleBottom(
 		SetSecondPasscode(controller, rebuild);
 	});
 	Ui::AddSkip(container);
-	Ui::AddDividerText(container, rpl::single(
-		DoubleBottom::NeedsNewSecondPasscode()
-			? Tr(
-				"主密码已更改，第二密码已失效，请重新设置。",
-				"The main passcode changed, so the second passcode no longer works. Set it again.")
-			: Tr(
-				"用第二个密码解锁时只显示选定的账号",
-				"A second passcode that shows only the accounts you pick")));
+	Ui::AddDividerText(container, TrValue(
+		"用第二个密码解锁时只显示选定的账号",
+		"A second passcode that shows only the accounts you pick"));
 
 	Ui::AddSkip(container);
 	Ui::AddSubsectionTitle(

@@ -14,15 +14,20 @@ class Account;
 // switcher, the tray / dock menus, notifications, the unread badge);
 // unlocking with the main passcode shows everything.
 //
-// Desktop difference: Telegram Desktop's local passcode encrypts the local
-// key, so at a cold start the second passcode alone can't open the data.
-// The record therefore keeps the main passcode sealed with AES-256-GCM under
-// PBKDF2-HMAC-SHA512(second passcode, random salt, 100000) - the same KDF
-// strength as upstream's passcode key - and nothing in plain text. A second
-// passcode that opens the record is the proof; the main passcode it holds
-// then starts the domain as usual. Changing or removing the main passcode
-// makes the record useless, so it is dropped and the setup page asks for a
-// new second passcode.
+// Desktop difference: Telegram Desktop's local passcode wraps the local
+// data key, so at a cold start the second passcode alone can't open the
+// data. The record therefore keeps upstream's local key (never the main
+// passcode) sealed with AES-256-GCM under PBKDF2-HMAC-SHA512(second
+// passcode, random salt, 100000) - the KDF strength of upstream's passcode
+// key - and nothing in plain text. A second passcode that opens the record
+// is the proof; Storage::Domain::luckgramStartWithLocalKey() then starts
+// with that key. Upstream re-wraps the same local key when the main passcode
+// changes, so the record stays valid.
+//
+// Threat model (as mobile 11, w-1139 review): the second space hides
+// accounts in the UI. All accounts share one local key, so someone holding
+// the second passcode and a copy of tdata can still decrypt every account's
+// local data offline; the main passcode itself is never exposed.
 namespace Luckgram::DoubleBottom {
 
 inline constexpr auto kFeatureKey = "double_bottom";
@@ -31,8 +36,6 @@ inline constexpr auto kFeatureKey = "double_bottom";
 [[nodiscard]] bool HasSecondPasscode();
 // Switch on, a record and the local passcode: unlocking can pick a space.
 [[nodiscard]] bool Configured();
-// The main passcode changed since the second one was set (setup page note).
-[[nodiscard]] bool NeedsNewSecondPasscode();
 
 // The app was unlocked with the second passcode (runtime only, every
 // unlock decides again).
@@ -60,17 +63,11 @@ void OnMainUnlock();
 // primary window off a hidden account.
 void ApplySpace();
 
-// Setup (Luckgram 功能 → 双重空间). Both passcodes come checked by the
-// caller (CheckNewSecondPasscode, main verified). done(false) when sealing
-// failed.
-void SetSecondPasscode(
-	const QString &second,
-	const QString &main,
-	Fn<void(bool ok)> done);
+// Setup (Luckgram 功能 → 双重空间), the domain started. The passcode comes
+// checked by the caller (CheckNewSecondPasscode, main verified). done(false)
+// when sealing failed.
+void SetSecondPasscode(const QString &second, Fn<void(bool ok)> done);
 // Forgets the second passcode and the visible list, switch off.
 void TurnOff();
-
-// Storage::Domain::localPasscodeChanged().
-void OnMainPasscodeChanged();
 
 } // namespace Luckgram::DoubleBottom
