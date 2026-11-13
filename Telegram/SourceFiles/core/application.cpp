@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "luckgram/luckgram_desktop.h"
 #include "luckgram/luckgram_screenshots.h"
+#include "luckgram/luckgram_service.h"
 
 #include "data/data_abstract_structure.h"
 #include "data/data_channel.h"
@@ -445,6 +446,7 @@ void Application::run() {
 	DEBUG_LOG(("Application Info: window created..."));
 
 	startDomain();
+	Luckgram::Start(); // D2: device registration, remote config.
 	startTray();
 
 	_lastActivePrimaryWindow->firstShow();

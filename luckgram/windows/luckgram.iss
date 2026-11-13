@@ -112,6 +112,16 @@ begin
   RegDeleteValue(HKCU, 'Software\RegisteredApplications', 'Luckgram');
 end;
 
+// D2: the device token is in Windows Credential Manager (generic credential
+// "Luckgram/device_token", see luckgram_secure_store.cpp); it goes together
+// with the data, kept when the user keeps the data.
+procedure RemoveLuckgramToken();
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\cmdkey.exe'), '/delete:Luckgram/device_token', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
@@ -120,6 +130,9 @@ begin
   begin
     // Default button is "No": keep chat data.
     if MsgBox(FmtMessage(CustomMessage('DeleteData'), [DataDir()]), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+    begin
       DelTree(DataDir(), True, True, True);
+      RemoveLuckgramToken();
+    end;
   end;
 end;
