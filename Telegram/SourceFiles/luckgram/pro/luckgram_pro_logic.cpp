@@ -511,6 +511,9 @@ QString Texts::freeTier() const {
 }
 
 QString Texts::proUntil(const QString &date) const {
+	if (date.isEmpty()) {
+		return L("Pro"); // No end date (server pro.free_for_all).
+	}
 	return t(U("Pro，到期 ") + date, L("Pro until ") + date);
 }
 
