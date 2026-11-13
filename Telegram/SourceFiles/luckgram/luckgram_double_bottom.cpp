@@ -24,7 +24,10 @@ namespace Luckgram::DoubleBottom {
 namespace {
 
 constexpr auto kRecordKey = "double_bottom.record";
-constexpr auto kVisibleKey = "double_bottom.visible";
+// Before the 2026-11-13 storage rule the list was plain text; it is moved
+// into the record the first time the local key is there.
+constexpr auto kLegacyVisibleKey = "double_bottom.visible";
+constexpr auto kVisibleKeyLabel = "luckgram double_bottom visible v1";
 constexpr auto kIterations = 100000; // Upstream kStrongIterationsCount.
 constexpr auto kKeySize = 32;
 
@@ -197,6 +200,109 @@ void Cleanse(Key &key) {
 	return domain->started() ? domain : nullptr;
 }
 
+// ---- The visible account list, sealed inside the record.
+
+[[nodiscard]] std::optional<std::vector<quint64>> &VisibleCache() {
+	static auto result = std::optional<std::vector<quint64>>();
+	return result;
+}
+
+// AES key of the list: SHA-256(label || local key). Available whenever the
+// app is unlocked (main or second space), never before.
+[[nodiscard]] std::optional<Key> VisibleKey() {
+	const auto domain = StartedDomain();
+	auto local = domain ? domain->local().luckgramLocalKey() : QByteArray();
+	if (local.isEmpty()) {
+		return std::nullopt;
+	}
+	auto input = QByteArray(kVisibleKeyLabel) + local;
+	auto result = Key();
+	auto size = 0u;
+	const auto ok = (EVP_Digest(
+		input.constData(),
+		size_t(input.size()),
+		result.data(),
+		&size,
+		EVP_sha256(),
+		nullptr) == 1) && (size == result.size());
+	Cleanse(input);
+	Cleanse(local);
+	if (!ok) {
+		Cleanse(result);
+		return std::nullopt;
+	}
+	return result;
+}
+
+void WriteRecord(Luckgram::Privacy::SecondRecord record) {
+	using namespace Luckgram::Privacy;
+	record.visibleNonce = QByteArray();
+	record.visibleSealed = QByteArray();
+	const auto &visible = VisibleCache();
+	if (visible && !visible->empty()) {
+		auto key = VisibleKey();
+		auto nonce = QByteArray(kNonceSize, Qt::Uninitialized);
+		const auto random = (RAND_bytes(
+			reinterpret_cast<unsigned char*>(nonce.data()),
+			nonce.size()) == 1);
+		if (key && random) {
+			const auto sealed = Seal(
+				*key,
+				nonce,
+				SerializeIds(*visible).toUtf8());
+			if (!sealed.isEmpty()) {
+				record.visibleNonce = nonce;
+				record.visibleSealed = sealed;
+			}
+		}
+		if (key) {
+			Cleanse(*key);
+		}
+	}
+	Settings::SetString(Name(kRecordKey), EncodeRecord(record));
+}
+
+// Decrypts (or migrates) the list once the local key is there; before that
+// only the cache, which is empty after a launch.
+[[nodiscard]] std::vector<quint64> LoadVisible() {
+	auto &cache = VisibleCache();
+	if (cache) {
+		return *cache;
+	}
+	auto key = VisibleKey();
+	if (!key) {
+		return {};
+	}
+	auto result = std::vector<quint64>();
+	const auto record = Record();
+	if (record && !record->visibleSealed.isEmpty()) {
+		if (auto plain = Open(*key, record->visibleNonce, record->visibleSealed)) {
+			result = Luckgram::Privacy::ParseIds(QString::fromUtf8(*plain));
+			Cleanse(*plain);
+		}
+		cache = result;
+	} else {
+		result = Luckgram::Privacy::ParseIds(
+			Settings::GetString(Name(kLegacyVisibleKey)));
+		cache = result;
+		if (record && !result.empty()) {
+			WriteRecord(*record); // Moves the plain list into the record.
+		}
+		if (record || result.empty()) {
+			Settings::Remove(Name(kLegacyVisibleKey));
+		}
+	}
+	Cleanse(*key);
+	return result;
+}
+
+// Before unlocking only the record can say a list was set.
+[[nodiscard]] bool HasVisibleBeforeUnlock() {
+	const auto record = Record();
+	return (record && !record->visibleSealed.isEmpty())
+		|| !Settings::GetString(Name(kLegacyVisibleKey)).isEmpty();
+}
+
 } // namespace
 
 bool HasLocalPasscode() {
@@ -217,7 +323,9 @@ bool Configured() {
 	return Settings::IsEnabled(Name(kFeatureKey))
 		&& HasSecondPasscode()
 		&& HasLocalPasscode()
-		&& !VisibleUserIds().empty();
+		&& (StartedDomain()
+			? !VisibleUserIds().empty()
+			: HasVisibleBeforeUnlock());
 }
 
 bool Active() {
@@ -233,16 +341,19 @@ rpl::producer<bool> ActiveChanges() {
 }
 
 std::vector<quint64> VisibleUserIds() {
-	return Luckgram::Privacy::ParseIds(Settings::GetString(Name(kVisibleKey)));
+	return LoadVisible();
 }
 
 void SetVisibleUserIds(const std::vector<quint64> &ids) {
-	const auto value = Luckgram::Privacy::SerializeIds(ids);
-	if (value.isEmpty()) {
-		Settings::Remove(Name(kVisibleKey));
-	} else {
-		Settings::SetString(Name(kVisibleKey), value);
+	(void)LoadVisible(); // Migrates a plain list before it is replaced.
+	VisibleCache() = Luckgram::Privacy::ParseIds(
+		Luckgram::Privacy::SerializeIds(ids));
+	// Without a second passcode yet the list waits in memory and goes into
+	// the record SetSecondPasscode() writes.
+	if (const auto record = Record()) {
+		WriteRecord(*record);
 	}
+	Settings::Remove(Name(kLegacyVisibleKey));
 	VisibleStream().fire({});
 }
 
@@ -367,12 +478,13 @@ void SetSecondPasscode(const QString &second, Fn<void(bool ok)> done) {
 				done(false);
 				return;
 			}
-			Settings::SetString(Name(kRecordKey), EncodeRecord({
+			(void)LoadVisible(); // Keeps an earlier list (or migrates it).
+			WriteRecord({
 				.salt = salt,
 				.nonce = nonce,
 				.sealed = sealed,
 				.iterations = kIterations,
-			}));
+			});
 			done(true);
 		});
 	});
@@ -380,7 +492,8 @@ void SetSecondPasscode(const QString &second, Fn<void(bool ok)> done) {
 
 void TurnOff() {
 	Settings::Remove(Name(kRecordKey));
-	Settings::Remove(Name(kVisibleKey));
+	Settings::Remove(Name(kLegacyVisibleKey));
+	VisibleCache() = std::vector<quint64>();
 	Settings::SetEnabled(Name(kFeatureKey), false);
 	VisibleStream().fire({});
 	SetActive(false);

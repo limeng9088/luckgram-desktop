@@ -13,9 +13,11 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "data/data_session.h"
 #include "history/history.h"
 #include "lang/lang_keys.h"
+#include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_privacy_logic.h"
 #include "luckgram/luckgram_privacy_ui.h"
 #include "luckgram/luckgram_settings.h"
+#include "luckgram/luckgram_storage.h"
 #include "luckgram/luckgram_strings.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
@@ -39,7 +41,11 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 namespace Luckgram::HiddenChats {
 namespace {
 
-constexpr auto kIdsPrefix = "hidden_chats.ids.";
+// Account level, encrypted with the local key (docs/desktop.md storage
+// rule); kLegacyIdsPrefix is the plain list in luckgram.json before it,
+// moved over the first time an account is read.
+constexpr auto kStorageName = "hidden_chats";
+constexpr auto kLegacyIdsPrefix = "hidden_chats.ids.";
 constexpr auto kLockKey = "hidden_chats.lock";
 constexpr auto kNotifyKey = "hidden_chats.notify";
 constexpr auto kHintShownKey = "hidden_chats.hint_shown";
@@ -52,12 +58,14 @@ constexpr auto kHintShownKey = "hidden_chats.hint_shown";
 	return quint64(session->userId().bare);
 }
 
-[[nodiscard]] QString IdsKey(quint64 account) {
-	return Name(kIdsPrefix) + QString::number(account);
+[[nodiscard]] QString LegacyIdsKey(quint64 account) {
+	return Name(kLegacyIdsPrefix) + QString::number(account);
 }
 
-// History::shouldBeInChatList() asks on every list update, so the parsed
-// lists and the switch are cached and refreshed from Settings::Changes().
+// History::shouldBeInChatList() asks on every list update, so the lists
+// and the switch are cached. A list read while the account's storage is
+// unavailable (an account the second space hides) lives in memory only
+// and is read again when the space changes.
 struct Cache {
 	bool enabledKnown = false;
 	bool enabled = false;
@@ -72,12 +80,15 @@ void RefreshAll();
 	static auto result = [] {
 		auto cache = std::make_unique<Cache>();
 		const auto raw = cache.get();
+		DoubleBottom::ActiveChanges(
+		) | rpl::on_next([=] {
+			raw->ids.clear();
+			RefreshAll();
+			raw->changes.fire({});
+		}, raw->lifetime);
 		Settings::Changes(
 		) | rpl::on_next([=](const QString &key) {
 			const auto feature = key.isEmpty() || key == Name(kFeatureKey);
-			if (key.isEmpty() || key.startsWith(Name(kIdsPrefix))) {
-				raw->ids.clear();
-			}
 			if (feature) {
 				const auto was = raw->enabled;
 				raw->enabledKnown = false;
@@ -95,15 +106,45 @@ void RefreshAll();
 	return *result;
 }
 
-[[nodiscard]] const base::flat_set<quint64> &Ids(quint64 account) {
+void Persist(not_null<Main::Session*> session, const QString &value) {
+	const auto name = Name(kStorageName);
+	if (value.isEmpty()) {
+		Storage::RemoveAccount(session, name);
+	} else {
+		Storage::WriteAccount(session, name, value.toUtf8());
+	}
+}
+
+[[nodiscard]] const base::flat_set<quint64> &Ids(
+		not_null<Main::Session*> session) {
 	auto &state = State();
+	const auto account = AccountKey(session);
 	const auto i = state.ids.find(account);
 	if (i != end(state.ids)) {
 		return i->second;
 	}
+	auto ids = std::vector<quint64>();
+	if (Storage::AccountAvailable(session)) {
+		ids = Privacy::ParseIds(QString::fromUtf8(
+			Storage::ReadAccount(session, Name(kStorageName))));
+		const auto legacyKey = LegacyIdsKey(account);
+		if (Settings::Has(legacyKey)) {
+			const auto legacy = Privacy::ParseIds(
+				Settings::GetString(legacyKey));
+			ids.insert(ids.end(), legacy.begin(), legacy.end());
+			const auto value = Privacy::SerializeIds(ids);
+			if (value.isEmpty()
+				|| Storage::WriteAccount(
+					session,
+					Name(kStorageName),
+					value.toUtf8())) {
+				Settings::Remove(legacyKey);
+			}
+			ids = Privacy::ParseIds(value);
+		}
+	}
 	auto set = base::flat_set<quint64>();
-	for (const auto id : Privacy::ParseIds(
-			Settings::GetString(IdsKey(account)))) {
+	for (const auto id : ids) {
 		set.emplace(id);
 	}
 	return state.ids.emplace(account, std::move(set)).first->second;
@@ -111,7 +152,7 @@ void RefreshAll();
 
 void RefreshSession(not_null<Main::Session*> session) {
 	const auto owner = &session->data();
-	for (const auto id : Ids(AccountKey(session))) {
+	for (const auto id : Ids(session)) {
 		if (const auto history = owner->historyLoaded(DeserializePeerId(id))) {
 			history->updateChatListExistence();
 		}
@@ -294,12 +335,12 @@ bool IsHidden(not_null<const History*> history) {
 		return false;
 	}
 	const auto session = &history->session();
-	return Ids(AccountKey(session)).contains(
+	return Ids(session).contains(
 		SerializePeerId(history->peer->id));
 }
 
 bool HasHidden(not_null<Main::Session*> session) {
-	return Enabled() && !Ids(AccountKey(session)).empty();
+	return Enabled() && !Ids(session).empty();
 }
 
 rpl::producer<bool> HasHiddenValue(not_null<Main::Session*> session) {
@@ -316,7 +357,7 @@ std::vector<not_null<History*>> List(not_null<Main::Session*> session) {
 		return result;
 	}
 	const auto owner = &session->data();
-	for (const auto id : Ids(AccountKey(session))) {
+	for (const auto id : Ids(session)) {
 		const auto peerId = DeserializePeerId(id);
 		if (owner->peerLoaded(peerId)) {
 			result.push_back(owner->history(peerId));
@@ -355,7 +396,7 @@ void SetHidden(not_null<History*> history, bool hidden) {
 	const auto session = &history->session();
 	const auto account = AccountKey(session);
 	auto current = std::vector<quint64>();
-	for (const auto id : Ids(account)) {
+	for (const auto id : Ids(session)) {
 		current.push_back(id);
 	}
 	const auto updated = Privacy::WithHidden(
@@ -365,15 +406,16 @@ void SetHidden(not_null<History*> history, bool hidden) {
 	if (!updated) {
 		return;
 	}
-	const auto value = Privacy::SerializeIds(*updated);
-	if (value.isEmpty()) {
-		Settings::Remove(IdsKey(account));
-	} else {
-		Settings::SetString(IdsKey(account), value);
+	auto &state = State();
+	auto &set = state.ids[account];
+	set.clear();
+	for (const auto id : *updated) {
+		set.emplace(id);
 	}
-	// Settings::Changes() dropped the cache already.
+	Persist(session, Privacy::SerializeIds(*updated));
 	history->updateChatListExistence();
 	session->data().notifyUnreadBadgeChanged();
+	state.changes.fire({});
 }
 
 bool LockEnabled() {

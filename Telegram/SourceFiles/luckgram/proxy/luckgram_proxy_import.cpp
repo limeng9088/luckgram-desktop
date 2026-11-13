@@ -13,6 +13,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "core/file_utilities.h"
 #include "lang/lang_keys.h"
 #include "luckgram/luckgram_settings.h"
+#include "luckgram/luckgram_storage.h"
 #include "luckgram/luckgram_strings.h"
 #include "luckgram/proxy/luckgram_proxy_exit.h"
 #include "luckgram/proxy/luckgram_proxy_import_logic.h"
@@ -52,7 +53,11 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 namespace Luckgram::ProxyImport {
 namespace {
 
-constexpr auto kSubscriptionsKey = "proxy_import.subscriptions";
+// Settings level (encrypted like upstream's proxy list, readable before
+// login and unlock; docs/desktop.md). kLegacySubscriptionsKey is the plain
+// JSON in luckgram.json before that rule, moved over on the first read.
+constexpr auto kStorageName = "proxy_subscriptions";
+constexpr auto kLegacySubscriptionsKey = "proxy_import.subscriptions";
 constexpr auto kTimeoutMs = 20 * 1000;
 constexpr auto kUserAgent = "clash.meta";
 
@@ -138,11 +143,22 @@ struct Subscription {
 	return result;
 }
 
+[[nodiscard]] QByteArray ReadStored() {
+	const auto name = QString::fromLatin1(kStorageName);
+	const auto legacyKey = QString::fromLatin1(kLegacySubscriptionsKey);
+	auto value = Storage::ReadSettings(name);
+	if (value.isEmpty() && Settings::Has(legacyKey)) {
+		value = Settings::GetString(legacyKey).toUtf8();
+		if (value.isEmpty() || Storage::WriteSettings(name, value)) {
+			Settings::Remove(legacyKey);
+		}
+	}
+	return value;
+}
+
 [[nodiscard]] std::vector<Subscription> LoadSubscriptions() {
-	const auto value = Settings::GetString(
-		QString::fromLatin1(kSubscriptionsKey));
 	auto result = std::vector<Subscription>();
-	const auto array = QJsonDocument::fromJson(value.toUtf8()).array();
+	const auto array = QJsonDocument::fromJson(ReadStored()).array();
 	for (const auto &item : array) {
 		const auto object = item.toObject();
 		auto subscription = Subscription{
@@ -172,15 +188,15 @@ void SaveSubscriptions(const std::vector<Subscription> &list) {
 			{ u"updated"_q, double(subscription.updated) },
 		});
 	}
-	const auto key = QString::fromLatin1(kSubscriptionsKey);
+	const auto name = QString::fromLatin1(kStorageName);
 	if (array.isEmpty()) {
-		Settings::Remove(key);
-	} else {
-		Settings::SetString(
-			key,
-			QString::fromUtf8(
-				QJsonDocument(array).toJson(QJsonDocument::Compact)));
+		Storage::RemoveSettings(name);
+	} else if (!Storage::WriteSettings(
+			name,
+			QJsonDocument(array).toJson(QJsonDocument::Compact))) {
+		LOG(("Luckgram Error: could not save proxy subscriptions."));
 	}
+	Settings::Remove(QString::fromLatin1(kLegacySubscriptionsKey));
 	SubscriptionsChanged().fire({});
 }
 
