@@ -33,7 +33,7 @@ const auto kStorageName = QStringLiteral("ai_conversations");
 // in plain tdata/luckgram_ai/<user id>.json. Removed once, not migrated.
 void RemoveLegacyPlainFolder() {
 	static auto done = false;
-	if (!base::take(done, true)) {
+	if (!std::exchange(done, true)) {
 		QDir(cWorkingDir() + u"tdata/luckgram_ai"_q).removeRecursively();
 	}
 }
