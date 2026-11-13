@@ -7,6 +7,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include <QtCore/QStringList>
 
+#include <algorithm>
+
 namespace Luckgram::Transcribe {
 
 bool UseLuckgram(bool featureOn, bool premium) {
@@ -68,6 +70,19 @@ std::optional<LinkTarget> ParseLink(const QString &link) {
 		return std::nullopt;
 	}
 	return result;
+}
+
+bool TooShort(int64_t durationMs) {
+	return durationMs < kMinRecordMs;
+}
+
+double LevelRatio(int level) {
+	return (level <= 0) ? 0. : std::min(1., level / kMaxLevel);
+}
+
+QString TidyResult(const QString &raw, const QString &tidy) {
+	const auto trimmed = tidy.trimmed();
+	return trimmed.isEmpty() ? raw : trimmed;
 }
 
 QString FailedText(bool chinese) {

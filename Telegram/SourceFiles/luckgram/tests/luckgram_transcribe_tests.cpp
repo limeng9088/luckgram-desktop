@@ -69,3 +69,23 @@ LUCKGRAM_TEST(TranscribeTexts) {
 		U("Couldn't transcribe · Retry"));
 	LG_EQUAL(CacheKey(1, 2), U("1:2"));
 }
+
+// 17.5-17.6 dictation.
+
+LUCKGRAM_TEST(DictationShortRecordingDropped) {
+	LG_CHECK(TooShort(0));
+	LG_CHECK(TooShort(99));
+	LG_CHECK(!TooShort(100));
+}
+
+LUCKGRAM_TEST(DictationLevel) {
+	LG_EQUAL(LevelRatio(0), 0.);
+	LG_EQUAL(LevelRatio(-5), 0.);
+	LG_EQUAL(LevelRatio(900), 0.5);
+	LG_EQUAL(LevelRatio(5000), 1.);
+}
+
+LUCKGRAM_TEST(DictationTidyKeepsRawWhenEmpty) {
+	LG_EQUAL(TidyResult(U("嗯 那个 明天见"), U("明天见。")), U("明天见。"));
+	LG_EQUAL(TidyResult(U("明天见"), U("  ")), U("明天见"));
+}
