@@ -92,7 +92,10 @@ void AcceptLogin(
 				}
 			}).fail([=](const MTP::Error &error) {
 				if (const auto strong = weak.get()) {
-					strong->showToast(error.type());
+					strong->show(Ui::MakeInformBox({
+						.text = Tx().loginError(error.type()),
+						.title = Tx().loginTitle(),
+					}));
 				}
 			}).send();
 		},

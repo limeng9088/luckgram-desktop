@@ -151,6 +151,17 @@ QString Texts::loginTitle() const { return t("在其他设备登录", "Log in on
 QString Texts::loginConfirm() const { return t("确定要用当前账号登录扫码的设备吗？只确认你自己的设备。", "Log in to the scanned device with this account? Only confirm devices that are yours."); }
 QString Texts::login() const { return t("登录", "Log in"); }
 QString Texts::loginDone() const { return t("已在其他设备登录", "Logged in on the other device"); }
+QString Texts::loginError(const QString &type) const {
+	// English: Telegram's AccountAlreadyLoggedIn / ErrorOccurred, as on
+	// mobile. Chinese: ours, mobile takes it from the cloud language pack.
+	if (type == QStringLiteral("AUTH_TOKEN_EXCEPTION")) {
+		return t(
+			"此账号已在本应用中登录。",
+			"This account is already logged in from this app.");
+	}
+	return t("发生错误。", "An error occurred.") + QChar('\n') + type;
+}
+
 QString Texts::text() const { return t("扫描结果", "Scan result"); }
 QString Texts::copy() const { return t("复制", "Copy"); }
 QString Texts::copied() const { return t("已复制", "Copied"); }

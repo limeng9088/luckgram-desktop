@@ -54,6 +54,9 @@ public:
 	[[nodiscard]] QString loginConfirm() const;
 	[[nodiscard]] QString login() const;
 	[[nodiscard]] QString loginDone() const;
+	// Mobile LuckgramScan: AUTH_TOKEN_EXCEPTION is "already logged in",
+	// anything else "An error occurred." and the code on the next line.
+	[[nodiscard]] QString loginError(const QString &type) const;
 	[[nodiscard]] QString text() const;
 	[[nodiscard]] QString copy() const;
 	[[nodiscard]] QString copied() const;

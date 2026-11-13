@@ -30,6 +30,18 @@ LUCKGRAM_TEST(ScanLogin) {
 	LG_CHECK(KindOf(U("tg://login?token=AQIDBA")) == Kind::Login);
 }
 
+LUCKGRAM_TEST(ScanLoginError) {
+	using Luckgram::Scan::Texts;
+	LG_EQUAL(
+		Texts(false).loginError(QStringLiteral("AUTH_TOKEN_EXCEPTION")),
+		QStringLiteral("This account is already logged in from this app."));
+	LG_EQUAL(
+		Texts(false).loginError(QStringLiteral("AUTH_TOKEN_EXPIRED")),
+		QStringLiteral("An error occurred.\nAUTH_TOKEN_EXPIRED"));
+	LG_CHECK(Texts(true).loginError(QStringLiteral("X")).endsWith(
+		QStringLiteral("\nX")));
+}
+
 LUCKGRAM_TEST(ScanProxies) {
 	using namespace Luckgram::Scan;
 	LG_CHECK(KindOf(U("tg://proxy?server=1.2.3.4&port=443&secret=ee00")) == Kind::Proxy);
