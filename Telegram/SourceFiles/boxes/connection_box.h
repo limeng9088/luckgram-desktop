@@ -77,6 +77,7 @@ public:
 		bool web = false;
 		bool canOpenBrowser = false;
 		ItemState state = ItemState::Checking;
+		QString luckgramExit; // Luckgram D3 (mobile #117): exit line.
 
 	};
 
@@ -97,6 +98,13 @@ public:
 
 	[[nodiscard]] bool contains(const ProxyData &proxy) const;
 	void addNewItem(const ProxyData &proxy);
+
+	// Luckgram D3 (mobile specs#118 / #117): subscription import adds and
+	// removes proxies without selecting them; exit checks for the rows.
+	[[nodiscard]] std::vector<ProxyData> luckgramList() const;
+	void luckgramAdd(const ProxyData &proxy);
+	void luckgramRemove(const ProxyData &proxy);
+	void luckgramCheckExits(bool force);
 
 	rpl::producer<ItemView> views() const;
 

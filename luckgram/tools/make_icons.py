@@ -23,13 +23,13 @@ def shape(size, margin_ratio=0.0, round_shape=False):
         d.rounded_rectangle((0, 0, inner - 1, inner - 1), radius=int(inner * 0.225), fill=255)
     out = Image.new('RGBA', (big, big), (0, 0, 0, 0))
     out.paste(img, (m, m), mask)
-    # thin outline so the light icon stays visible on light backgrounds
+    # thin light outline so the dark icon keeps its shape on dark backgrounds (taskbar, dock)
     ol = ImageDraw.Draw(out)
     w = max(SS, int(big / 128))
     if round_shape:
-        ol.ellipse((m, m, m + inner - 1, m + inner - 1), outline=(0, 0, 0, 40), width=w)
+        ol.ellipse((m, m, m + inner - 1, m + inner - 1), outline=(255, 255, 255, 40), width=w)
     else:
-        ol.rounded_rectangle((m, m, m + inner - 1, m + inner - 1), radius=int(inner * 0.225), outline=(0, 0, 0, 40), width=w)
+        ol.rounded_rectangle((m, m, m + inner - 1, m + inner - 1), radius=int(inner * 0.225), outline=(255, 255, 255, 40), width=w)
     return out.resize((size, size), Image.LANCZOS)
 
 # Upstream icons have a small transparent margin (~6%).

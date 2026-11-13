@@ -1,0 +1,156 @@
+/*
+This file is part of Luckgram Desktop, based on Telegram Desktop.
+
+Luckgram changes are licensed under GPL-3.0 like the upstream project.
+*/
+#include "luckgram/luckgram_storage.h"
+
+#include "luckgram/luckgram_storage_logic.h"
+#include "main/main_account.h"
+#include "main/main_session.h"
+#include "storage/details/storage_file_utilities.h"
+#include "storage/localstorage.h"
+#include "storage/serialize_common.h"
+#include "storage/storage_account.h"
+
+#include <QtCore/QDir>
+
+namespace Luckgram::Storage {
+namespace {
+
+using namespace ::Storage::details;
+
+[[nodiscard]] QByteArray Read(
+		const QString &folder,
+		const MTP::AuthKeyPtr &key,
+		const QString &name) {
+	const auto file = FileName(name);
+	if (!key || folder.isEmpty() || file.isEmpty()) {
+		return QByteArray();
+	}
+	auto descriptor = FileReadDescriptor();
+	if (!ReadEncryptedFile(descriptor, file, folder, key)) {
+		return QByteArray();
+	}
+	auto result = QByteArray();
+	descriptor.stream >> result;
+	return CheckStreamStatus(descriptor.stream) ? result : QByteArray();
+}
+
+[[nodiscard]] bool Write(
+		const QString &folder,
+		const MTP::AuthKeyPtr &key,
+		const QString &name,
+		const QByteArray &data) {
+	const auto file = FileName(name);
+	if (!key || folder.isEmpty() || file.isEmpty()) {
+		if (file.isEmpty()) {
+			LOG(("Luckgram Storage Error: bad name '%1'.").arg(name));
+		}
+		return false;
+	}
+	if (!QDir().exists(folder)) {
+		QDir().mkpath(folder);
+	}
+	auto encrypted = EncryptedDescriptor(Serialize::bytearraySize(data));
+	encrypted.stream << data;
+	auto descriptor = FileWriteDescriptor(file, folder);
+	descriptor.writeEncrypted(encrypted, key);
+	return true;
+}
+
+void Remove(const QString &folder, const QString &name) {
+	if (folder.isEmpty()) {
+		return;
+	}
+	// Through the same queue as the writes, so a pending write can't bring
+	// the file back after the removal.
+	auto paths = RecordPaths(folder, name);
+	ScheduleRemoveFiles({ paths.begin(), paths.end() });
+}
+
+[[nodiscard]] ::Storage::Account &AccountLocal(
+		not_null<Main::Account*> account) {
+	return account->local();
+}
+
+} // namespace
+
+bool AccountAvailable(not_null<Main::Account*> account) {
+	return AccountLocal(account).peekLegacyLocalKey() != nullptr;
+}
+
+QByteArray ReadAccount(
+		not_null<Main::Account*> account,
+		const QString &name) {
+	auto &local = AccountLocal(account);
+	return Read(local.basePath(), local.peekLegacyLocalKey(), name);
+}
+
+bool WriteAccount(
+		not_null<Main::Account*> account,
+		const QString &name,
+		const QByteArray &data) {
+	auto &local = AccountLocal(account);
+	return Write(local.basePath(), local.peekLegacyLocalKey(), name, data);
+}
+
+void RemoveAccount(not_null<Main::Account*> account, const QString &name) {
+	Remove(AccountLocal(account).basePath(), name);
+}
+
+bool AccountAvailable(not_null<Main::Session*> session) {
+	return AccountAvailable(&session->account());
+}
+
+QByteArray ReadAccount(
+		not_null<Main::Session*> session,
+		const QString &name) {
+	return ReadAccount(&session->account(), name);
+}
+
+bool WriteAccount(
+		not_null<Main::Session*> session,
+		const QString &name,
+		const QByteArray &data) {
+	return WriteAccount(&session->account(), name, data);
+}
+
+void RemoveAccount(not_null<Main::Session*> session, const QString &name) {
+	RemoveAccount(&session->account(), name);
+}
+
+void ClearAccount(const QString &basePath) {
+	if (basePath.isEmpty()) {
+		return;
+	}
+	const auto names = QDir(basePath).entryList(
+		QDir::Files | QDir::Hidden | QDir::System);
+	auto paths = LuckgramPaths(basePath, names);
+	ScheduleRemoveFiles({ paths.begin(), paths.end() });
+}
+
+bool SettingsAvailable() {
+	return ::Local::luckgramSettingsKey() != nullptr;
+}
+
+QByteArray ReadSettings(const QString &name) {
+	return Read(
+		::Local::luckgramSettingsPath(),
+		::Local::luckgramSettingsKey(),
+		name);
+}
+
+bool WriteSettings(const QString &name, const QByteArray &data) {
+	return Write(
+		::Local::luckgramSettingsPath(),
+		::Local::luckgramSettingsKey(),
+		name,
+		data);
+}
+
+void RemoveSettings(const QString &name) {
+	Remove(::Local::luckgramSettingsPath(), name);
+}
+
+} // namespace Luckgram::Storage
