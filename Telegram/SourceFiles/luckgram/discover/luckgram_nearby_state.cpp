@@ -140,6 +140,9 @@ void SetShowPhoto(bool show) {
 
 std::optional<QPointF> ManualLocation() {
 	const auto account = DiscoverStorage::Active();
+	if (!account) {
+		return std::nullopt; // Plain pre-D2 values stay until it can move.
+	}
 	const auto name = K(DiscoverStorage::kNearbyManualLocation);
 	if (Settings::Has(K(kLegacyLatKey)) || Settings::Has(K(kLegacyLonKey))) {
 		// Plain pre-D2 pair: moved once into the encrypted "lat,lon".
