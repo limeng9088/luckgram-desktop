@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "settings/sections/settings_luckgram_pro.h"
 
 #include "base/timer.h"
+#include "luckgram/discover/luckgram_square_ui.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_strings.h"
 #include "luckgram/pro/luckgram_pro.h"
@@ -378,6 +379,12 @@ void LuckgramAccount::rebuild() {
 	}
 	if (_state->status) {
 		if (linked) {
+			// D10 (26 需求 8): 「删除我的广场数据」 while Square is on.
+			if (Luckgram::SquareUi::FeatureEnabled()) {
+				AddActionRow(container, Luckgram::SquareUi::Tx().deleteMyData(), [=] {
+					Luckgram::SquareUi::DeleteMyData(_controller);
+				}, st::settingsAttentionButton);
+			}
 			AddActionRow(container, texts.unlink(), [=] {
 				unlink();
 			}, st::settingsAttentionButton);

@@ -33,7 +33,9 @@ namespace {
 	if (ucs4.size() <= max) {
 		return s;
 	}
-	return QString::fromUcs4(ucs4.constData(), max);
+	return QString::fromUcs4(
+		reinterpret_cast<const char32_t*>(ucs4.constData()),
+		max);
 }
 
 [[nodiscard]] QString OneLine(const QString &s) {
