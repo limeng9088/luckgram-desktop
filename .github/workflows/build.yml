@@ -534,6 +534,9 @@ jobs:
         env:
           _CL_: ${{ format('/MP{0}', vars.WIN_CL_MP || '4') }}
         run: |
+          rem configure.bat takes QT as an argument; in the environment it makes
+          rem the Qt package check compare "qt6" with the configured version.
+          set QT=
           set OUT=%TBUILD%\luckgram-desktop\out
           set APP=%RUNNER_TEMP%\shots-app
           if exist "%APP%" rmdir /s /q "%APP%"
@@ -552,6 +555,7 @@ jobs:
       - name: Switch the test login off again.
         if: always() && env.SELF_HOSTED == 'true'
         run: |
+          set QT=
           if exist "%TBUILD%\luckgram-desktop\out\CMakeCache.txt" cmake -D LUCKGRAM_CI_BUILD=OFF %TBUILD%\luckgram-desktop\out
 
       # Renders the logged-out screens (welcome, tray menu, about, settings) in
