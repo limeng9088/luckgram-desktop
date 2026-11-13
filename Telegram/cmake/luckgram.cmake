@@ -79,6 +79,8 @@ PRIVATE
     settings/sections/settings_luckgram_pro.cpp
     settings/sections/settings_luckgram_pro.h
     # D12 built-in Xray
+    luckgram/xray/luckgram_xray.cpp
+    luckgram/xray/luckgram_xray.h
     luckgram/xray/luckgram_xray_logic.cpp
     luckgram/xray/luckgram_xray_logic.h
     # D7 AI: pure logic (also in luckgram_tests)

@@ -9,6 +9,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/pro/luckgram_pro.h"
+#include "luckgram/xray/luckgram_xray.h"
 
 #include <QtCore/QDateTime>
 #include <QtCore/QJsonObject>
@@ -65,6 +66,7 @@ void Start() {
 	Api::EnsureRegistered();
 	RefreshRemoteConfig(); // At every launch.
 	Pro::Start(); // D12: Pro state from /v1/me.
+	Xray::Start(); // D12: the built-in proxy core, when there are nodes.
 	state.timer.setCallback([] { Check(); });
 	state.timer.callEach(kCheckInterval);
 }
