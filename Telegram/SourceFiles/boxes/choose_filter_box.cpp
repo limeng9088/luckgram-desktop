@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "boxes/choose_filter_box.h"
 
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "apiwrap.h"
 #include "base/qt/qt_key_modifiers.h"
 #include "boxes/filters/edit_filter_box.h"
@@ -220,7 +221,9 @@ bool ChooseFilterValidator::canAdd() const {
 		return false;
 	}
 	for (const auto &filter : _history->owner().chatsFilters().list()) {
-		if (filter.id() && !filter.contains(_history)) {
+		if (filter.id()
+			&& !Luckgram::Keywords::IsLocalFilterId(filter.id())
+			&& !filter.contains(_history)) {
 			return true;
 		}
 	}
@@ -288,8 +291,8 @@ void FillChooseFilterMenu(
 	const auto suppressClose = menu->lifetime().make_state<bool>(false);
 	for (const auto &filter : list) {
 		const auto id = filter.id();
-		if (!id) {
-			continue;
+		if (!id || Luckgram::Keywords::IsLocalFilterId(id)) {
+			continue; // Luckgram D9: keyword folders fill themselves.
 		}
 
 		const auto contains = menu->lifetime().make_state<bool>(

@@ -9,6 +9,11 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_hidden_chats.h"
 #include "luckgram/luckgram_store_restrictions.h"
+#include "luckgram/d9/luckgram_keyword_folders.h"
+#include "luckgram/d9/luckgram_notes.h"
+#include "luckgram/d9/luckgram_notes_widgets.h"
+#include "luckgram/d9/luckgram_profile_info.h"
+#include "luckgram/d9/luckgram_shared_activity.h"
 #include "luckgram/luckgram_strings.h"
 #include "luckgram/xray/luckgram_xray.h"
 #include "settings/sections/settings_luckgram_discover.h"
@@ -88,6 +93,45 @@ namespace {
 		.defaultValue = true,
 		.subpage = [] { return ::Settings::LuckgramHiddenChatsId(); },
 		.onToggled = HiddenChats::OnToggled,
+	});
+	// D9: same keys, texts and defaults as mobile LuckgramFeatures.
+	result.push_back({
+		.key = QString::fromLatin1(Notes::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "私人备注",
+		.titleEn = "Private notes",
+		.aboutZh = "给联系人、群组和频道写只有自己能看到的备注",
+		.aboutEn = "Notes about contacts, groups and channels that only you can see",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramNotes::Id(); },
+	});
+	result.push_back({
+		.key = QString::fromLatin1(Keywords::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "关键词文件夹",
+		.titleEn = "Keyword folders",
+		.aboutZh = "按关键词自动归类聊天（只在本机）",
+		.aboutEn = "Group chats by keyword (this device only)",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramKeywordFolders::Id(); },
+	});
+	result.push_back({
+		.key = QString::fromLatin1(ProfileInfo::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "资料详情",
+		.titleEn = "Profile details",
+		.aboutZh = "资料页显示 ID、大致注册时间，简介里的链接可以点开",
+		.aboutEn = "Show ID and approximate registration date; links in bios are clickable",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = QString::fromLatin1(SharedActivity::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "共同群动态",
+		.titleEn = "Activity in shared groups",
+		.aboutZh = "用户资料页显示对方最近在共同群组里发的消息",
+		.aboutEn = "Show a user's recent messages in your groups in common on their profile",
+		.defaultValue = true,
 	});
 	// ---- 发现 / Discover (D10)
 	result.push_back({

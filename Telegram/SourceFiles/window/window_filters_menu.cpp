@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_filters_menu.h"
 
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "menu/menu_mark_as_read.h"
 #include "mainwindow.h"
 #include "window/window_session_controller.h"
@@ -774,6 +775,15 @@ void FiltersMenu::showMenu(QPoint position, FilterId id) {
 			tr::lng_filters_setup_menu(tr::now),
 			crl::guard(&_outer, [=] { openFiltersSettings(); }),
 			&st::menuIconEdit);
+		if (Luckgram::Keywords::Enabled()) {
+			// Luckgram D9 (06 §1): new keyword folder.
+			addAction(
+				Luckgram::Keywords::MenuNewFolder(),
+				crl::guard(&_outer, [=] {
+					Luckgram::Keywords::ShowCreate(_session);
+				}),
+				&st::menuIconAddToFolder);
+		}
 
 		MarkAsReadMenu::AddChatListAction(
 			_session,

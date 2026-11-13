@@ -112,6 +112,14 @@ class FieldAutocomplete;
 struct FileChosen;
 } // namespace ChatHelpers
 
+namespace Luckgram::Notes {
+class NoteBar;
+} // namespace Luckgram::Notes
+
+namespace Luckgram::Keywords {
+class JumpBar;
+} // namespace Luckgram::Keywords
+
 namespace HistoryView {
 class StickerToast;
 class PaidReactionToast;
@@ -642,6 +650,8 @@ private:
 
 	void updatePinnedViewer();
 	void setupTranslateBar();
+	void setupLuckgramNoteBar(); // Luckgram D9 (05)
+	void setupLuckgramJumpBar(); // Luckgram D9 (06)
 	void setupPinnedTracker();
 	void checkPinnedBarState();
 	void clearHidingPinnedBar();
@@ -844,6 +854,13 @@ private:
 
 	std::unique_ptr<HistoryView::TranslateBar> _translateBar;
 	int _translateBarHeight = 0;
+
+	// Luckgram D9 (05): private note bar under the pinned message bar.
+	std::unique_ptr<Luckgram::Notes::NoteBar> _luckgramNoteBar;
+	int _luckgramNoteBarHeight = 0;
+	// Luckgram D9 (06): 「跳到下一个」 in chats opened from a keyword folder.
+	std::unique_ptr<Luckgram::Keywords::JumpBar> _luckgramJumpBar;
+	int _luckgramJumpBarHeight = 0;
 
 	std::unique_ptr<HistoryView::PinnedTracker> _pinnedTracker;
 	std::unique_ptr<Ui::PinnedBar> _pinnedBar;

@@ -2886,6 +2886,7 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/Telegram PREFIX Resources FILES ${
 target_include_directories(Telegram PRIVATE ${src_loc})
 
 include(cmake/luckgram.cmake) # Luckgram (D1)
+include(cmake/luckgram_d9.cmake) # Luckgram (D9)
 
 target_compile_definitions(Telegram
 PRIVATE
