@@ -19,6 +19,11 @@ PRIVATE
 
     # D5-D12: logic files and their tests, one block per task.
 
+    # D5 welcome, privacy, onboarding, version, login code help
+    luckgram/luckgram_onboarding_logic.cpp
+    luckgram/luckgram_onboarding_logic.h
+    luckgram/tests/luckgram_onboarding_tests.cpp
+
     # D12 Luckgram Pro, account link
     luckgram/pro/luckgram_pro_logic.cpp
     luckgram/pro/luckgram_pro_logic.h

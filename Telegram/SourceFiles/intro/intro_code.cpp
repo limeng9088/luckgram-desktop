@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "intro/intro_code.h"
 
+#include "luckgram/luckgram_onboarding.h"
+
 #include "lang/lang_keys.h"
 #include "intro/intro_code_input.h"
 #include "intro/intro_signup.h"
@@ -45,6 +47,7 @@ CodeWidget::CodeWidget(
 	}, lifetime());
 
 	_noTelegramCode->addClickHandler([=] { noTelegramCode(); });
+	Luckgram::SetupCodeHelp(this, _noTelegramCode.data()); // D5
 
 	_code->setDigitsCountMax(getData()->codeLength);
 

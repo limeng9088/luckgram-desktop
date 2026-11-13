@@ -274,6 +274,7 @@ void Step::resizeEvent(QResizeEvent *e) {
 void Step::updateLabelsPosition() {
 	Ui::SendPendingMoveResizeEvents(_description->entity());
 	if (hasCover()) {
+		_description->resizeToWidth(Luckgram::WelcomeTextWidth(width())); // Luckgram D5
 		_title->moveToLeft((width() - _title->width()) / 2, contentTop() + st::introCoverTitleTop);
 		_description->moveToLeft((width() - _description->width()) / 2, contentTop() + st::introCoverDescriptionTop);
 	} else {

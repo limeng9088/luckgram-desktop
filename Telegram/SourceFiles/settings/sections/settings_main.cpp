@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_main.h"
 
 #include "settings/sections/settings_luckgram.h"
+#include "luckgram/luckgram_onboarding.h"
 
 #include "settings/settings_common_session.h"
 
@@ -768,6 +769,7 @@ void Main::setupContent() {
 		BuildInterfaceScale(builder);
 		BuildPremiumSection(builder);
 		BuildHelpSection(builder);
+		Luckgram::AddVersionRow(container, controller); // Luckgram D5 (28)
 
 		std::move(showFinished) | rpl::on_next([=] {
 			for (const auto &[id, entry] : *highlights) {

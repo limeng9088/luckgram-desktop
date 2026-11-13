@@ -28,6 +28,10 @@ PRIVATE
     luckgram/luckgram_desktop.h
     luckgram/luckgram_intro.cpp
     luckgram/luckgram_intro.h
+    luckgram/luckgram_onboarding.cpp
+    luckgram/luckgram_onboarding.h
+    luckgram/luckgram_onboarding_logic.cpp
+    luckgram/luckgram_onboarding_logic.h
     luckgram/luckgram_screenshots.cpp
     luckgram/luckgram_screenshots.h
     luckgram/luckgram_ci_login.cpp
