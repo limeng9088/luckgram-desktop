@@ -67,6 +67,10 @@ PRIVATE
     luckgram/luckgram_service.h
     luckgram/luckgram_settings.cpp
     luckgram/luckgram_settings.h
+    luckgram/luckgram_storage.cpp
+    luckgram/luckgram_storage.h
+    luckgram/luckgram_storage_logic.cpp
+    luckgram/luckgram_storage_logic.h
     luckgram/luckgram_strings.cpp
     luckgram/luckgram_strings.h
     settings/sections/settings_luckgram.cpp
