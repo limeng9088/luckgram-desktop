@@ -5,6 +5,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/luckgram_api.h"
 
+#include "luckgram/luckgram_desktop.h"
 #include "luckgram/luckgram_features.h"
 #include "luckgram/luckgram_secure_store.h"
 #include "luckgram/luckgram_settings.h"
@@ -209,6 +210,13 @@ private:
 		request.setRawHeader(
 			"X-Luckgram-App-Version",
 			QByteArray(AppVersionStr));
+		// specs#164: the server checks the build number for flags such
+		// as free_for_all. Local builds (0) leave it out, like mobile.
+		if (const auto build = BuildNumber(); build > 0) {
+			request.setRawHeader(
+				"X-Luckgram-App-Build",
+				QByteArray::number(build));
+		}
 		if (!_args.contentType.isEmpty()) {
 			request.setRawHeader("Content-Type", _args.contentType);
 		}
