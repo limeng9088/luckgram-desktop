@@ -14,8 +14,10 @@ namespace Luckgram {
 // about box and settings of a fresh (logged out) client in English, switches
 // to Simplified Chinese, renders them again into that folder, then (only in
 // the CI build, see luckgram_ci_login.h) signs in on Telegram's
-// test servers and renders the main window, settings and tray menu, and
-// quits.
+// test servers, turns every Luckgram switch on (not double_bottom) and
+// renders the main window and one screen per feature, named by desktop
+// task (zh-D7-ai-assistant.png, ...; settings pages also as -full.png with
+// the whole page), and quits.
 // Rendering uses QWidget::grab(), so it works without an interactive desktop
 // (the self-hosted runner service).
 void RunScreenshotsIfRequested();

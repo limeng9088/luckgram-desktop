@@ -10,16 +10,37 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #if LUCKGRAM_CI_BUILD
 
 #include "boxes/about_box.h"
+#include "boxes/connection_box.h"
 #include "core/application.h"
 #include "lang/lang_cloud_manager.h"
 #include "lang/lang_keys.h"
 #include "logs.h"
 #include "luckgram/luckgram_ci_login.h"
+#include "luckgram/ai/ai_assistant.h"
+#include "luckgram/d9/luckgram_keyword_folders.h"
 #include "luckgram/luckgram_desktop.h"
+#include "luckgram/luckgram_features.h"
+#include "luckgram/luckgram_hidden_chats.h"
+#include "luckgram/luckgram_settings.h"
+#include "data/data_user.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
+#include "main/main_session.h"
+#include "settings/settings_common.h"
+#include "settings/sections/settings_advanced.h"
+#include "settings/sections/settings_local_storage.h"
+#include "settings/sections/settings_luckgram.h"
+#include "settings/sections/settings_luckgram_backup.h"
+#include "settings/sections/settings_luckgram_call_recording.h"
+#include "settings/sections/settings_luckgram_discover.h"
+#include "settings/sections/settings_luckgram_privacy.h"
+#include "settings/sections/settings_luckgram_pro.h"
+#include "settings/sections/settings_luckgram_translate.h"
+#include "ui/abstract_button.h"
+#include "window/window_session_controller.h"
 #include "mainwindow.h"
 #include "ui/layers/generic_box.h"
+#include "ui/widgets/dropdown_menu.h"
 #include "ui/widgets/popup_menu.h"
 #include "window/window_controller.h"
 
@@ -160,6 +181,119 @@ void CaptureSet(const QString &dir, const QString &prefix, Fn<void()> done) {
 	RunSteps(steps, 0);
 }
 
+[[nodiscard]] Window::SessionController *Session() {
+	const auto window = PrimaryWindow();
+	return window ? window->sessionController() : nullptr;
+}
+
+// The widest settings page shown: QWidget::grab() renders the whole
+// section, also the part scrolled out of the window.
+[[nodiscard]] ::Settings::AbstractSection *ShownSection() {
+	auto result = (::Settings::AbstractSection*)nullptr;
+	for (const auto widget : QApplication::allWidgets()) {
+		if (const auto section = dynamic_cast<::Settings::AbstractSection*>(widget)) {
+			if (section->isVisible()
+				&& (!result || section->height() > result->height())) {
+				result = section;
+			}
+		}
+	}
+	return result;
+}
+
+// Popup and dropdown menus are their own top level windows.
+void GrabMenus(const QString &base) {
+	auto index = 0;
+	for (const auto widget : QApplication::topLevelWidgets()) {
+		if (!widget->isVisible()) {
+			continue;
+		} else if (const auto menu = dynamic_cast<Ui::PopupMenu*>(widget)) {
+			Save(base + u"-menu%1.png"_q.arg(++index), Opaque(menu->grab()));
+		} else if (const auto dropdown = dynamic_cast<Ui::DropdownMenu*>(widget)) {
+			Save(base + u"-menu%1.png"_q.arg(++index), Opaque(dropdown->grab()));
+		}
+	}
+}
+
+[[nodiscard]] Ui::AbstractButton *FindButton(const QString &name) {
+	for (const auto widget : QApplication::allWidgets()) {
+		if (widget->objectName() == name && widget->isVisible()) {
+			if (const auto button = dynamic_cast<Ui::AbstractButton*>(widget)) {
+				return button;
+			}
+		}
+	}
+	return nullptr;
+}
+
+void CloseAll() {
+	for (const auto widget : QApplication::topLevelWidgets()) {
+		if (widget->isVisible()
+			&& (dynamic_cast<Ui::PopupMenu*>(widget)
+				|| dynamic_cast<Ui::DropdownMenu*>(widget))) {
+			widget->hide();
+		}
+	}
+	if (const auto window = PrimaryWindow()) {
+		window->hideSettingsAndLayer(anim::type::instant);
+	}
+}
+
+// Every Luckgram switch on (not double_bottom: it needs passcodes and its
+// confirm hook), so all entries are there to be seen. CI test account only.
+void EnableAllFeatures() {
+	for (const auto &feature : Features::All()) {
+		if (feature.group != Features::Group::Debug
+			&& feature.key != u"double_bottom"_q) {
+			Settings::SetEnabled(feature.key, true);
+		}
+	}
+	Log(u"all features on"_q);
+}
+
+struct Shot {
+	QString name; // D<n>-<what>, also the file name.
+	Fn<void(not_null<Window::SessionController*>)> show;
+	int wait = 0;
+	bool section = false; // Also the full settings page.
+	QString click; // objectName of a button to click before grabbing.
+};
+
+[[nodiscard]] std::vector<Shot> FeatureShots() {
+	using Controller = not_null<Window::SessionController*>;
+	const auto settings = [](::Settings::Type type) {
+		return [=](Controller controller) {
+			controller->showSettings(type);
+		};
+	};
+	const auto self = [](Controller controller) {
+		return controller->session().user();
+	};
+	return {
+		{ u"D5-luckgram-features"_q, settings(::Settings::LuckgramFeatures::Id()), 0, true },
+		{ u"D7-ai-assistant"_q, [](Controller c) { Luckgram::AI::OpenAssistant(c); }, 3000 },
+		{ u"D7-chat-list-ai-row"_q, [](Controller c) { c->clearSectionStack(); } },
+		{ u"D7-ai-menu"_q, [=](Controller c) { c->showPeerHistory(self(c)); }, 3000, false, u"luckgram-ai-writing"_q },
+		{ u"D6-translate"_q, settings(::Settings::LuckgramTranslateIn::Id()), 0, true },
+		{ u"D10-discover"_q, settings(::Settings::LuckgramDiscover::Id()), 0, true },
+		{ u"D10-square"_q, settings(::Settings::LuckgramSquare::Id()), 4000, true },
+		{ u"D10-nearby"_q, settings(::Settings::LuckgramNearby::Id()), 3000, true },
+		{ u"D8-double-bottom"_q, settings(::Settings::LuckgramDoubleBottomId()), 0, true },
+		{ u"D8-hidden-chats-settings"_q, settings(::Settings::LuckgramHiddenChatsId()), 0, true },
+		{ u"D8-hidden-chats"_q, [](Controller c) { Luckgram::HiddenChats::Open(c); }, 2000 },
+		{ u"D12-proxy-xray"_q, [](Controller c) {
+			c->show(ProxiesBoxController::CreateOwningBox(&c->session().account()));
+		}, 2000 },
+		{ u"D12-pro"_q, settings(::Settings::LuckgramPro::Id()), 3000, true },
+		{ u"D12-backup"_q, settings(::Settings::LuckgramBackup::Id()), 0, true },
+		{ u"D9-profile"_q, [=](Controller c) { c->showPeerInfo(self(c)); }, 3000 },
+		{ u"D9-keyword-folders"_q, settings(::Settings::LuckgramKeywordFolders::Id()), 0, true },
+		{ u"D9-storage"_q, settings(::Settings::LocalStorageId()), 2000, true },
+		{ u"D11-call-recording"_q, settings(::Settings::LuckgramCallRecordingId()), 0, true },
+		{ u"D4-advanced-update"_q, settings(::Settings::AdvancedId()), 0, true },
+	};
+}
+
 void CaptureLoggedIn(const QString &dir, Fn<void()> done) {
 	const auto base = dir + u"/zh-"_q;
 	auto steps = std::make_shared<std::vector<Step>>();
@@ -169,20 +303,49 @@ void CaptureLoggedIn(const QString &dir, Fn<void()> done) {
 			window->widget()->resize(1200, 760);
 		}
 	} });
+	// Whatever shows first after the login (D5 onboarding pages).
+	steps->push_back({ kStepDelay, [=] {
+		GrabWindow(base + u"D5-after-login.png"_q);
+		GrabMenus(base + u"D5-after-login"_q);
+	} });
+	steps->push_back({ 0, [] {
+		CloseAll();
+		EnableAllFeatures();
+	} });
 	steps->push_back({ kStepDelay, [=] {
 		GrabWindow(base + u"5-main.png"_q);
 	} });
-	steps->push_back({ 0, [] {
-		if (const auto window = PrimaryWindow()) {
-			window->showSettings();
+	for (const auto &shot : FeatureShots()) {
+		steps->push_back({ 0, [=] {
+			CloseAll();
+			if (const auto controller = Session()) {
+				Log(u"show "_q + shot.name);
+				shot.show(controller);
+			} else {
+				Log(u"no session for "_q + shot.name);
+			}
+		} });
+		if (!shot.click.isEmpty()) {
+			steps->push_back({ kStepDelay + shot.wait, [=] {
+				if (const auto button = FindButton(shot.click)) {
+					button->clicked({}, Qt::LeftButton);
+				} else {
+					Log(u"no button "_q + shot.click);
+				}
+			} });
 		}
-	} });
-	steps->push_back({ kStepDelay * 2, [=] {
-		GrabWindow(base + u"6-settings.png"_q);
-		if (const auto window = PrimaryWindow()) {
-			window->hideSettingsAndLayer(anim::type::instant);
-		}
-	} });
+		steps->push_back({ kStepDelay + (shot.click.isEmpty() ? shot.wait : 0), [=] {
+			const auto name = base + shot.name;
+			GrabWindow(name + u".png"_q);
+			if (shot.section) {
+				if (const auto section = ShownSection()) {
+					Save(name + u"-full.png"_q, Opaque(section->grab()));
+				}
+			}
+			GrabMenus(name);
+		} });
+	}
+	steps->push_back({ 0, [] { CloseAll(); } });
 	steps->push_back({ 0, [] {
 		if (const auto menu = TrayMenu()) {
 			menu->popup(QPoint(200, 200));
