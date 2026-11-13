@@ -50,6 +50,18 @@ PRIVATE
     luckgram/discover/luckgram_square_ui.h
     luckgram/media/luckgram_image_prepare.cpp
     luckgram/media/luckgram_image_prepare.h
+    luckgram/media/luckgram_round_video.cpp
+    luckgram/media/luckgram_round_video.h
+    luckgram/media/luckgram_round_video_logic.cpp
+    luckgram/media/luckgram_round_video_logic.h
+    luckgram/calls/luckgram_call_recording.cpp
+    luckgram/calls/luckgram_call_recording.h
+    luckgram/calls/luckgram_call_recording_encoder.cpp
+    luckgram/calls/luckgram_call_recording_encoder.h
+    luckgram/calls/luckgram_call_recording_logic.cpp
+    luckgram/calls/luckgram_call_recording_logic.h
+    settings/sections/settings_luckgram_call_recording.cpp
+    settings/sections/settings_luckgram_call_recording.h
     luckgram/media/luckgram_video_transcode.cpp
     luckgram/media/luckgram_video_transcode.h
     settings/sections/settings_luckgram_discover.cpp
@@ -233,3 +245,17 @@ if (LINUX)
     target_link_libraries(lib_luckgram_quirc PUBLIC m)
 endif()
 target_link_libraries(Telegram PRIVATE lib_luckgram_quirc)
+
+# Call recording (D11): the audio device module wrapper is the only Luckgram
+# code built against tg_owt headers, so it gets its own library and the
+# WebRTC defines stay out of the Telegram target.
+add_library(lib_luckgram_call_tap STATIC)
+init_target(lib_luckgram_call_tap)
+nice_target_sources(lib_luckgram_call_tap ${src_loc}
+PRIVATE
+    luckgram/calls/luckgram_call_audio_tap.cpp
+    luckgram/calls/luckgram_call_audio_tap.h
+)
+target_include_directories(lib_luckgram_call_tap PUBLIC ${src_loc})
+target_link_libraries(lib_luckgram_call_tap PRIVATE desktop-app::external_webrtc)
+target_link_libraries(Telegram PRIVATE lib_luckgram_call_tap)

@@ -29,6 +29,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/boxes/confirm_box.h"
 #include "ui/boxes/rate_call_box.h"
 #include "webrtc/webrtc_create_adm.h"
+#include "luckgram/calls/luckgram_call_recording.h" // Luckgram (D11)
 #include "webrtc/webrtc_environment.h"
 #include "webrtc/webrtc_video_track.h"
 #include "window/window_controller.h"
@@ -1212,8 +1213,9 @@ void Call::createAndStartController(const MTPDphoneCall &call) {
 				sendSignalingData(bytes);
 			});
 		},
-		.createAudioDeviceModule = Webrtc::AudioDeviceModuleCreator(
-			saveSetDeviceIdCallback),
+		.createAudioDeviceModule = Luckgram::CallRecording::WrapAudioDeviceModule(
+			this,
+			Webrtc::AudioDeviceModuleCreator(saveSetDeviceIdCallback)),
 	};
 	if (Logs::DebugEnabled()) {
 		const auto callLogFolder = cWorkingDir() + u"DebugLogs"_q;
