@@ -142,6 +142,8 @@ PRIVATE
     luckgram/ai/ai_assistant_row.cpp
     luckgram/ai/ai_assistant_row.h
     luckgram/ai/ai_assistant.h
+    luckgram/ai/ai_image.cpp
+    luckgram/ai/ai_image.h
     luckgram/ai/ai_registry.cpp
     luckgram/ai/ai_registry.h
     luckgram/ai/ai_store.cpp
@@ -163,6 +165,8 @@ PRIVATE
     luckgram/ai/ai_agents_logic.h
     luckgram/ai/ai_compose_logic.cpp
     luckgram/ai/ai_compose_logic.h
+    luckgram/ai/ai_image_logic.cpp
+    luckgram/ai/ai_image_logic.h
     luckgram/ai/ai_conversation_logic.cpp
     luckgram/ai/ai_conversation_logic.h
     luckgram/ai/ai_market_logic.cpp

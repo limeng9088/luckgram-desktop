@@ -8,6 +8,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/ai/ai_agents.h"
 #include "luckgram/ai/ai_assistant.h"
 #include "luckgram/ai/ai_compose_logic.h"
+#include "luckgram/ai/ai_image.h"
 #include "luckgram/ai/ai_store.h"
 #include "luckgram/ai/ai_text_logic.h"
 #include "luckgram/luckgram_features.h"
@@ -246,6 +247,7 @@ void RegisterAll() {
 	RegisterDebugDemos();
 	// ---- features that extend the assistant register here (22, 23, 30) ----
 	Agents::Register(); // 22: 「智能体」 at the top of the assistant page.
+	Draw::Register(); // 23 AI 画图
 }
 
 } // namespace Luckgram::AI
