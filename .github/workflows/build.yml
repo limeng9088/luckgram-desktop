@@ -29,6 +29,10 @@ name: Build
 # Compiles only on master pushes and manual runs (w-1109, 2026-11-13:
 # no compiling for PRs, they get lint.yml only, so the self-hosted
 # Windows machine is never held by a PR).
+# Master pushes compile only while the repository variable BUILD_ON_PUSH
+# is 'true' (w-1109: off until the unified build is through, so merges do
+# not hold aws-win; turn it on when releases come from push builds). With
+# it off a push runs only the installer check here (hosted) and lint.yml.
 on:
   push:
     branches: [master]
@@ -72,6 +76,9 @@ env:
 jobs:
   credentials:
     name: Check API credentials
+    # Every compiling job needs this one, so skipping it on a push skips
+    # libs, build, mac-libs, macos and both releases.
+    if: github.event_name != 'push' || vars.BUILD_ON_PUSH == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: TG_API_ID / TG_API_HASH secrets
@@ -862,7 +869,7 @@ jobs:
         # Keeps the generated sources (Libraries/local/src: wallet_engine.cpp,
         # which cmake/external/wallet_engine compiles).
         if: always() && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'skipped'
-        run: find Libraries '(' '(' ! '(' -name '*.a' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path 'Libraries/local/src/*' -o -path '*/tdesktop_rust/out/*' -o -perm +111 ')' -type f ')' -o -empty ')' -delete || true
+        run: find Libraries '(' '(' ! '(' -name '*.a' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path 'Libraries/local/src/*' -o -perm +111 ')' -type f ')' -o -empty ')' -delete || true
 
       - name: Check generated sources.
         if: steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
