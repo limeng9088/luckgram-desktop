@@ -747,60 +747,77 @@ QImage ReadFrame(const QString &path, qint64 atMs) {
 		: stream->start_time;
 	auto packet = av_packet_alloc();
 	auto frame = MakeFramePointer();
+	auto last = MakeFramePointer(); // Latest frame before atMs.
 	const auto guard = gsl::finally([&] { av_packet_free(&packet); });
 	auto result = QImage();
 	auto sws = (SwsContext*)nullptr;
+	const auto convert = [&](AVFrame *source) {
+		auto image = QImage(
+			source->width,
+			source->height,
+			QImage::Format_ARGB32);
+		sws = sws_getCachedContext(
+			sws,
+			source->width,
+			source->height,
+			AVPixelFormat(source->format),
+			source->width,
+			source->height,
+			AV_PIX_FMT_BGRA,
+			SWS_BICUBIC,
+			nullptr,
+			nullptr,
+			nullptr);
+		if (!sws) {
+			return QImage();
+		}
+		uint8_t *data[AV_NUM_DATA_POINTERS] = { image.bits() };
+		int linesize[AV_NUM_DATA_POINTERS] = {
+			int(image.bytesPerLine()),
+		};
+		sws_scale(
+			sws,
+			source->data,
+			source->linesize,
+			0,
+			source->height,
+			data,
+			linesize);
+		return input.rotation
+			? image.transformed(QTransform().rotate(input.rotation))
+			: image;
+	};
+	const auto receive = [&] {
+		while (result.isNull()
+			&& avcodec_receive_frame(decoder.get(), frame.get()) >= 0) {
+			const auto pts = (frame->best_effort_timestamp != AV_NOPTS_VALUE)
+				? frame->best_effort_timestamp
+				: frame->pts;
+			if (pts != AV_NOPTS_VALUE
+				&& PtsToTime(pts - start, stream->time_base) < atMs) {
+				av_frame_unref(last.get());
+				av_frame_move_ref(last.get(), frame.get());
+				continue;
+			}
+			result = convert(frame.get());
+			av_frame_unref(frame.get());
+		}
+	};
 	while (result.isNull() && av_read_frame(input.format.get(), packet) >= 0) {
 		if (packet->stream_index == input.videoIndex
 			&& avcodec_send_packet(decoder.get(), packet) >= 0) {
-			while (result.isNull()
-				&& avcodec_receive_frame(decoder.get(), frame.get()) >= 0) {
-				const auto pts = (frame->best_effort_timestamp != AV_NOPTS_VALUE)
-					? frame->best_effort_timestamp
-					: frame->pts;
-				if (pts != AV_NOPTS_VALUE
-					&& PtsToTime(pts - start, stream->time_base) < atMs) {
-					av_frame_unref(frame.get());
-					continue;
-				}
-				auto image = QImage(
-					frame->width,
-					frame->height,
-					QImage::Format_ARGB32);
-				sws = sws_getCachedContext(
-					sws,
-					frame->width,
-					frame->height,
-					AVPixelFormat(frame->format),
-					frame->width,
-					frame->height,
-					AV_PIX_FMT_BGRA,
-					SWS_BICUBIC,
-					nullptr,
-					nullptr,
-					nullptr);
-				if (sws) {
-					uint8_t *data[AV_NUM_DATA_POINTERS] = { image.bits() };
-					int linesize[AV_NUM_DATA_POINTERS] = {
-						int(image.bytesPerLine()),
-					};
-					sws_scale(
-						sws,
-						frame->data,
-						frame->linesize,
-						0,
-						frame->height,
-						data,
-						linesize);
-					result = input.rotation
-						? image.transformed(
-							QTransform().rotate(input.rotation))
-						: image;
-				}
-				av_frame_unref(frame.get());
-			}
+			receive();
 		}
 		av_packet_unref(packet);
+	}
+	if (result.isNull()) {
+		// End of file: the decoder still holds the last frames (review P3).
+		avcodec_send_packet(decoder.get(), nullptr);
+		receive();
+	}
+	if (result.isNull() && last->data[0]) {
+		// atMs past every frame: the last one rather than nothing.
+		result = convert(last.get());
 	}
 	if (sws) {
 		sws_freeContext(sws);
