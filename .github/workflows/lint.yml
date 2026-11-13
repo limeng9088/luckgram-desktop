@@ -1,0 +1,26 @@
+name: Lint
+
+# Quick checks without compiling: conflict markers, CMake source lists,
+# duplicate language keys. Finishes in well under a minute.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+          fetch-depth: 1
+      - name: Luckgram lint
+        run: python3 -I .github/scripts/luckgram_lint.py --github
