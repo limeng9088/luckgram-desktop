@@ -431,7 +431,25 @@ jobs:
       - name: Libraries (self-hosted, same machine as the app).
         if: env.SELF_HOSTED == 'true'
         timeout-minutes: 200
+        env:
+          # Parallel jobs for the libraries (xs-master: ~1 GB free next to the
+          # emulators). prepare.py takes them from three places, all set here:
+          #   jom -j%NUMBER_OF_PROCESSORS%          (Qt 5, OpenSSL)
+          #   cmake --build on Ninja: CMAKE_BUILD_PARALLEL_LEVEL (Qt 6, most
+          #     CMake libraries; MSBuild ones build one project at a time)
+          #   make MAKE_THREADS_CNT = os.cpu_count(): PYTHON_CPU_COUNT
+          #     (Python 3.13+; older Python keeps the real count)
+          # and _CL_ caps cl /MP. Not covered: 'msbuild -m' (LZMA, dump_syms)
+          # and the direct 'ninja' of breakpad, both small.
+          LIBS_JOBS: ${{ vars.WIN_LIBS_PARALLEL || '2' }}
+          LIBS_CL: ${{ format('/MP{0}', vars.WIN_CL_MP || '2') }}
         run: |
+          set NUMBER_OF_PROCESSORS=%LIBS_JOBS%
+          set CMAKE_BUILD_PARALLEL_LEVEL=%LIBS_JOBS%
+          set PYTHON_CPU_COUNT=%LIBS_JOBS%
+          set _CL_=%LIBS_CL%
+          echo Libraries: %LIBS_JOBS% jobs, _CL_=%_CL_%
+          python -c "import os, sys; print('Python', sys.version.split()[0], 'cpu_count', os.cpu_count())"
           git config --global user.email >nul 2>&1 || git config --global user.email "ci@luckgram.invalid"
           git config --global user.name >nul 2>&1 || git config --global user.name "Luckgram CI"
           nuget sources Disable -Name "Microsoft Visual Studio Offline Packages" >nul 2>&1
