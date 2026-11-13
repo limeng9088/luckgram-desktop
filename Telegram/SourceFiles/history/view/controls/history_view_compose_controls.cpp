@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/controls/history_view_compose_controls.h"
 
+#include "luckgram/luckgram_compose_slots.h"
+
 #include "history/view/controls/history_view_bot_menu_button.h"
 
 #include "base/call_delayed.h"
@@ -2843,6 +2845,15 @@ void ComposeControls::show() {
 }
 
 void ComposeControls::init() {
+	_luckgramSlots = std::make_unique<Luckgram::Compose::RightSlots>(
+		Luckgram::Compose::SlotContext{
+			.parent = _wrap.get(),
+			.field = _field,
+			.show = _show,
+			.history = [=] { return _history; },
+		},
+		_send.get(),
+		[=] { updateControlsGeometry(_wrap->size()); });
 	if (session().settings().shouldShowStashHint()) {
 		_stashHintManager = std::make_unique<Controls::StashHintManager>(
 			Controls::StashHintDescriptor{
@@ -5064,6 +5075,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		- (_sendAs ? _sendAs->width() : 0)
 		- _st.padding.right()
 		- _send->width()
+		- (_luckgramSlots ? _luckgramSlots->width() : 0)
 		- (_editStars ? _editStars->width() : 0)
 		- (_tabbedSelectorToggle->isHidden()
 			? 0
@@ -5148,6 +5160,9 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 	right += _st.padding.right();
 	_send->moveToRight(right, buttonsTop);
 	right += _send->width();
+	if (_luckgramSlots) {
+		right = _luckgramSlots->moveToRight(right, buttonsTop);
+	}
 	if (_editStars) {
 		_editStars->moveToRight(right, buttonsTop);
 		right += _editStars->width();
