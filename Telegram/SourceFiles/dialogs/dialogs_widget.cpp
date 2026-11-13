@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/dialogs_widget.h"
 
+#include "luckgram/ai/ai_assistant_row.h" // Luckgram D7
+
 #include "base/call_delayed.h"
 #include "base/qt/qt_key_modifiers.h"
 #include "base/options.h"
@@ -472,6 +474,14 @@ Widget::Widget(
 	_scroll->setOverscrollPullDistances(st::dialogsStoriesFull.height, 0);
 	_innerList = _scroll->setOwnedWidget(
 		object_ptr<Ui::VerticalLayout>(this));
+	if (_layout != Layout::Child) { // Luckgram D7 (18 需求 1)
+		Luckgram::AI::AddChatListRow(_innerList, controller, rpl::combine(
+			_openedFolderOrForum.value(),
+			_searchStateForTopBarSuggestion.events_starting_with(false)
+		) | rpl::map([](bool folderOrForum, bool search) {
+			return !folderOrForum && !search;
+		}));
+	}
 	_inner = _innerList->add(object_ptr<InnerWidget>(
 		_innerList,
 		controller,

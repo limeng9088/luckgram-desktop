@@ -117,6 +117,8 @@ PRIVATE
     settings/sections/settings_luckgram_translate.h
     # D7 AI
     luckgram/ai/ai_assistant.cpp
+    luckgram/ai/ai_assistant_row.cpp
+    luckgram/ai/ai_assistant_row.h
     luckgram/ai/ai_assistant.h
     luckgram/ai/ai_registry.cpp
     luckgram/ai/ai_registry.h
