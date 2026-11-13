@@ -22,6 +22,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_features.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/luckgram_strings.h"
+#include "luckgram/pro/luckgram_pro.h"
 #include "main/main_session.h"
 #include "settings/settings_common.h"
 #include "settings/settings_common_session.h"
@@ -503,7 +504,12 @@ ChatSection::~ChatSection() {
 }
 
 rpl::producer<QString> ChatSection::title() {
-	return rpl::single(u"Luckgram AI"_q);
+	// 18 需求 8 "对话属性": a feature's conversation (agent:<id>, ...) shows
+	// its own name; ordinary chats are "Luckgram AI".
+	const auto &title = _conversation.title;
+	return rpl::single((_conversation.key && title && !title->isEmpty())
+		? *title
+		: u"Luckgram AI"_q);
 }
 
 void ChatSection::fillTopBarMenu(const Ui::Menu::MenuCallback &addAction) {
@@ -882,6 +888,9 @@ void ChatSection::request() {
 			finish(text, QString());
 		}),
 		crl::guard(this, [=](Api::Error error) {
+			// 29 需求 6: not_pro / quota_exceeded / credits_exhausted open
+			// the upgrade box; the bubble still shows the error.
+			Pro::HandleError(controller(), error);
 			const auto pending = findMessage(_pendingId);
 			finish(
 				pending ? pending->text.value_or(QString()) : QString(),
