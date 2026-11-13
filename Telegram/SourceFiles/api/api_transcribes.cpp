@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "api/api_transcribes.h"
+#include "luckgram/transcribe/luckgram_transcribe.h" // Luckgram D6
 
 #include "apiwrap.h"
 #include "api/api_text_entities.h"
@@ -56,6 +57,9 @@ void Transcribes::rate(not_null<HistoryItem*> item, bool isGood) {
 }
 
 bool Transcribes::freeFor(not_null<HistoryItem*> item) const {
+	if (Luckgram::Transcribe::FreeFor(item)) {
+		return true; // Luckgram D6 (mobile 17): free for non-Premium.
+	}
 	if (const auto channel = item->history()->peer->asMegagroup()) {
 		const auto owner = &channel->owner();
 		return channel->levelHint() >= owner->groupFreeTranscribeLevel();
@@ -105,6 +109,12 @@ void Transcribes::toggle(not_null<HistoryItem*> item) {
 	const auto id = item->fullId();
 	auto i = _map.find(id);
 	if (i == _map.end()) {
+		load(item);
+		_session->data().requestItemResize(item);
+	} else if (!i->second.requestId
+			&& i->second.failed
+			&& Luckgram::Transcribe::FreeFor(item)) {
+		_map.erase(i); // Luckgram D6: 「重试」 after a failure.
 		load(item);
 		_session->data().requestItemResize(item);
 	} else if (!i->second.requestId) {
@@ -185,6 +195,34 @@ void Transcribes::load(not_null<HistoryItem*> item) {
 		}
 	};
 	const auto id = item->fullId();
+	if (Luckgram::Transcribe::FreeFor(item)) {
+		// Luckgram D6 (mobile 17): POST /v1/ai/transcribe instead.
+		const auto finish = [=](QString text, bool failed, bool toolong) {
+			auto &entry = _map[id];
+			entry.requestId = 0;
+			entry.pending = false;
+			entry.result = text;
+			entry.failed = failed;
+			entry.toolong = toolong;
+			if (const auto item = _session->data().message(id)) {
+				toggleRound(item, entry);
+				_session->data().requestItemResize(item);
+			}
+		};
+		auto &entry = _map.emplace(id).first->second;
+		entry.requestId = -1; // Loading, no MTP request.
+		entry.shown = true;
+		entry.failed = false;
+		entry.toolong = false;
+		entry.pending = false;
+		Luckgram::Transcribe::Request(item, crl::guard(_session, [=](
+				QString text) {
+			finish(text, false, false);
+		}), crl::guard(_session, [=](bool toolong) {
+			finish(QString(), true, toolong);
+		}));
+		return;
+	}
 	const auto requestId = _api.request(MTPmessages_TranscribeAudio(
 		item->history()->peer->input(),
 		MTP_int(item->id)

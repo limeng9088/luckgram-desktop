@@ -85,6 +85,10 @@ PRIVATE
     luckgram/luckgram_strings.h
     luckgram/translate/translate_logic.cpp
     luckgram/translate/translate_logic.h
+    luckgram/transcribe/luckgram_transcribe.cpp
+    luckgram/transcribe/luckgram_transcribe.h
+    luckgram/transcribe/luckgram_transcribe_logic.cpp
+    luckgram/transcribe/luckgram_transcribe_logic.h
     luckgram/translate/translate_out.cpp
     luckgram/translate/translate_out.h
     luckgram/translate/translate_service.cpp

@@ -258,6 +258,15 @@ namespace {
 		.aboutEn = "Summarize many unread messages, jump to the source, ask about them",
 		.defaultValue = true,
 	});
+	result.push_back({
+		.key = u"free_transcribe"_q, // D6, mobile 17
+		.group = Group::AI,
+		.titleZh = "免费语音转文字",
+		.titleEn = "Free voice transcription",
+		.aboutZh = "非 Premium 也能把语音消息和圆形视频转成文字",
+		.aboutEn = "Transcribe voice messages and round videos without Premium",
+		.defaultValue = true,
+	});
 
 	// ---- 调试 / Debug (dev builds only)
 	if (IsDevBuild()) {
