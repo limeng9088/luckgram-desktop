@@ -81,7 +81,6 @@ void OnLoggedOutCompletely() {
 	NearbyState::OnLoggedOutCompletely(); // D10: card off before the token goes.
 	Settings::ClearAll();
 	Translate::ClearAll();
-	AI::Store::ClearAll(); // D7: local AI conversations.
 	Api::ForgetToken();
 	LOG(("Luckgram: logged out of every account, local data cleared."));
 }
