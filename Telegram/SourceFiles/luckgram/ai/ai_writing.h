@@ -19,6 +19,12 @@ namespace Luckgram::AI {
 [[nodiscard]] Compose::Slot CreateWritingSlot(
 	const Compose::SlotContext &context);
 
+// Upstream's own AI compose button (ComposeAiButton, shown for long text)
+// is hidden while ai_writing is on, so the field has one AI entry (✦);
+// with ai_writing off it is back as upstream has it (w-1109).
+[[nodiscard]] bool HidesUpstreamAiButton();
+[[nodiscard]] rpl::producer<bool> HidesUpstreamAiButtonValue();
+
 // 21 需求 1: the five effects (orders 100..140), from
 // RegisterWritingFeatures().
 void RegisterWritingEffects();

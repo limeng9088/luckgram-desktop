@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "luckgram/luckgram_compose_slots.h"
 #include "luckgram/luckgram_compose_panel.h" // Luckgram D7
+#include "luckgram/ai/ai_writing.h" // Luckgram D7
 
 #include "history/view/controls/history_view_bot_menu_button.h"
 
@@ -4645,6 +4646,9 @@ void ComposeControls::initAiButton() {
 		tr::lng_ai_compose_tooltip(tr::rich),
 		"ai_compose_tooltip_hidden"_cs,
 		[=] { return _wrap->width(); });
+	Luckgram::AI::HidesUpstreamAiButtonValue() | rpl::on_next([=] { // Luckgram D7
+		updateAiButtonVisibility();
+	}, _wrap->lifetime());
 }
 
 void ComposeControls::initSendAsFileButton() {
@@ -5292,7 +5296,8 @@ void ComposeControls::updateControlsVisibility() {
 }
 
 void ComposeControls::updateAiButtonVisibility() {
-	const auto hidden = !hasEnoughLinesForAi()
+	const auto hidden = Luckgram::AI::HidesUpstreamAiButton() // Luckgram D7
+		|| !hasEnoughLinesForAi()
 		|| !_wrap->isVisible()
 		|| _recording.current()
 		|| !_field->isVisible();
