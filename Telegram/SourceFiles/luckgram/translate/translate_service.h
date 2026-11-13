@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #pragma once
 
 #include "spellcheck/spellcheck_types.h"
+#include "ui/widgets/menu/menu_add_action_callback.h"
 
 class ClickHandler;
 class HistoryItem;
@@ -80,6 +81,19 @@ void ChooseLanguage(
 	Fn<void(QString)> chosen);
 
 [[nodiscard]] QString LanguageName(const QString &code);
+
+// specs#105: the 「🌐 中文 ▾」 link of a translation (an internal: URL,
+// core/local_url_handlers.cpp): choose a language, 「仅本聊天 / 设为默认」,
+// translate the message again. False when the link is not ours.
+bool HandleLanguageLink(
+	not_null<Window::SessionController*> controller,
+	const QString &link);
+
+// specs#105: 「翻译设置…」 in the chat's ⋮ menu, the chat's own language.
+void AddChatMenuAction(
+	not_null<Window::SessionController*> controller,
+	not_null<PeerData*> peer,
+	const Ui::Menu::MenuCallback &addAction);
 
 // Forgets cached translations and shown states (logout of all accounts).
 void ClearAll();

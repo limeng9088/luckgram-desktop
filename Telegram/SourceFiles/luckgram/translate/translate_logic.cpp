@@ -130,6 +130,55 @@ QString LanguageButton(const QString &toName) {
 		+ QString::fromUtf8(" ▾");
 }
 
+QString LanguageLink(int64_t peerId, int64_t msgId) {
+	return QString::fromLatin1("internal:")
+		+ QString::fromLatin1(kLanguageLinkPrefix)
+		+ QString::number(peerId)
+		+ QChar(':')
+		+ QString::number(msgId);
+}
+
+std::optional<LanguageLinkTarget> ParseLanguageLink(const QString &link) {
+	const auto prefix = QString::fromLatin1(kLanguageLinkPrefix);
+	if (!link.startsWith(prefix)) {
+		return std::nullopt;
+	}
+	const auto parts = link.mid(prefix.size()).split(QChar(':'));
+	if (parts.size() != 2) {
+		return std::nullopt;
+	}
+	auto peerOk = false;
+	auto msgOk = false;
+	const auto peerId = parts[0].toLongLong(&peerOk);
+	const auto msgId = parts[1].toLongLong(&msgOk);
+	if (!peerOk || !msgOk || peerId <= 0 || msgId == 0) {
+		return std::nullopt;
+	}
+	return LanguageLinkTarget{ .peerId = peerId, .msgId = msgId };
+}
+
+QStringList PushRecent(const QStringList &recent, const QString &language) {
+	const auto code = language.trimmed();
+	auto result = QStringList();
+	if (!code.isEmpty()) {
+		result.push_back(code);
+	}
+	for (const auto &item : recent) {
+		if (result.size() >= kMaxRecent) {
+			break;
+		}
+		const auto trimmed = item.trimmed();
+		if (!trimmed.isEmpty() && !result.contains(trimmed)) {
+			result.push_back(trimmed);
+		}
+	}
+	return result;
+}
+
+QString ChatOverrideAfter(Scope scope, const QString &language) {
+	return (scope == Scope::ThisChat) ? language.trimmed() : QString();
+}
+
 QString Header(const QString &fromName, const QString &toName, bool chinese) {
 	const auto arrow = QString::fromUtf8(" → ");
 	const auto prefix = chinese

@@ -75,6 +75,33 @@ inline constexpr auto kEmptyResult = "EMPTY_RESULT";
 // specs#105: 「🌐 中文 ▾」.
 [[nodiscard]] QString LanguageButton(const QString &toName);
 
+// specs#105: the 「🌐 中文 ▾」 link in a translation's header, opened by
+// upstream's internal URL handlers. ParseLanguageLink takes the part after
+// "internal:" (what the handler's regex sees).
+inline constexpr auto kLanguageLinkPrefix = "luckgram_translate_lang:";
+[[nodiscard]] QString LanguageLink(int64_t peerId, int64_t msgId);
+struct LanguageLinkTarget {
+	int64_t peerId = 0;
+	int64_t msgId = 0;
+};
+[[nodiscard]] std::optional<LanguageLinkTarget> ParseLanguageLink(
+	const QString &link);
+
+// specs#105 3: 「最近使用」, newest first, no duplicates, at most kMaxRecent.
+inline constexpr auto kMaxRecent = 5;
+[[nodiscard]] QStringList PushRecent(
+	const QStringList &recent,
+	const QString &language);
+
+// specs#105 2: changing the language inside a chat asks 「仅本聊天 / 设为
+// 默认」. Which chat override remains after the choice: the new language
+// for this chat only, or none (the chat follows the new default).
+enum class Scope {
+	ThisChat,
+	Default,
+};
+[[nodiscard]] QString ChatOverrideAfter(Scope scope, const QString &language);
+
 // A.1: 「已翻译 · 英语 → 中文」, just the target without a known source.
 [[nodiscard]] QString Header(
 	const QString &fromName,
