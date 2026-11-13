@@ -5,6 +5,7 @@ set(LUCKGRAM_BUILD_NUMBER "0" CACHE STRING "CI run number shown on the about pag
 set(LUCKGRAM_COMMIT "" CACHE STRING "Git commit shown on the about page.")
 option(LUCKGRAM_CI_BUILD "CI screenshot build only: screenshot mode and Telegram test-server login. Never for releases." OFF)
 option(LUCKGRAM_DEV "Dev build: api-dev.luckgram.cc, debug switches and page (D2)." OFF)
+option(LUCKGRAM_TESTS "Build luckgram_tests (Luckgram pure logic unit tests)." OFF)
 option(LUCKGRAM_REQUIRE_API_CREDENTIALS "Fail unless real api_id / api_hash are given (CI)." OFF)
 
 if (LUCKGRAM_REQUIRE_API_CREDENTIALS)
@@ -72,3 +73,7 @@ PRIVATE
     LUCKGRAM_BUILD_NUMBER=${LUCKGRAM_BUILD_NUMBER}
     LUCKGRAM_COMMIT="${LUCKGRAM_COMMIT}"
 )
+
+if (LUCKGRAM_TESTS)
+    include(${CMAKE_CURRENT_LIST_DIR}/luckgram_tests.cmake)
+endif()
