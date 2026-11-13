@@ -21,6 +21,12 @@ namespace {
 
 using namespace ::Storage::details;
 
+// Folder -> names written in this run (ClearPaths).
+[[nodiscard]] std::map<QString, QStringList> &Written() {
+	static const auto result = new std::map<QString, QStringList>();
+	return *result;
+}
+
 [[nodiscard]] QByteArray Read(
 		const QString &folder,
 		const MTP::AuthKeyPtr &key,
@@ -57,6 +63,10 @@ using namespace ::Storage::details;
 	encrypted.stream << data;
 	auto descriptor = FileWriteDescriptor(file, folder);
 	descriptor.writeEncrypted(encrypted, key);
+	auto &written = Written()[folder];
+	if (!written.contains(name)) {
+		written.push_back(name);
+	}
 	return true;
 }
 
@@ -140,7 +150,13 @@ void ClearAccount(const QString &basePath) {
 	}
 	const auto names = QDir(basePath).entryList(
 		QDir::Files | QDir::Hidden | QDir::System);
-	auto paths = LuckgramPaths(basePath, names);
+	auto written = QStringList();
+	if (const auto i = Written().find(basePath); i != end(Written())) {
+		written = std::move(i->second);
+		Written().erase(i);
+	}
+	// Queued after any pending write of these files, so it wins.
+	auto paths = ClearPaths(basePath, names, written);
 	ScheduleRemoveFiles({ paths.begin(), paths.end() });
 }
 
