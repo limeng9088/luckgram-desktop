@@ -199,9 +199,9 @@ private:
 					if (!minId || id < minId) {
 						minId = id;
 					}
-					if (const auto item = owner.message(peer, id)) {
-						_items.push_back(item);
-					}
+					// Ids only: a message deleted while the next pages
+					// load must not leave a dangling pointer (review P2).
+					_items.push_back(id);
 				}
 			});
 			const auto left = remaining - received;
@@ -224,13 +224,11 @@ private:
 	}
 
 	void finish() {
-		ranges::sort(_items, [](
-				not_null<HistoryItem*> a,
-				not_null<HistoryItem*> b) {
-			return a->id < b->id;
-		});
-		for (const auto item : _items) {
-			if (item->isService() || _ids.contains(item->id.bare)) {
+		ranges::sort(_items);
+		const auto &owner = _history->owner();
+		for (const auto id : _items) {
+			const auto item = owner.message(_history->peer, id);
+			if (!item || item->isService() || _ids.contains(item->id.bare)) {
 				continue;
 			}
 			const auto text = LineTextOf(item);
@@ -256,7 +254,7 @@ private:
 
 	const not_null<History*> _history;
 	mtpRequestId _requestId = 0;
-	std::vector<not_null<HistoryItem*>> _items;
+	std::vector<MsgId> _items;
 	std::vector<Summary::Line> _lines;
 	std::set<qint64> _ids;
 	Fn<void(int)> _done;
