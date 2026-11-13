@@ -118,6 +118,8 @@ PRIVATE
     settings/sections/settings_luckgram_translate.cpp
     settings/sections/settings_luckgram_translate.h
     # D7 AI: ✦ writing menu
+    luckgram/ai/ai_post.cpp
+    luckgram/ai/ai_post.h
     luckgram/ai/ai_writing.cpp
     luckgram/ai/ai_writing.h
     luckgram/ai/ai_writing_registry.cpp
