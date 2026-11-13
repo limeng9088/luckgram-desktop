@@ -30,6 +30,8 @@ struct Error {
 // Codes produced by the client itself (others come from the server).
 inline constexpr auto kNetworkError = "network_error";
 inline constexpr auto kCancelled = "cancelled";
+// DownloadToFile could not write the file (disk full, no access).
+inline constexpr auto kWriteFailed = "write_failed";
 inline constexpr auto kConsentDenied = "consent_denied";
 inline constexpr auto kUpstreamUnavailable = "upstream_unavailable";
 inline constexpr auto kInvalidToken = "invalid_token";

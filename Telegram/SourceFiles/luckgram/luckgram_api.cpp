@@ -524,7 +524,7 @@ RequestPtr DownloadToFile(
 	if (!result->file->open(QIODevice::WriteOnly)) {
 		result->file = nullptr;
 		crl::on_main([=] {
-			fail({ .code = QString::fromLatin1(kNetworkError) });
+			fail({ .code = QString::fromLatin1(kWriteFailed) });
 		});
 		return result;
 	}
@@ -586,9 +586,13 @@ RequestPtr DownloadToFile(
 					strong->size);
 				return;
 			}
+			strong->failed = true; // Could not put it in place.
 		}
+		const auto writeFailed = strong->failed;
 		strong->drop();
-		fail({ .code = QString::fromLatin1(status
+		fail({ .code = QString::fromLatin1(writeFailed
+			? kWriteFailed
+			: status
 			? kUpstreamUnavailable
 			: kNetworkError), .status = status });
 	});

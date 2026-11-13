@@ -339,6 +339,10 @@ void StartDownload(bool manual) {
 			});
 		});
 	}, [=](Api::Error error) {
+		if (error.code == QString::fromLatin1(Api::kWriteFailed)) {
+			DownloadFailed(Failure::Space, QString());
+			return;
+		}
 		DownloadFailed(
 			Failure::Network,
 			error.status ? QString::number(error.status) : QString());
