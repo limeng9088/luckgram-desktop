@@ -32,6 +32,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/labels.h"
+#include "ui/widgets/dropdown_menu.h"
 #include "ui/widgets/popup_menu.h"
 #include "ui/wrap/vertical_layout.h"
 #include "ui/painter.h"
@@ -449,9 +450,22 @@ Compose::Slot CreateWritingSlot(const Compose::SlotContext &context) {
 			&& (!field->getLastText().trimmed().isEmpty()
 				|| HasWritingItemsForEmptyText(host));
 	}) | rpl::distinct_until_changed();
+	// specs#94 compact input bar: 「AI 写作」 in the 「+」 menu opens the
+	// same ✦ menu (the button itself is hidden then).
+	auto plus = [=](not_null<Ui::DropdownMenu*> menu) {
+		if (!WritingEnabled()) {
+			return;
+		}
+		menu->addAction(Tr("AI 写作", "AI writing"), [=] {
+			if (!host->busy()) {
+				host->showMenu(raw);
+			}
+		}, &st::menuIconCustomize);
+	};
 	return {
 		.widget = std::move(button),
 		.wanted = std::move(wanted),
+		.plus = std::move(plus),
 	};
 }
 
