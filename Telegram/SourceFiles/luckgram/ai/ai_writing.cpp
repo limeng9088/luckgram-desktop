@@ -11,6 +11,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "base/weak_ptr.h"
 #include "chat_helpers/compose/compose_show.h"
 #include "data/data_channel.h"
+#include "data/data_drafts.h"
 #include "data/data_peer.h"
 #include "history/history.h"
 #include "history/view/history_view_schedule_box.h"
@@ -25,6 +26,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/luckgram_strings.h"
 #include "main/main_session.h"
+#include "storage/storage_account.h"
 #include "menu/menu_send_details.h"
 #include "ui/text/text_utilities.h"
 #include "ui/widgets/buttons.h"
@@ -91,6 +93,23 @@ constexpr auto kUndoHintMs = crl::time(8000);
 	return out;
 }
 
+// 21 review P3: the chat was switched while the result was streaming into
+// the shared field, so the half-written text was saved as that chat's local
+// draft. Put the user's original back.
+void RestoreDraft(
+		not_null<History*> history,
+		const TextWithTags &before,
+		const QString &written) {
+	const auto draft = history->localDraft(MsgId(), PeerId());
+	if (!draft || draft->textWithTags.text != written) {
+		return;
+	}
+	const auto size = int(before.text.size());
+	draft->textWithTags = before;
+	draft->cursor = MessageCursor(size, size, 0);
+	history->session().local().writeDrafts(history);
+}
+
 // The WritingHost of one message field (21 需求 6).
 class FieldHost final : public WritingHost, public base::has_weak_ptr {
 public:
@@ -127,6 +146,8 @@ private:
 	const Fn<History*()> _history;
 	std::optional<TextWithTags> _undoText;
 	Api::RequestPtr _request;
+	rpl::lifetime _requestLifetime;
+	bool _writing = false;
 	base::unique_qptr<Ui::PopupMenu> _menu;
 	QPointer<Ui::RpWidget> _undoHint;
 	base::Timer _undoHintTimer;
@@ -165,8 +186,10 @@ TextWithTags FieldHost::text() {
 void FieldHost::replaceText(
 		const TextWithTags &text,
 		Ui::InputField::HistoryAction action) {
+	_writing = true;
 	_field->setTextWithTags(text, action);
 	_field->setCursorPosition(text.text.size());
+	_writing = false;
 }
 
 void FieldHost::setText(const TextWithTags &text, bool undoable) {
@@ -290,23 +313,30 @@ void FieldHost::runEffect(const Writing::Effect &effect) {
 		args.messages.push_back({ u"user"_q, original });
 		args.extra.insert(u"effect"_q, id);
 		// 21 需求 2: the field shows the result as it is written, like
-		// Android; after switching chats the answer is dropped.
+		// Android. Anything else changing the field (the user typing, a
+		// switch to another chat) stops it.
 		const auto stillOurs = [=] {
 			return (history() == chat) && _request;
 		};
+		const auto written = std::make_shared<QString>(original);
 		_request = Chat(
 			std::move(args),
 			crl::guard(this, [=](QString, QString soFar) {
 				if (stillOurs()) {
 					// One undo step for the whole stream (Ctrl+Z).
+					*written = soFar;
 					replaceText(
 						{ soFar },
 						Ui::InputField::HistoryAction::MergeEntry);
 				}
 			}),
 			crl::guard(this, [=](QString text) {
+				_requestLifetime.destroy();
 				if (!stillOurs()) {
 					_request = nullptr;
+					if (chat && history() != chat) {
+						RestoreDraft(chat, before, *written);
+					}
 					return;
 				}
 				_request = nullptr;
@@ -320,16 +350,34 @@ void FieldHost::runEffect(const Writing::Effect &effect) {
 				showUndoHint(Tr(doneZh, doneEn));
 			}),
 			crl::guard(this, [=](Api::Error error) {
+				_requestLifetime.destroy();
 				const auto ours = stillOurs();
 				_request = nullptr;
 				if (ours) {
 					replaceText(before);
+				} else if (chat && history() != chat) {
+					RestoreDraft(chat, before, *written);
 				}
 				if (error.code != QLatin1String(Api::kCancelled)
 					&& error.code != QLatin1String(Api::kConsentDenied)) {
 					_show->showToast(Api::ErrorText(error.code));
 				}
 			}));
+		_requestLifetime.destroy();
+		_field->changes() | rpl::on_next([=] {
+			if (_writing || !_request) {
+				return;
+			}
+			if (const auto request = base::take(_request)) {
+				request->cancel(); // No callback after this.
+			}
+			if (chat && history() != chat) {
+				RestoreDraft(chat, before, *written);
+			}
+			crl::on_main(this, [=] {
+				_requestLifetime.destroy();
+			});
+		}, _requestLifetime);
 	}));
 }
 
