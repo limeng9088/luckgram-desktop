@@ -65,6 +65,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_controller.h"
 #include "window/window_unlock_passcode_box.h"
 #include "webrtc/webrtc_create_adm.h"
+#include "luckgram/calls/luckgram_call_recording.h" // Luckgram (D11)
 #include "webrtc/webrtc_environment.h"
 #include "webrtc/webrtc_video_track.h"
 #include "styles/style_calls.h"
@@ -897,6 +898,14 @@ void Panel::reinitWithCall(Call *call) {
 	_addPeople->raise();
 
 	_incoming->widget()->lower();
+
+	// Luckgram (D11): Record button, auto-record, stop on hang-up.
+	Luckgram::CallRecording::SetupPanel(
+		widget(),
+		_call,
+		_status.get(),
+		uiShow(),
+		_callLifetime);
 }
 
 void Panel::createRemoteAudioMute() {

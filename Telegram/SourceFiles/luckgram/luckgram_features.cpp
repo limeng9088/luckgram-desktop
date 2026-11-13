@@ -7,7 +7,10 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "luckgram/discover/luckgram_nearby_logic.h"
 #include "luckgram/discover/luckgram_square_logic.h"
+#include "luckgram/calls/luckgram_call_recording.h"
+#include "luckgram/calls/luckgram_call_recording_logic.h"
 #include "luckgram/media/luckgram_round_video_logic.h"
+#include "settings/sections/settings_luckgram_call_recording.h"
 #include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_hidden_chats.h"
 #include "luckgram/luckgram_store_restrictions.h"
@@ -100,6 +103,19 @@ namespace {
 		.aboutZh = "发送文件时选一个视频，在「…」菜单里可作为圆形视频发送",
 		.aboutEn = "Pick one video to send, then send it as a round video from the \"…\" menu",
 		.defaultValue = true,
+	});
+	// D11: 04 通话录音 (mobile CallRecSettings.KEY_ENABLED, same texts).
+	result.push_back({
+		.key = QString::fromLatin1(CallRecording::kFeatureKey),
+		.group = Group::MediaCallsStorage,
+		.titleZh = "通话录音",
+		.titleEn = "Call recording",
+		.aboutZh = "一对一通话中录音，挂断后保存到收藏夹",
+		.aboutEn = "Record one-on-one calls and save them to Saved Messages",
+		.defaultValue = false,
+		.subpage = [] { return ::Settings::LuckgramCallRecordingId(); },
+		// Legal reminder before it is switched on (spec 04 §1, #58).
+		.confirmEnable = CallRecording::ConfirmEnable,
 	});
 	// ---- 发现 / Discover (D10)
 	result.push_back({
