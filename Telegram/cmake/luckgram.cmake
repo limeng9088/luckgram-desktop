@@ -144,6 +144,9 @@ PRIVATE
     luckgram/ai/ai_registry.h
     luckgram/ai/ai_store.cpp
     luckgram/ai/ai_store.h
+    # D7 AI: chat summary (19)
+    luckgram/ai/ai_summary.cpp
+    luckgram/ai/ai_summary.h
     # D7 AI: ✦ writing menu
     luckgram/ai/ai_reply.cpp
     luckgram/ai/ai_reply.h
