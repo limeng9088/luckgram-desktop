@@ -444,15 +444,24 @@ jobs:
           #     CMake libraries; MSBuild ones build one project at a time)
           #   make MAKE_THREADS_CNT = os.cpu_count(): PYTHON_CPU_COUNT
           #     (Python 3.13+; older Python keeps the real count)
-          # and _CL_ caps cl /MP. Not covered: 'msbuild -m' (LZMA, dump_syms)
+          # and _CL_ caps cl /MP, written -MP: libraries built in msys2 bash
+          # (libvpx) would take '/MP2' for a path and convert it (C1083
+          # 'msys64/MP2'); MSYS2_ENV_CONV_EXCL keeps msys2 off _CL_ as well.
+          # Not covered: 'msbuild -m' (LZMA, dump_syms)
           # and the direct 'ninja' of breakpad, both small.
           LIBS_JOBS: ${{ vars.WIN_LIBS_PARALLEL || '2' }}
-          LIBS_CL: ${{ format('/MP{0}', vars.WIN_CL_MP || '2') }}
+          LIBS_CL: ${{ format('-MP{0}', vars.WIN_CL_MP || '2') }}
+          # PYTHON_CPU_COUNT needs Python 3.13+; the Native Tools step puts
+          # an older python first in PATH (xs-master: 3.12.10, cpu_count 12).
+          # vars.WIN_PYTHON_DIR (xs-master: E:\py313) goes first for prepare.py.
+          PY_DIR: ${{ vars.WIN_PYTHON_DIR }}
         run: |
+          if not "%PY_DIR%"=="" set "PATH=%PY_DIR%;%PY_DIR%\Scripts;%PATH%"
           set NUMBER_OF_PROCESSORS=%LIBS_JOBS%
           set CMAKE_BUILD_PARALLEL_LEVEL=%LIBS_JOBS%
           set PYTHON_CPU_COUNT=%LIBS_JOBS%
           set _CL_=%LIBS_CL%
+          set MSYS2_ENV_CONV_EXCL=_CL_
           echo Libraries: %LIBS_JOBS% jobs, _CL_=%_CL_%
           python -c "import os, sys; print('Python', sys.version.split()[0], 'cpu_count', os.cpu_count())"
           git config --global user.email >nul 2>&1 || git config --global user.email "ci@luckgram.invalid"
@@ -496,7 +505,7 @@ jobs:
           # at /MP4 on the heavy Telegram TUs. Hosted: /MP2 (override with
           # vars.WIN_HOSTED_CL_MP), one project at a time. Self-hosted:
           # vars WIN_CL_MP / WIN_BUILD_PARALLEL.
-          _CL_: ${{ format('/MP{0}', env.SELF_HOSTED == 'true' && (vars.WIN_CL_MP || '4') || (vars.WIN_HOSTED_CL_MP || '2')) }}
+          _CL_: ${{ format('-MP{0}', env.SELF_HOSTED == 'true' && (vars.WIN_CL_MP || '4') || (vars.WIN_HOSTED_CL_MP || '2')) }}
           BUILD_PARALLEL: ${{ env.SELF_HOSTED == 'true' && (vars.WIN_BUILD_PARALLEL || '2') || '1' }}
           KEEP_GOING: ${{ inputs.keep_going && '1' || '0' }}
         run: |
@@ -629,7 +638,7 @@ jobs:
         if: env.SELF_HOSTED == 'true'
         continue-on-error: true
         env:
-          _CL_: ${{ format('/MP{0}', vars.WIN_CL_MP || '4') }}
+          _CL_: ${{ format('-MP{0}', vars.WIN_CL_MP || '4') }}
         run: |
           if "%SELF_HOSTED%"=="true" powershell -NoProfile -Command "$p = (Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID)).ParentProcessId; (Get-Process -Id $p).PriorityClass = 'BelowNormal'"
           rem configure.bat takes QT as an argument; in the environment it makes
