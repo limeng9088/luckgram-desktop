@@ -18,6 +18,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include <QtCore/QDir>
 #include <QtCore/QTimer>
+#include <QtGui/QPainter>
 #include <QtWidgets/QApplication>
 
 namespace Luckgram {
@@ -48,6 +49,14 @@ void Save(const QString &path, const QPixmap &pixmap) {
 		.arg(path)
 		.arg(pixmap.width())
 		.arg(pixmap.height()));
+}
+
+[[nodiscard]] QPixmap Opaque(const QPixmap &pixmap) {
+	auto result = QPixmap(pixmap.size());
+	result.setDevicePixelRatio(pixmap.devicePixelRatio());
+	result.fill(Qt::white);
+	QPainter(&result).drawPixmap(0, 0, pixmap);
+	return result;
 }
 
 void GrabWindow(const QString &path) {
@@ -106,7 +115,14 @@ void CaptureSet(const QString &dir, const QString &prefix, Fn<void()> done) {
 	} });
 	steps->push_back({ kStepDelay, [=] {
 		if (const auto menu = TrayMenu()) {
-			Save(base + u"2-tray-menu.png"_q, menu->grab());
+			auto texts = QStringList();
+			for (const auto &action : menu->actions()) {
+				if (!action->isSeparator()) {
+					texts.push_back(action->text());
+				}
+			}
+			Log(u"tray menu: "_q + texts.join(u" | "_q));
+			Save(base + u"2-tray-menu.png"_q, Opaque(menu->menu()->grab()));
 			menu->hide();
 		}
 	} });
