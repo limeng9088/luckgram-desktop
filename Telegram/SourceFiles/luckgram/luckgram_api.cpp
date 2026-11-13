@@ -430,6 +430,60 @@ RequestPtr Download(
 	return result;
 }
 
+RequestPtr Upload(
+		const QString &url,
+		const QByteArray &contentType,
+		QByteArray body,
+		Fn<void(qint64, qint64)> progress,
+		Fn<void()> done,
+		Fn<void(Error)> fail) {
+	class UploadImpl final : public Request {
+	public:
+		QPointer<QNetworkReply> reply;
+		void cancel() override {
+			if (const auto r = reply.data()) {
+				reply = nullptr;
+				r->abort();
+			}
+		}
+	};
+	auto result = std::make_shared<UploadImpl>();
+	auto request = QNetworkRequest(QUrl(url));
+	request.setTransferTimeout(kTransferTimeoutMs);
+	request.setRawHeader("Content-Type", contentType);
+	const auto reply = Manager()->put(request, body);
+	result->reply = reply;
+	const auto strong = result;
+	if (progress) {
+		QObject::connect(reply, &QNetworkReply::uploadProgress, [=](
+				qint64 sent,
+				qint64 total) {
+			if (strong->reply == reply) {
+				progress(sent, total);
+			}
+		});
+	}
+	QObject::connect(reply, &QNetworkReply::finished, [=] {
+		reply->deleteLater();
+		if (strong->reply != reply) {
+			return;
+		}
+		strong->reply = nullptr;
+		const auto status = reply->attribute(
+			QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		if (reply->error() == QNetworkReply::NoError
+			&& status >= 200
+			&& status < 300) {
+			done();
+		} else {
+			fail({ .code = QString::fromLatin1(status
+				? kUpstreamUnavailable
+				: kNetworkError), .status = status });
+		}
+	});
+	return result;
+}
+
 void EnsureRegistered(Fn<void()> done, Fn<void(Error)> fail) {
 	auto &state = Token();
 	if (!state.token.isEmpty()) {

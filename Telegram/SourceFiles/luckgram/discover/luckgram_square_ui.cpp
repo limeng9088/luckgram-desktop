@@ -54,6 +54,7 @@ constexpr auto kBlockedNamesKey = "discover_blocked_names";
 
 struct Shared {
 	rpl::event_stream<Square::Post> postUpdated;
+	rpl::event_stream<Square::Post> postCreated;
 	rpl::event_stream<QString> postRemoved;
 	rpl::event_stream<QString> authorBlocked;
 	QString myAuthorId;
@@ -997,6 +998,14 @@ void NotifyPostUpdated(const Square::Post &post) {
 
 void NotifyPostRemoved(const QString &postId) {
 	Data().postRemoved.fire_copy(postId);
+}
+
+rpl::producer<Square::Post> PostCreated() {
+	return Data().postCreated.events();
+}
+
+void NotifyPostCreated(const Square::Post &post) {
+	Data().postCreated.fire_copy(post);
 }
 
 QString MyAuthorId() {

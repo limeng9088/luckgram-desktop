@@ -33,7 +33,10 @@ PRIVATE
     luckgram/discover/luckgram_scan_logic.h
     luckgram/discover/luckgram_square_logic.cpp
     luckgram/discover/luckgram_square_logic.h
+    luckgram/media/luckgram_image_prepare.cpp
+    luckgram/media/luckgram_image_prepare.h
     luckgram/tests/luckgram_discover_tests.cpp
+    luckgram/tests/luckgram_media_tests.cpp
     luckgram/tests/luckgram_nearby_tests.cpp
     luckgram/tests/luckgram_square_tests.cpp
 
@@ -83,6 +86,7 @@ PRIVATE
 target_link_libraries(luckgram_tests
 PRIVATE
     desktop-app::external_qt
+    desktop-app::external_qt_static_plugins # JPEG / PNG (D10 media tests).
 )
 
 set_target_properties(luckgram_tests PROPERTIES
