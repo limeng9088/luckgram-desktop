@@ -66,10 +66,23 @@ void FillAccountsLimitBox(not_null<Ui::GenericBox*> box);
 void ShowUpgrade(
 	not_null<Window::SessionController*> controller,
 	Reason reason);
+// The same box with a feature's own reason line.
+void ShowUpgradeText(
+	not_null<Window::SessionController*> controller,
+	const QString &reason);
 // quota_exceeded / not_pro / credits_exhausted open the upgrade box (true);
 // anything else is left to the caller (false).
 bool HandleError(
 	not_null<Window::SessionController*> controller,
 	const Api::Error &error);
+
+// D12 (mobile 31): 「加入 Pro 社群」 on the Luckgram Pro page.
+// The row shows while the pro_community switch is on and the server lists
+// the perk.
+[[nodiscard]] bool ShowCommunityRowNow();
+// Pro: a one-time invite from S14 opens Telegram's join box in the app;
+// already a member: 「你已经在 Pro 社群里」 and the group; free users and
+// not_pro: the upgrade box.
+void JoinCommunity(not_null<Window::SessionController*> controller);
 
 } // namespace Luckgram::Pro

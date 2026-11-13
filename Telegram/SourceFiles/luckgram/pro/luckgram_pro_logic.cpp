@@ -12,6 +12,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QRegularExpression>
 
 #include <algorithm>
+#include <initializer_list>
 
 namespace Luckgram::Pro {
 namespace {
@@ -200,6 +201,66 @@ bool CanAddAccount(int count, int limit) {
 
 bool OfferAccountsUpgrade(bool pro, int remoteMaxFree) {
 	return !pro && (AccountsLimit(false, remoteMaxFree) < kAccountSlots);
+}
+
+bool ShowCommunityRow(bool featureEnabled, bool hasPerk) {
+	return featureEnabled && hasPerk;
+}
+
+namespace {
+
+// The first member of keys that holds an openable Telegram link.
+[[nodiscard]] QString FirstLink(
+		const QJsonObject &json,
+		std::initializer_list<const char*> keys) {
+	for (const auto key : keys) {
+		const auto value = StringOf(json, key);
+		if (IsOpenableTelegramLink(value)) {
+			return value;
+		}
+	}
+	return QString();
+}
+
+} // namespace
+
+CommunityInvite ParseCommunityInvite(const QJsonObject &body) {
+	if (body.value(L(kErrorAlreadyMember)).toBool(false)
+		|| StringOf(body, "status") == L(kErrorAlreadyMember)) {
+		return CommunityAlreadyMember(body);
+	}
+	const auto link = FirstLink(body, { "invite_link", "url", "link" });
+	if (link.isEmpty()) {
+		return {};
+	}
+	return { .kind = CommunityInvite::Kind::Join, .link = link };
+}
+
+CommunityInvite CommunityAlreadyMember(const QJsonObject &body) {
+	return {
+		.kind = CommunityInvite::Kind::AlreadyMember,
+		.link = FirstLink(body, { "chat_link", "invite_link", "url", "link" }),
+		.channelId = CommunityChannelId(Int64Of(body, "chat_id")),
+	};
+}
+
+int64_t CommunityChannelId(int64_t botApiId) {
+	if (botApiId < -1000000000000LL) {
+		return -botApiId - 1000000000000LL;
+	} else if (botApiId > 0) {
+		return botApiId;
+	}
+	return 0;
+}
+
+bool IsOpenableTelegramLink(const QString &url) {
+	const auto prefixed = [&](const char *prefix) {
+		const auto text = L(prefix);
+		return url.startsWith(text) && (url.size() > text.size());
+	};
+	return prefixed("tg://")
+		|| prefixed("https://t.me/")
+		|| prefixed("https://telegram.me/");
 }
 
 LinkStatus ParseLink(const QJsonObject &json) {
@@ -621,6 +682,28 @@ QString Texts::creditsLine(
 	return creditsTitle()
 		+ t(U(" "), L(": "))
 		+ creditsValue(remaining, total, resetsAtMs, tz);
+}
+
+QString Texts::communityJoin() const {
+	return t(U("加入 Pro 社群"), L("Join the Pro community"));
+}
+
+QString Texts::communityInfo() const {
+	return t(
+		U("Luckgram Pro 用户的 Telegram 私密群。会员到期后会自动移出，续期后可重新加入。"),
+		L("A private Telegram group for Luckgram Pro members. You leave it automatically when Pro ends and can join again after renewing."));
+}
+
+QString Texts::communityAlreadyMember() const {
+	return t(
+		U("你已经在 Pro 社群里"),
+		U("You're already in the Pro community"));
+}
+
+QString Texts::communityProOnly() const {
+	return t(
+		U("Pro 社群是 Luckgram Pro 专享，订阅后即可加入"),
+		L("The Pro community is for Luckgram Pro members. Subscribe to join"));
 }
 
 QString Texts::upgradeTitle() const {
