@@ -37,6 +37,10 @@ inline constexpr auto kSummaryMaxFree = 100;
 inline constexpr auto kSummaryMaxPro = 1000;
 inline constexpr auto kDefaultMonthlyCredits = 50;
 
+// D3 #6 / specs#135: account slots compiled into the app
+// (Main::Domain::kPremiumMaxAccounts). Pro has no product limit, only this.
+inline constexpr auto kAccountSlots = 100;
+
 // Remote config keys (S4 / S12).
 inline constexpr auto kConfigBillingEnabled = "billing.enabled";
 inline constexpr auto kConfigPerks = "pro.perks";
@@ -90,6 +94,17 @@ struct State {
 [[nodiscard]] int64_t ParseTime(const QString &rfc3339);
 // yyyy-MM-dd in tz; empty for 0.
 [[nodiscard]] QString Date(int64_t ms, const QTimeZone &tz);
+
+// --- Account limit (D3 #6, specs#135; Android AccountLimit).
+
+// Free: accounts.max_free (0 = not set: kAccountsMaxFree), at least 1, at
+// most the slots. Pro: the slots.
+[[nodiscard]] int AccountsLimit(bool pro, int remoteMaxFree);
+// Never logs anyone out (free above the limit, expired Pro): only adding
+// is blocked.
+[[nodiscard]] bool CanAddAccount(int count, int limit);
+// The "upgrade" line only for free users, when Pro raises the limit.
+[[nodiscard]] bool OfferAccountsUpgrade(bool pro, int remoteMaxFree);
 
 // --- Account link (S6).
 
@@ -212,6 +227,10 @@ public:
 	[[nodiscard]] QString linkedNow() const;
 	[[nodiscard]] QString unlinkedNow() const;
 	[[nodiscard]] QString linkResult(const QString &request, int max) const;
+
+	// Account limit (D3 #6, Android LuckgramAccounts.limitReachedText).
+	[[nodiscard]] QString accountsLimitReached(int max, bool offerPro) const;
+	[[nodiscard]] QString viewPro() const;
 
 	// Pro (S7).
 	[[nodiscard]] QString proTitle() const;

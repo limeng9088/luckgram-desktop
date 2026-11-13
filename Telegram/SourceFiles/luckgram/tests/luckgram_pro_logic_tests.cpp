@@ -259,3 +259,29 @@ LUCKGRAM_TEST(BotUsernameFromLink) {
 	LG_CHECK(BotUsername(S("https://t.me/ab?start=1")).isEmpty());
 	LG_CHECK(BotUsername(QString()).isEmpty());
 }
+
+// D3 #6: ported from Android AccountLimitTest.
+LUCKGRAM_TEST(AccountsLimitFreeFromConfigProSlots) {
+	LG_EQUAL(AccountsLimit(false, 0), kAccountsMaxFree);
+	LG_EQUAL(AccountsLimit(false, 12), 12);
+	LG_EQUAL(AccountsLimit(false, 3), 3); // No lower bound but 1.
+	LG_EQUAL(AccountsLimit(false, -5), kAccountsMaxFree);
+	LG_EQUAL(AccountsLimit(false, 1000), int(kAccountSlots));
+	LG_EQUAL(AccountsLimit(true, 0), int(kAccountSlots));
+	LG_EQUAL(AccountsLimit(true, 3), int(kAccountSlots));
+}
+
+LUCKGRAM_TEST(AccountsOnlyAddingIsBlocked) {
+	LG_CHECK(CanAddAccount(9, 10));
+	LG_CHECK(!CanAddAccount(10, 10));
+	LG_CHECK(!CanAddAccount(12, 10)); // Above the limit: nobody logged out.
+	LG_CHECK(OfferAccountsUpgrade(false, 10));
+	LG_CHECK(!OfferAccountsUpgrade(true, 10));
+	LG_CHECK(!OfferAccountsUpgrade(false, int(kAccountSlots)));
+}
+
+LUCKGRAM_TEST(AccountsLimitTexts) {
+	LG_EQUAL(Texts(true).accountsLimitReached(10, true), S("免费版最多可登录 10 个账号。升级 Pro 可登录的账号数量不限"));
+	LG_EQUAL(Texts(false).accountsLimitReached(10, true), S("Free accounts can log in to at most 10 accounts. Upgrade to Pro for unlimited accounts"));
+	LG_EQUAL(Texts(true).accountsLimitReached(100, false), S("这台设备最多可登录 100 个账号"));
+}

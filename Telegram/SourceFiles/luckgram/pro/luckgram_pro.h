@@ -11,6 +11,10 @@ namespace Luckgram::Api {
 struct Error;
 } // namespace Luckgram::Api
 
+namespace Ui {
+class GenericBox;
+} // namespace Ui
+
 namespace Window {
 class SessionController;
 } // namespace Window
@@ -47,6 +51,15 @@ void RefreshIfStale();
 [[nodiscard]] Numbers ConfigNumbers();
 // The perk rows to show now (Rows() of the live perks).
 [[nodiscard]] std::vector<Row> LiveRows();
+
+// D3 #6: how many accounts can be logged in now (free: accounts.max_free,
+// default 10; Pro: the compiled slots), and when that may have changed
+// (Pro state, remote config).
+[[nodiscard]] int AccountsLimitNow();
+[[nodiscard]] rpl::producer<> AccountsLimitChanges();
+// The box shown when adding one more account is not possible: the limit
+// and, for free users, 「查看 Pro」 (only while billing.enabled).
+void FillAccountsLimitBox(not_null<Ui::GenericBox*> box);
 
 // 29 需求 6: the shared "upgrade to Pro" box: one reason line and
 // 「查看 Pro」, which opens the Luckgram Pro page.

@@ -30,6 +30,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_folder.h"
 #include "data/data_premium_limits.h"
 #include "lang/lang_keys.h"
+#include "luckgram/pro/luckgram_pro.h"
 #include "settings/sections/settings_premium.h" // ShowPremium.
 #include "base/unixtime.h"
 #include "apiwrap.h"
@@ -1064,7 +1065,15 @@ void FileSizeLimitBox(
 		});
 }
 
+// Luckgram D3 #6: the Luckgram limit (free accounts.max_free, Pro no limit)
+// instead of Telegram Premium's; upstream's box is kept below, unused.
 void AccountsLimitBox(
+		not_null<Ui::GenericBox*> box,
+		not_null<Main::Session*> session) {
+	Luckgram::Pro::FillAccountsLimitBox(box);
+}
+
+[[maybe_unused]] static void TelegramAccountsLimitBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<Main::Session*> session) {
 	const auto defaultLimit = Main::Domain::kMaxAccounts;
