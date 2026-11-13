@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "luckgram/luckgram_save_to_saved.h"
 #include "luckgram/translate/translate_service.h"
+#include "luckgram/ai/ai_assistant.h" // Luckgram D7
 
 #include "api/api_attached_stickers.h"
 #include "api/api_editing.h"
@@ -1990,6 +1991,9 @@ base::unique_qptr<Ui::PopupMenu> FillContextMenu(
 
 	// Build the full message menu.
 	FillContextMenuItems(result, list, request, hasPollOption);
+	if (item && !list->hasCopyRestriction(item)) {
+		Luckgram::AI::AddAskAiAction(result.get(), list->controller(), item); // Luckgram D7
+	}
 
 	if (item) {
 		const auto media = item->media();
