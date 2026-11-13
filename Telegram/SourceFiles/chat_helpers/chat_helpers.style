@@ -1383,6 +1383,10 @@ historyLuckgramDictation: IconButton(historyAttach) {
 	icon: icon {{ "chat/voice_to_text", historyComposeIconFg }};
 	iconOver: icon {{ "chat/voice_to_text", historyComposeIconFgOver }};
 }
+historyLuckgramAi: IconButton(historyAttach) { // Luckgram D7 ✦
+	icon: icon {{ "menu/ai_prompt", historyComposeIconFg }};
+	iconOver: icon {{ "menu/ai_prompt", historyComposeIconFgOver }};
+}
 historyBotKeyboardShow: IconButton(historyAttach) {
 	icon: icon {{ "chat/input_bot_keyboard", historyComposeIconFg }};
 	iconOver: icon {{ "chat/input_bot_keyboard", historyComposeIconFgOver }};

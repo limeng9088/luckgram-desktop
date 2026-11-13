@@ -65,6 +65,8 @@ PRIVATE
     luckgram/luckgram_ai.h
     luckgram/luckgram_api.cpp
     luckgram/luckgram_api.h
+    luckgram/luckgram_compose_panel.cpp
+    luckgram/luckgram_compose_panel.h
     luckgram/luckgram_compose_slots.cpp
     luckgram/luckgram_compose_slots.h
     luckgram/luckgram_features.cpp
@@ -116,6 +118,8 @@ PRIVATE
     settings/sections/settings_luckgram_translate.cpp
     settings/sections/settings_luckgram_translate.h
     # D7 AI: ✦ writing menu
+    luckgram/ai/ai_writing.cpp
+    luckgram/ai/ai_writing.h
     luckgram/ai/ai_writing_registry.cpp
     luckgram/ai/ai_writing_registry.h
     # D7 AI: pure logic (also in luckgram_tests)

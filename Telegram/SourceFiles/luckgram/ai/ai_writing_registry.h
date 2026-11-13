@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #pragma once
 
 #include "base/object_ptr.h"
+#include "ui/style/style_core_types.h"
 
 class History;
 struct TextWithTags;

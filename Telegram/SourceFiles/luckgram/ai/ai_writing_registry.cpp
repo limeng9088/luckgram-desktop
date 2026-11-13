@@ -5,6 +5,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/ai/ai_writing_registry.h"
 
+#include "luckgram/ai/ai_writing.h"
+
 namespace Luckgram::AI {
 namespace {
 
@@ -58,8 +60,8 @@ void RegisterWritingFeatures() {
 	if (std::exchange(done, true)) {
 		return;
 	}
-	// 21: the built-in effects (Writing::Effects(), orders 100..140) come
-	// with the ✦ menu. Features add one line each below:
+	RegisterWritingEffects(); // 21: orders 100..140.
+	// Features add one line each below:
 	// 20 AI reply (order 0, Reply::kMenuOrder)
 	// 24 AI post (order 10, Post::kMenuOrder)
 }

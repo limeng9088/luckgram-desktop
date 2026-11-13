@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/controls/history_view_compose_controls.h"
 
 #include "luckgram/luckgram_compose_slots.h"
+#include "luckgram/luckgram_compose_panel.h" // Luckgram D7
 
 #include "history/view/controls/history_view_bot_menu_button.h"
 
@@ -2855,6 +2856,7 @@ void ComposeControls::init() {
 		},
 		_send.get(),
 		[=] { updateControlsGeometry(_wrap->size()); });
+	Luckgram::Compose::AttachPanelHost(_field, _wrap.get(), Luckgram::Compose::PanelAnchor::Top); // Luckgram D7
 	if (session().settings().shouldShowStashHint()) {
 		_stashHintManager = std::make_unique<Controls::StashHintManager>(
 			Controls::StashHintDescriptor{
