@@ -23,6 +23,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
 #include "ui/widgets/shadow.h"
+#include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "ui/ui_utility.h"
 #include "ui/userpic_view.h"
@@ -30,6 +31,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "styles/style_boxes.h"
 #include "styles/style_chat.h"
 #include "styles/style_info.h"
+#include "styles/style_info_profile_actions.h"
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
@@ -98,9 +100,9 @@ object_ptr<Ui::SlideWrap<Ui::VerticalLayout>> CreateProfileRow(
 	};
 	line.text->setSelectable(false);
 	line.text->overrideLinkClickHandler(open);
-	for (const auto label : { line.text, line.subtext }) {
-		label->setCursor(style::cur_pointer);
-		base::install_event_filter(label, [=](not_null<QEvent*> e) {
+	for (const auto widget : { line.text, line.subtext }) {
+		widget->setCursor(style::cur_pointer);
+		base::install_event_filter(widget, [=](not_null<QEvent*> e) {
 			if (e->type() == QEvent::MouseButtonRelease) {
 				const auto mouse = static_cast<QMouseEvent*>(e.get());
 				if (mouse->button() == Qt::LeftButton
@@ -403,7 +405,9 @@ void FillList(
 			continue;
 		}
 		const auto snippet = Luckgram::NotesText::Snippet(entry.note, query);
-		const auto target = peer ? peer : session->data().peer(entry.peer);
+		const auto target = peer
+			? not_null<PeerData*>(peer)
+			: session->data().peer(entry.peer);
 		const auto row = list->add(object_ptr<NoteRow>(
 			list,
 			target,
