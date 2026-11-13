@@ -8,6 +8,9 @@
 #   build  restores the finished libraries, builds Luckgram.exe and packages
 #          Luckgram-Setup-<version>-<build>-x64.exe and the portable zip.
 #
+# Manual runs: 'platforms' (both / windows / macos, default both) picks what
+# to build; windows skips mac-libs and macos, macos skips libs and build.
+#
 # Runner switch: repository variable WIN_RUNNER (Settings → Variables → Actions)
 #   (a manual run can override it with the 'runner' input)
 #   unset / anything else  GitHub hosted windows-latest, libraries via actions/cache.
@@ -18,9 +21,8 @@
 #                          job runs prepare.py itself, so libraries and app are on the
 #                          same machine (several machines may carry the label, each
 #                          with its own TBuild; a new one builds them once, ~70 min).
-#                          Only pushes to this repository and
-#                          PRs from branches of this repository run there; PRs from
-#                          forks are skipped (public repo). Put the runner work folder
+#                          Only master pushes and manual runs use it (PRs
+#                          do not compile, so no fork code). Put the runner work folder
 #                          on a large disk (E:), see luckgram/windows/RUNNER.md.
 name: Build
 
@@ -46,12 +48,19 @@ on:
         description: 'Keep going after compile errors, to collect all of them in one run (the job still fails)'
         type: boolean
         default: false
+      platforms:
+        description: 'Platforms to build: windows skips mac-libs and macos, macos skips libs and the Windows build'
+        type: choice
+        options: [both, windows, macos]
+        default: both
 
 concurrency:
   # Pushes and manual runs in their own groups: a new master push must not
-  # replace a queued manual (unified, keep_going) build. Nothing running is
-  # cancelled.
-  group: build-${{ github.ref }}-${{ github.event_name }}
+  # replace a queued manual (unified, keep_going) build. Manual runs are
+  # also split by 'platforms', so a Windows-only run does not wait for a
+  # 'both' run that is still building the Mac libraries. Nothing running
+  # is cancelled.
+  group: build-${{ github.ref }}-${{ github.event_name }}-${{ inputs.platforms || 'both' }}
   cancel-in-progress: false
 
 env:
@@ -104,7 +113,7 @@ jobs:
     # Hosted only. Self-hosted builds the libraries inside the build job, so
     # libraries and app are always on the same machine (several machines
     # carry the luckgram-win label, each with its own TBuild).
-    if: (!(inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')))
+    if: inputs.platforms != 'macos' && !(inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted'))
     runs-on: windows-latest
     timeout-minutes: 355
     outputs:
@@ -303,12 +312,13 @@ jobs:
   build:
     name: Luckgram x64
     needs: [credentials, libs]
-    # Self-hosted: never run code from fork PRs on our machines.
+    # Only master pushes and manual runs reach this workflow (no PRs, so no
+    # fork code on the self-hosted machine).
     if: >-
       !cancelled()
+      && inputs.platforms != 'macos'
       && needs.credentials.result == 'success'
       && (needs.libs.result == 'success' || (needs.libs.result == 'skipped' && (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted'))))
-      && (!(inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ${{ (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) && fromJSON('["self-hosted","luckgram-win"]') || 'windows-latest' }}
     timeout-minutes: 355
     defaults:
@@ -778,8 +788,9 @@ jobs:
     needs: credentials
     # For now manual runs only (w-1109): the first build of the Mac
     # libraries takes hours; master pushes skip macOS (and so macos and
-    # release-macos) until the unified build is through.
-    if: github.event_name == 'workflow_dispatch'
+    # release-macos) until the unified build is through. platforms=windows
+    # skips it, and so macos.
+    if: github.event_name == 'workflow_dispatch' && inputs.platforms != 'windows'
     runs-on: macos-15
     timeout-minutes: 355
     env:
