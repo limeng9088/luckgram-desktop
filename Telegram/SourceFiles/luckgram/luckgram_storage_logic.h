@@ -39,4 +39,10 @@ inline constexpr auto kMaxNameLength = 64;
 	const QString &folder,
 	const QStringList &fileNames);
 
+// Account level: whether an account's data may be read, written or removed
+// now. Needs the local key, and the account must not be hidden in the
+// second space (D8). Reads AND writes are refused together: a caller that
+// read nothing and writes its empty state back would overwrite the file.
+[[nodiscard]] bool AccountUsable(bool hasLocalKey, bool hidden);
+
 } // namespace Luckgram::Storage
