@@ -93,6 +93,11 @@ struct State {
 
 void Save() {
 	auto &data = Data();
+	if (!data.loaded) {
+		// The stored list was never read (settings storage not ready):
+		// writing now would replace it with an incomplete one.
+		return;
+	}
 	auto nodes = QJsonArray();
 	for (const auto &rec : data.nodes) {
 		nodes.push_back(QJsonObject{
