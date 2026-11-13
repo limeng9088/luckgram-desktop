@@ -420,6 +420,7 @@ struct SummaryBar::State {
 	Ui::VerticalLayout *card = nullptr;
 	Ui::FlatLabel *title = nullptr;
 	Ui::LinkButton *collapse = nullptr;
+	Ui::RpWidget *scrollWrap = nullptr; // ScrollArea is no RpWidget.
 	Ui::ScrollArea *scroll = nullptr;
 	Ui::VerticalLayout *body = nullptr;
 	Ui::FlatLabel *status = nullptr;
@@ -534,9 +535,13 @@ void SummaryBar::setup() {
 		state->title->moveToLeft(padding.left(), top(state->title), width);
 	}, header->lifetime());
 
-	state->scroll = state->card->add(object_ptr<Ui::ScrollArea>(
-		state->card,
-		st::defaultSolidScroll));
+	// Ui::ScrollArea isn't a Ui::RpWidget, so VerticalLayout::add() can't
+	// take it: it lives in a plain row of the card instead.
+	state->scrollWrap = state->card->add(
+		object_ptr<Ui::RpWidget>(state->card));
+	state->scroll = Ui::CreateChild<Ui::ScrollArea>(
+		state->scrollWrap,
+		st::defaultSolidScroll);
 	state->body = state->scroll->setOwnedWidget(
 		object_ptr<Ui::VerticalLayout>(state->scroll));
 	const auto label = [&](const style::FlatLabel &st) {
@@ -560,8 +565,13 @@ void SummaryBar::setup() {
 
 	state->body->heightValue() | rpl::on_next([=](int height) {
 		const auto max = style::ConvertScale(kMaxBodyHeight);
-		state->scroll->resize(state->scroll->width(), std::min(height, max));
+		const auto shown = std::min(height, max);
+		state->scrollWrap->resize(state->scrollWrap->width(), shown);
+		state->scroll->resize(state->scrollWrap->width(), shown);
 	}, state->body->lifetime());
+	state->scrollWrap->widthValue() | rpl::on_next([=](int width) {
+		state->scroll->resize(width, state->scrollWrap->height());
+	}, state->scrollWrap->lifetime());
 	state->scroll->widthValue() | rpl::on_next([=](int width) {
 		state->body->resizeToWidth(width);
 	}, state->scroll->lifetime());
@@ -678,7 +688,7 @@ void SummaryBar::setup() {
 		state->cardShown = true;
 		state->collapsed = false;
 		state->collapse->setText(Tr("收起", "Collapse"));
-		state->scroll->show();
+		state->scrollWrap->show();
 		state->askRow->show();
 		state->title->setText(Tr("AI 总结 · ", "AI summary · ") + rangeLabel);
 		state->summary->hide();
@@ -780,7 +790,7 @@ void SummaryBar::setup() {
 
 	state->collapse->setClickedCallback([=] {
 		state->collapsed = !state->collapsed;
-		state->scroll->setVisible(!state->collapsed);
+		state->scrollWrap->setVisible(!state->collapsed);
 		state->askRow->setVisible(!state->collapsed);
 		state->collapse->setText(state->collapsed
 			? Tr("展开", "Expand")
