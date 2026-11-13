@@ -16,6 +16,7 @@ class Show;
 namespace Ui {
 class RpWidget;
 class InputField;
+class PopupMenu;
 } // namespace Ui
 
 namespace Luckgram::Compose {
@@ -30,6 +31,7 @@ struct SlotContext {
 	not_null<Ui::InputField*> field;
 	std::shared_ptr<ChatHelpers::Show> show;
 	Fn<History*()> history; // The current chat, may be nullptr.
+	Ui::RpWidget *send = nullptr; // The send button (AddSendMenuItems).
 };
 
 struct Slot {
@@ -64,5 +66,14 @@ private:
 	rpl::lifetime _lifetime;
 
 };
+
+// Items a slot adds to the send button's right-click menu, after the
+// upstream ones (SendMenu::FillSendMenu calls FillSendMenu). Removed with
+// `lifetime`.
+void AddSendMenuItems(
+	not_null<QWidget*> send,
+	Fn<void(not_null<Ui::PopupMenu*>)> fill,
+	rpl::lifetime &lifetime);
+void FillSendMenu(QWidget *send, not_null<Ui::PopupMenu*> menu);
 
 } // namespace Luckgram::Compose

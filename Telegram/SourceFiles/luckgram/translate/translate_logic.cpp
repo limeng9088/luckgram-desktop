@@ -210,6 +210,28 @@ std::optional<int64_t> LegacyChatPeerId(
 	return (ok && peerId > 0) ? std::make_optional(peerId) : std::nullopt;
 }
 
+QString OutLanguage(const QString &chatChosen, const QString &lastIncoming) {
+	if (const auto chosen = chatChosen.trimmed(); !chosen.isEmpty()) {
+		return chosen;
+	} else if (const auto base = Base(lastIncoming); !base.isEmpty()) {
+		return base;
+	}
+	return QString::fromLatin1("en");
+}
+
+QString OutHint(const QString &toName, bool chinese) {
+	return chinese
+		? (QString::fromUtf8("已翻译成 ") + toName + QString::fromUtf8(" · "))
+		: (QString::fromLatin1("Translated to ") + toName
+			+ QString::fromUtf8(" · "));
+}
+
+QString UndoLabel(bool chinese) {
+	return chinese
+		? QString::fromUtf8("撤销")
+		: QString::fromLatin1("Undo");
+}
+
 QStringList PushRecent(const QStringList &recent, const QString &language) {
 	const auto code = language.trimmed();
 	auto result = QStringList();

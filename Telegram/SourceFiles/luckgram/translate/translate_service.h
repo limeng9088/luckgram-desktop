@@ -9,6 +9,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/widgets/menu/menu_add_action_callback.h"
 
 class ClickHandler;
+class History;
 class HistoryItem;
 class PeerData;
 
@@ -45,6 +46,22 @@ void SetDefaultTarget(const QString &language);
 [[nodiscard]] QString ChatTarget(not_null<PeerData*> peer);
 void SetChatTarget(not_null<PeerData*> peer, const QString &language);
 [[nodiscard]] QString EffectiveTarget(not_null<PeerData*> peer);
+
+// 01 C.3: the language messages to this chat are translated into before
+// sending, remembered per chat (encrypted, like the reading languages).
+[[nodiscard]] QString OutChatTarget(not_null<PeerData*> peer);
+void SetOutChatTarget(not_null<PeerData*> peer, const QString &language);
+// The language of the newest incoming message with text, or empty.
+[[nodiscard]] QString LastIncomingLanguage(not_null<History*> history);
+
+// Telegram first, then Luckgram AI (source "translate_out"). On failure
+// the reason toast is shown and `fail` is called.
+void TranslateText(
+	not_null<Main::Session*> session,
+	const TextWithEntities &text,
+	const QString &to,
+	Fn<void(TextWithEntities)> done,
+	Fn<void()> fail);
 
 // "不翻译的语言": the upstream "Do not translate" languages.
 [[nodiscard]] QStringList DoNotTranslate();
