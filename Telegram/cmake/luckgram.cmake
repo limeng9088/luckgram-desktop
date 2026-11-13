@@ -212,15 +212,26 @@ file(CONFIGURE
     @ONLY)
 target_include_directories(Telegram PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/luckgram_gen)
 
+# Build number, commit and the dev switch: generated headers too, never
+# compile definitions of Telegram. A definition that changes every CI run
+# (run number, commit) changes the command line of every Telegram source
+# and the precompiled header, so the self-hosted build recompiled almost
+# everything each run. file(CONFIGURE) writes only when the content
+# changed: a new run number rebuilds luckgram_desktop.cpp, a dev switch
+# change luckgram_features.cpp.
 if (LUCKGRAM_DEV)
-    target_compile_definitions(Telegram PRIVATE LUCKGRAM_DEV_BUILD)
+    set(LUCKGRAM_DEV_BUILD_VALUE 1)
+else()
+    set(LUCKGRAM_DEV_BUILD_VALUE 0)
 endif()
-
-target_compile_definitions(Telegram
-PRIVATE
-    LUCKGRAM_BUILD_NUMBER=${LUCKGRAM_BUILD_NUMBER}
-    LUCKGRAM_COMMIT="${LUCKGRAM_COMMIT}"
-)
+file(CONFIGURE
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/luckgram_gen/luckgram_dev_config.h
+    CONTENT "#pragma once\n#define LUCKGRAM_DEV_BUILD_VALUE @LUCKGRAM_DEV_BUILD_VALUE@\n"
+    @ONLY)
+file(CONFIGURE
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/luckgram_gen/luckgram_build_info.h
+    CONTENT "#pragma once\n#define LUCKGRAM_BUILD_NUMBER @LUCKGRAM_BUILD_NUMBER@\n#define LUCKGRAM_COMMIT \"@LUCKGRAM_COMMIT@\"\n"
+    @ONLY)
 
 # D8 account & privacy: double space (11), hidden chats (12), store-restricted
 # channels (13). Own block so other feature branches don't touch these lines.

@@ -332,6 +332,12 @@ jobs:
       && (needs.libs.result == 'success' || (needs.libs.result == 'skipped' && (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted'))))
     runs-on: ${{ (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) && fromJSON('["self-hosted","luckgram-win"]') || 'windows-latest' }}
     timeout-minutes: 355
+    env:
+      # Self-hosted (xs-master also runs emulators): the steps that build
+      # lower their own cmd.exe to BelowNormal (the line with PriorityClass),
+      # Windows hands that class on to cmake, MSBuild, cl and link. No MSBuild
+      # node reuse, so no node from an earlier build keeps Normal priority.
+      MSBUILDDISABLENODEREUSE: '1'
     defaults:
       run:
         shell: cmd
@@ -431,6 +437,7 @@ jobs:
           nuget sources Disable -Name "Microsoft Visual Studio Offline Packages" >nul 2>&1
           nuget sources Add -Source https://api.nuget.org/v3/index.json >nul 2>&1
           echo Machine: %COMPUTERNAME% (runner %RUNNER_NAME%)
+          if "%SELF_HOSTED%"=="true" powershell -NoProfile -Command "$p = (Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID)).ParentProcessId; (Get-Process -Id $p).PriorityClass = 'BelowNormal'"
           call %TBUILD%\luckgram-desktop\Telegram\build\prepare\win.bat silent %QT%
           if %errorlevel% neq 0 exit /b %errorlevel%
 
@@ -471,6 +478,7 @@ jobs:
           KEEP_GOING: ${{ inputs.keep_going && '1' || '0' }}
         run: |
           echo _CL_=%_CL_% BUILD_PARALLEL=%BUILD_PARALLEL% KEEP_GOING=%KEEP_GOING%
+          if "%SELF_HOSTED%"=="true" powershell -NoProfile -Command "$p = (Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID)).ParentProcessId; (Get-Process -Id $p).PriorityClass = 'BelowNormal'"
           if "%KEEP_GOING%"=="1" goto keep_going
           cmake --build %TBUILD%\luckgram-desktop\out --config Release --parallel %BUILD_PARALLEL%
           exit /b %errorlevel%
@@ -600,6 +608,7 @@ jobs:
         env:
           _CL_: ${{ format('/MP{0}', vars.WIN_CL_MP || '4') }}
         run: |
+          if "%SELF_HOSTED%"=="true" powershell -NoProfile -Command "$p = (Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID)).ParentProcessId; (Get-Process -Id $p).PriorityClass = 'BelowNormal'"
           rem configure.bat takes QT as an argument; in the environment it makes
           rem the Qt package check compare "qt6" with the configured version.
           set QT=
@@ -664,6 +673,7 @@ jobs:
       - name: Unit tests.
         if: always() && inputs.tests && steps.configure.outcome == 'success'
         run: |
+          if "%SELF_HOSTED%"=="true" powershell -NoProfile -Command "$p = (Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID)).ParentProcessId; (Get-Process -Id $p).PriorityClass = 'BelowNormal'"
           set OUT=%TBUILD%\luckgram-desktop\out
           cmake --build %OUT% --config Release --target luckgram_tests --parallel 2
           if errorlevel 1 exit /b 1
