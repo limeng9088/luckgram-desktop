@@ -24,11 +24,12 @@
 #                          on a large disk (E:), see luckgram/windows/RUNNER.md.
 name: Build
 
+# Compiles only on master pushes and manual runs (w-1109, 2026-11-13:
+# no compiling for PRs, they get lint.yml only, so the self-hosted
+# Windows machine is never held by a PR).
 on:
   push:
     branches: [master]
-    paths-ignore: ['**.md', 'docs/**', 'LICENSE', 'LEGAL', 'changelog.txt']
-  pull_request:
     paths-ignore: ['**.md', 'docs/**', 'LICENSE', 'LEGAL', 'changelog.txt']
   workflow_dispatch:
     inputs:
@@ -47,9 +48,11 @@ on:
         default: false
 
 concurrency:
-  group: build-${{ github.ref }}
-  # Superseded PR runs are cancelled; master runs always finish.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Pushes and manual runs in their own groups: a new master push must not
+  # replace a queued manual (unified, keep_going) build. Nothing running is
+  # cancelled.
+  group: build-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
 
 env:
   # 'true' when the Windows jobs run on [self-hosted, luckgram-win].
@@ -773,6 +776,10 @@ jobs:
   mac-libs:
     name: Libraries (macOS)
     needs: credentials
+    # For now manual runs only (w-1109): the first build of the Mac
+    # libraries takes hours; master pushes skip macOS (and so macos and
+    # release-macos) until the unified build is through.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     timeout-minutes: 355
     env:
