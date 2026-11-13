@@ -5730,6 +5730,9 @@ bool ComposeControls::updateSendAsButton(
 
 void ComposeControls::updateAttachBotsMenu() {
 	_attachBotsMenu = nullptr;
+	if (_luckgramSlots) {
+		_luckgramSlots->setPlusMenu(false); // Luckgram D6, until built.
+	}
 	if (!_features.attachBotsMenu
 		|| !_features.attachments
 		|| !_history
