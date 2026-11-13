@@ -12,6 +12,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "data/data_user.h"
 #include "lang/lang_keys.h"
 #include "luckgram/discover/luckgram_discover_logic.h"
+#include "luckgram/discover/luckgram_discover_storage.h"
 #include "luckgram/discover/luckgram_silent_link.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_settings.h"
@@ -50,7 +51,6 @@ namespace Luckgram::SquareUi {
 namespace {
 
 constexpr auto kImageCacheMax = 200;
-constexpr auto kBlockedNamesKey = "discover_blocked_names";
 
 struct Shared {
 	rpl::event_stream<Square::Post> postUpdated;
@@ -1146,11 +1146,10 @@ void Block(
 					QString::fromLatin1(Blocks::kPath),
 					Blocks::BlockBody(author.id),
 					[=](QJsonObject) {
-						const auto key = L(kBlockedNamesKey);
-						Settings::SetString(key, Blocks::PutName(
-							Settings::GetString(key),
+						PutBlockedName(
+							&controller->session().account(),
 							author.id,
-							author.displayName));
+							author.displayName);
 						Data().authorBlocked.fire_copy(author.id);
 						controller->showToast(Tx().blocked());
 					},
@@ -1207,6 +1206,30 @@ void DeletePost(
 		.confirmText = Tx().deleteText(),
 		.confirmStyle = &st::attentionBoxButton,
 	}));
+}
+
+QString BlockedNames(not_null<Main::Account*> account) {
+	return DiscoverStorage::Read(
+		account,
+		L(DiscoverStorage::kBlockedNames),
+		L(DiscoverStorage::kBlockedNames)); // Same key in luckgram.json.
+}
+
+void PutBlockedName(
+		not_null<Main::Account*> account,
+		const QString &id,
+		const QString &name) {
+	DiscoverStorage::Write(
+		account,
+		L(DiscoverStorage::kBlockedNames),
+		Blocks::PutName(BlockedNames(account), id, name));
+}
+
+void RemoveBlockedName(not_null<Main::Account*> account, const QString &id) {
+	DiscoverStorage::Write(
+		account,
+		L(DiscoverStorage::kBlockedNames),
+		Blocks::RemoveName(BlockedNames(account), id));
 }
 
 void DeleteMyData(not_null<Window::SessionController*> controller) {

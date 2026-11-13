@@ -17,6 +17,11 @@ PRIVATE
     luckgram/tests/luckgram_test.cpp
     luckgram/tests/luckgram_test.h
 
+    # D2 encrypted storage naming
+    luckgram/luckgram_storage_logic.cpp
+    luckgram/luckgram_storage_logic.h
+    luckgram/tests/luckgram_storage_tests.cpp
+
     # D5-D12: logic files and their tests, one block per task.
 
     # D5 welcome, privacy, onboarding, version, login code help
@@ -51,10 +56,23 @@ PRIVATE
     luckgram/pro/luckgram_pro_logic.h
     luckgram/tests/luckgram_pro_logic_tests.cpp
 
+    # D3 proxy import and exit check (mobile specs#117 / #118); the
+    # import logic calls D12's luckgram/xray/luckgram_xray_logic.
+    luckgram/proxy/luckgram_proxy_exit_logic.cpp
+    luckgram/proxy/luckgram_proxy_exit_logic.h
+    luckgram/proxy/luckgram_proxy_import_logic.cpp
+    luckgram/proxy/luckgram_proxy_import_logic.h
+    luckgram/tests/luckgram_proxy_tests.cpp
+
     # D8 double space, hidden chats, store-restricted channels (11, 12, 13)
     luckgram/luckgram_privacy_logic.cpp
     luckgram/luckgram_privacy_logic.h
     luckgram/tests/luckgram_privacy_tests.cpp
+
+    # D12 built-in Xray: share links, Clash entries, outbounds, config
+    luckgram/xray/luckgram_xray_logic.cpp
+    luckgram/xray/luckgram_xray_logic.h
+    luckgram/tests/luckgram_xray_logic_tests.cpp
 
     # D7 AI (mobile 18-24, 30)
     luckgram/ai/ai_agents_logic.cpp

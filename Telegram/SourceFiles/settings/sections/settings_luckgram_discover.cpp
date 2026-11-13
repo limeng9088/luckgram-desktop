@@ -23,6 +23,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/widgets/fields/input_field.h"
 #include "window/window_session_controller_link_info.h"
 #include "luckgram/discover/luckgram_discover_logic.h"
+#include "luckgram/discover/luckgram_discover_storage.h"
 #include "luckgram/discover/luckgram_nearby_logic.h"
 #include "luckgram/discover/luckgram_square_compose.h"
 #include "luckgram/discover/luckgram_square_ui.h"
@@ -74,8 +75,8 @@ namespace Api = Luckgram::Api;
 	) | rpl::to_empty;
 }
 
-[[nodiscard]] QString SavedKey(const QString &tab) {
-	return u"square_saved_"_q + tab;
+[[nodiscard]] QString LegacySavedKey(const QString &tab) {
+	return u"square_saved_"_q + tab; // Plain tdata/luckgram.json, pre-D2.
 }
 
 [[nodiscard]] QStringList Tabs() {
@@ -229,7 +230,10 @@ void LuckgramSquare::showTab(const QString &tab) {
 	auto &feed = _state->feed();
 	if (!feed.loadedOnce) {
 		const auto saved = Square::DecodeSaved(
-			Luckgram::Settings::GetString(SavedKey(tab)),
+			Luckgram::DiscoverStorage::Read(
+				&_controller->session().account(),
+				Luckgram::DiscoverStorage::SquareSaved(tab),
+				LegacySavedKey(tab)),
 			NowMs());
 		if (saved) {
 			feed.restore(saved->page, saved->savedAtMs);
@@ -260,8 +264,9 @@ void LuckgramSquare::refresh(bool manual) {
 		const auto json = response.json();
 		auto &feed = _state->feeds.try_emplace(tab, tab).first->second;
 		const auto fresh = feed.applyRefresh(Square::ParsePosts(json), NowMs());
-		Luckgram::Settings::SetString(
-			SavedKey(tab),
+		Luckgram::DiscoverStorage::Write(
+			&_controller->session().account(),
+			Luckgram::DiscoverStorage::SquareSaved(tab),
 			Square::EncodeSaved(json, NowMs()));
 		if (tab == _state->tab) {
 			rebuildList();
@@ -453,8 +458,6 @@ namespace Nearby = Luckgram::Nearby;
 namespace NearbyState = Luckgram::NearbyState;
 namespace Blocks = Luckgram::Blocks;
 
-constexpr auto kBlockedNamesKey = "discover_blocked_names";
-
 [[nodiscard]] Nearby::Texts NearbyTx() {
 	return Nearby::Texts(Luckgram::IsChinese());
 }
@@ -587,11 +590,12 @@ void PersonBox(
 					.body = JsonBytes(Blocks::BlockBody(person.id)),
 					.contentType = "application/json",
 				}, [=](Api::Response) {
-					const auto key = QString::fromLatin1(kBlockedNamesKey);
-					Luckgram::Settings::SetString(key, Blocks::PutName(
-						Luckgram::Settings::GetString(key),
-						person.id,
-						person.displayName));
+					if (const auto strong = weak.get()) {
+						Luckgram::SquareUi::PutBlockedName(
+							&strong->session().account(),
+							person.id,
+							person.displayName);
+					}
 					if (hidden) {
 						hidden();
 					}
@@ -1130,8 +1134,8 @@ void LuckgramBlocked::rebuild() {
 	const auto container = _content.get();
 	container->clear();
 	Ui::AddSkip(container);
-	const auto cache = Luckgram::Settings::GetString(
-		QString::fromLatin1(kBlockedNamesKey));
+	const auto cache = Luckgram::SquareUi::BlockedNames(
+		&_controller->session().account());
 	for (const auto &id : _state->ids) {
 		const auto known = Blocks::Name(cache, id);
 		const auto name = known.isEmpty() ? tx.unknownUser() : known;
@@ -1150,10 +1154,9 @@ void LuckgramBlocked::rebuild() {
 						.method = "DELETE",
 						.path = Blocks::DeletePath(id),
 					}, crl::guard(this, [=](Api::Response) {
-						const auto key = QString::fromLatin1(kBlockedNamesKey);
-						Luckgram::Settings::SetString(key, Blocks::RemoveName(
-							Luckgram::Settings::GetString(key),
-							id));
+						Luckgram::SquareUi::RemoveBlockedName(
+							&_controller->session().account(),
+							id);
 						_state->ids.removeAll(id);
 						rebuild();
 						_controller->showToast(
