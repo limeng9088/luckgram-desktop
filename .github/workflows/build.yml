@@ -41,6 +41,10 @@ on:
         description: 'Dev build: api-dev.luckgram.cc, debug switches and page (D2)'
         type: boolean
         default: false
+      keep_going:
+        description: 'Keep going after compile errors, to collect all of them in one run (the job still fails)'
+        type: boolean
+        default: false
 
 concurrency:
   group: build-${{ github.ref }}
@@ -436,9 +440,25 @@ jobs:
           # vars WIN_CL_MP / WIN_BUILD_PARALLEL.
           _CL_: ${{ format('/MP{0}', env.SELF_HOSTED == 'true' && (vars.WIN_CL_MP || '4') || (vars.WIN_HOSTED_CL_MP || '2')) }}
           BUILD_PARALLEL: ${{ env.SELF_HOSTED == 'true' && (vars.WIN_BUILD_PARALLEL || '2') || '1' }}
+          KEEP_GOING: ${{ inputs.keep_going && '1' || '0' }}
         run: |
-          echo _CL_=%_CL_% BUILD_PARALLEL=%BUILD_PARALLEL%
+          echo _CL_=%_CL_% BUILD_PARALLEL=%BUILD_PARALLEL% KEEP_GOING=%KEEP_GOING%
+          if "%KEEP_GOING%"=="1" goto keep_going
           cmake --build %TBUILD%\luckgram-desktop\out --config Release --parallel %BUILD_PARALLEL%
+          exit /b %errorlevel%
+          :keep_going
+          rem Manual runs with keep_going: collect every compile error in one
+          rem run. MSBuild goes on after a failed task, then the Telegram
+          rem project is compiled once more on its own (no project references,
+          rem generated files + compile only), so its sources are compiled even when a library
+          rem it links failed. The job fails if anything failed.
+          cmake --build %TBUILD%\luckgram-desktop\out --config Release --parallel %BUILD_PARALLEL% -- /p:ContinueOnError=ErrorAndContinue
+          set BUILD_RESULT=%errorlevel%
+          if %BUILD_RESULT% equ 0 exit /b 0
+          echo ::group::Telegram sources, compile only
+          cmake --build %TBUILD%\luckgram-desktop\out --config Release --target Telegram -- "/t:CustomBuild;ClCompile" /p:BuildProjectReferences=false /p:ContinueOnError=ErrorAndContinue
+          echo ::endgroup::
+          exit /b %BUILD_RESULT%
 
       - name: Stage files.
         shell: pwsh
