@@ -17,6 +17,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/proxy/luckgram_proxy_exit.h"
 #include "luckgram/proxy/luckgram_proxy_import_logic.h"
 #include "luckgram/qr/luckgram_qr_decode.h"
+#include "luckgram/xray/luckgram_xray.h"
 #include "mtproto/mtproto_proxy_data.h"
 #include "settings/settings_common.h"
 #include "ui/boxes/confirm_box.h"
@@ -82,11 +83,10 @@ constexpr auto kUserAgent = "clash.meta";
 		"This is not a proxy link. Supported: tg://socks, t.me/proxy, socks5://, vless://, vmess://, trojan://, ss:// links and mihomo / Clash subscription URLs.");
 }
 
+// Why Xray nodes can't be used now (mobile XrayManager.problem()).
 [[nodiscard]] QString XrayProblemText() {
-	// Desktop until D12: the core isn't in the app yet.
-	return Tr(
-		"VLESS、VMess、Trojan、Shadowsocks 节点需要内置 Xray 内核，当前不可用",
-		"VLESS, VMess, Trojan and Shadowsocks need the built-in Xray core, which isn't available");
+	const auto problem = Xray::Problem();
+	return problem.isEmpty() ? Xray::UnavailableText() : problem;
 }
 
 [[nodiscard]] QString ResultText(
@@ -206,11 +206,13 @@ void SaveSubscriptions(const std::vector<Subscription> &list) {
 
 // ---- Proxies.
 
-// Telegram's proxy for an entry; nullopt for an Xray node (D12 hands the
-// node to the core and gets its local SOCKS5 here) or an invalid one.
+// Telegram's proxy for an entry: an Xray node becomes the loopback SOCKS5
+// of the built-in core (D12); nullopt when it can't be used or is invalid.
 [[nodiscard]] std::optional<MTP::ProxyData> ToProxy(const Entry &entry) {
 	if (entry.type == QString::fromLatin1(kTypeXray)) {
-		return std::nullopt;
+		return (entry.node && Xray::Enabled())
+			? Xray::Register(*entry.node)
+			: std::nullopt;
 	}
 	auto result = MTP::ProxyData();
 	result.host = entry.host;
@@ -228,7 +230,9 @@ void SaveSubscriptions(const std::vector<Subscription> &list) {
 
 [[nodiscard]] QString KeyOf(const MTP::ProxyData &proxy) {
 	using Type = MTP::ProxyData::Type;
-	if (proxy.type == Type::Socks5) {
+	if (const auto node = Xray::Find(proxy)) {
+		return node->key(); // The loopback proxy of an Xray node.
+	} else if (proxy.type == Type::Socks5) {
 		return MakeEntry(
 			QString::fromLatin1(kTypeSocks5),
 			proxy.host,
@@ -362,12 +366,13 @@ void Apply(
 		list.push_back({ .url = url });
 		i = end(list) - 1;
 	}
-	// Xray nodes need the built-in core (D12); until then they're skipped.
+	// Xray nodes only while the core is on; the rest count as skipped.
+	const auto xrayOn = Xray::Enabled();
 	auto usable = std::vector<Entry>();
 	auto skipped = result.skipped;
 	auto xraySkipped = false;
 	for (const auto &entry : result.proxies) {
-		if (entry.type == QString::fromLatin1(kTypeXray)) {
+		if (entry.type == QString::fromLatin1(kTypeXray) && !xrayOn) {
 			++skipped;
 			xraySkipped = true;
 		} else {
@@ -449,12 +454,17 @@ void HandleIn(
 		const auto entry = ParseLink(text);
 		if (!entry) {
 			break;
-		} else if (entry->type == QString::fromLatin1(kTypeXray)) {
-			Inform(show, InputTitle(), XrayProblemText() + Tr("。", "."));
+		} else if (entry->type == QString::fromLatin1(kTypeXray)
+			&& !Xray::Enabled()) {
+			Inform(show, InputTitle(), XrayProblemText());
 			return;
 		}
 		const auto proxy = ToProxy(*entry);
 		if (!proxy) {
+			if (entry->type == QString::fromLatin1(kTypeXray)) {
+				Inform(show, InputTitle(), Xray::UnavailableText());
+				return;
+			}
 			break;
 		}
 		const auto existed = controller->contains(*proxy);

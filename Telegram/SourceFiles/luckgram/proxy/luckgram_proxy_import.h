@@ -24,7 +24,8 @@ class VerticalLayout;
 // Desktop differences: 扫码 (camera) → a QR code read from a picture or the
 // clipboard (the camera is D10 扫一扫); tapping a subscription row → a click
 // opening a menu (刷新 / 删除订阅). VLESS / VMess / Trojan / Shadowsocks
-// entries count as skipped until the built-in Xray core (D12) is there.
+// entries go to the built-in Xray core (D12) and are skipped while it is
+// off or missing.
 namespace Luckgram::ProxyImport {
 
 // Above the proxy list: 「直连（不使用代理）」 with the direct exit (click:
