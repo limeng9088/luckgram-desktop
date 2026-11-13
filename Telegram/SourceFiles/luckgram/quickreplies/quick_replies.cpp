@@ -156,7 +156,7 @@ void SendNow(
 		const QString &text) {
 	auto action = context.sendAction
 		? context.sendAction()
-		: std::optional<Api::SendAction>();
+		: std::optional<::Api::SendAction>();
 	if (!action) {
 		return;
 	}
@@ -171,11 +171,11 @@ void SendNow(
 		.text = &textWithTags,
 	});
 	if (error) {
-		Data::ShowSendErrorToast(context.show, peer, error);
+		::Data::ShowSendErrorToast(context.show, peer, error);
 		return;
 	}
 	action->clearDraft = false; // The user's draft stays.
-	auto message = Api::MessageToSend(*action);
+	auto message = ::Api::MessageToSend(*action);
 	message.textWithTags = textWithTags;
 	peer->session().api().sendMessage(std::move(message));
 }

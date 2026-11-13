@@ -30,6 +30,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include <QtCore/QPointer>
 
+#include <deque>
+
 namespace Luckgram::Transcribe {
 namespace {
 
