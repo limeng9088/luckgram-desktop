@@ -118,6 +118,8 @@ PRIVATE
     luckgram/ai/ai_markdown_logic.h
     luckgram/ai/ai_summary_logic.cpp
     luckgram/ai/ai_summary_logic.h
+    luckgram/ai/ai_text_logic.cpp
+    luckgram/ai/ai_text_logic.h
 )
 
 # A generated header rather than a compile definition: switching the option

@@ -4,6 +4,7 @@ This file is part of Luckgram Desktop, based on Telegram Desktop.
 Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/ai/ai_conversation_logic.h"
+#include "luckgram/ai/ai_text_logic.h"
 
 #include <QtCore/QJsonArray>
 #include <QtCore/QUuid>
@@ -160,7 +161,7 @@ std::vector<RequestMessage> RequestMessages(
 			if (picked.empty()) {
 				// The newest message alone is too long: send its end, the
 				// server would reject all of it.
-				text = text.right(std::max(0, maxChars - chars));
+				text = Text::SafeRight(text, std::max(0, maxChars - chars));
 			} else {
 				break;
 			}
@@ -187,7 +188,7 @@ QString AutoTitle(const QString &firstUserText) {
 	auto t = firstUserText;
 	t.replace(QChar('\n'), QChar(' '));
 	t = t.trimmed();
-	return (t.size() > 40) ? (t.left(40) + QString::fromUtf8("…")) : t;
+	return (t.size() > 40) ? (Text::SafeLeft(t, 40) + QString::fromUtf8("…")) : t;
 }
 
 QString PreviewText(const Conversation &conversation) {
