@@ -93,14 +93,34 @@ struct Store {
 		states = Cache::Parse(
 			Storage::ReadAccount(session, QString::fromLatin1(kStatesName)),
 			now);
-		// Choices made before loading are newer than the saved ones.
 		auto saved = DecodeChatLanguages(Storage::ReadAccount(
 			session,
 			QString::fromLatin1(kChatLanguagesName)));
-		for (auto &[peerId, language] : chatLanguages) {
-			saved[peerId] = std::move(language);
+		// #25-#43 kept them as plain luckgram.json keys: move all of this
+		// account's at once (the encrypted value wins).
+		const auto prefix = QString::fromLatin1(kChatToLangPrefix)
+			+ QString::number(session->uniqueId())
+			+ QChar('.');
+		const auto legacy = Settings::KeysWithPrefix(prefix);
+		for (const auto &key : legacy) {
+			const auto peerId = LegacyChatPeerId(key, prefix);
+			const auto code = TargetLanguage(Settings::GetString(key));
+			if (peerId && !code.isEmpty()) {
+				saved.emplace(*peerId, code);
+			}
 		}
-		chatLanguages = std::move(saved);
+		// Choices made before loading are newer than the saved ones.
+		chatLanguages = MergeChatLanguages(
+			std::move(saved),
+			chatLanguages,
+			chatLanguagesRemoved);
+		chatLanguagesRemoved.clear();
+		if (!legacy.isEmpty()) {
+			save(); // Encrypted copy queued first, then the plain keys go.
+			for (const auto &key : legacy) {
+				Settings::Remove(key);
+			}
+		}
 	}
 	void scheduleSave() {
 		if (loaded && !saveTimer.isActive()) {
@@ -139,6 +159,7 @@ struct Store {
 	Cache results;
 	Cache states; // State key -> translated text, from>to languages.
 	std::map<int64_t, QString> chatLanguages; // specs#105, peer id -> code.
+	std::set<int64_t> chatLanguagesRemoved; // Reset before the load.
 	std::map<FullMsgId, Shown> shown;
 	std::map<FullMsgId, Detected> detected; // A.2 icon, memory only.
 	base::Timer saveTimer;
@@ -500,7 +521,8 @@ void SetDefaultTarget(const QString &language) {
 
 namespace {
 
-// #25-#43 kept the chat languages in plain luckgram.json: moved on read.
+// #25-#43 kept the chat languages in plain luckgram.json, moved to the
+// encrypted storage when it loads (Store::ensureLoaded).
 [[nodiscard]] QString LegacyChatKey(not_null<PeerData*> peer) {
 	return QString::fromLatin1(kChatToLangPrefix)
 		+ QString::number(peer->session().uniqueId())
@@ -517,14 +539,10 @@ QString ChatTarget(not_null<PeerData*> peer) {
 	if (i != end(store.chatLanguages)) {
 		return TargetLanguage(i->second);
 	}
-	const auto legacyKey = LegacyChatKey(peer);
-	const auto legacy = TargetLanguage(Settings::GetString(legacyKey));
-	if (!legacy.isEmpty() && store.loaded) {
-		store.chatLanguages.emplace(peerId, legacy);
-		store.scheduleSave();
-		Settings::Remove(legacyKey);
-	}
-	return legacy;
+	// Not loaded yet (or hidden): an old plain key is still in place.
+	return (store.loaded || store.chatLanguagesRemoved.contains(peerId))
+		? QString()
+		: TargetLanguage(Settings::GetString(LegacyChatKey(peer)));
 }
 
 void SetChatTarget(not_null<PeerData*> peer, const QString &language) {
@@ -533,11 +551,17 @@ void SetChatTarget(not_null<PeerData*> peer, const QString &language) {
 	const auto code = TargetLanguage(language);
 	if (code.isEmpty()) {
 		store.chatLanguages.erase(peerId);
+		if (!store.loaded) {
+			store.chatLanguagesRemoved.emplace(peerId);
+		}
 	} else {
 		store.chatLanguages[peerId] = code;
+		store.chatLanguagesRemoved.erase(peerId);
 	}
 	store.scheduleSave();
-	Settings::Remove(LegacyChatKey(peer));
+	if (store.loaded) {
+		Settings::Remove(LegacyChatKey(peer));
+	}
 }
 
 QString EffectiveTarget(not_null<PeerData*> peer) {
@@ -856,6 +880,7 @@ void ClearAll() {
 		store->results = Cache();
 		store->states = Cache();
 		store->chatLanguages.clear();
+		store->chatLanguagesRemoved.clear();
 		store->shown.clear();
 	}
 }

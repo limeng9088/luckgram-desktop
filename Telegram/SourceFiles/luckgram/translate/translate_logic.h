@@ -16,6 +16,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <list>
 #include <map>
 #include <optional>
+#include <set>
 #include <unordered_map>
 
 namespace Luckgram::Translate {
@@ -95,6 +96,20 @@ struct LanguageLinkTarget {
 	const std::map<int64_t, QString> &languages);
 [[nodiscard]] std::map<int64_t, QString> DecodeChatLanguages(
 	const QByteArray &data);
+
+// Loading the saved chat languages: choices made in memory before the
+// load win, and chats reset to the default before the load stay reset
+// (removed), instead of getting the saved value back.
+[[nodiscard]] std::map<int64_t, QString> MergeChatLanguages(
+	std::map<int64_t, QString> saved,
+	const std::map<int64_t, QString> &memory,
+	const std::set<int64_t> &removed);
+
+// #25-#43 kept them as plain luckgram.json keys "<prefix><peer id>":
+// the peer id of such a key, if it has the prefix and a valid id.
+[[nodiscard]] std::optional<int64_t> LegacyChatPeerId(
+	const QString &key,
+	const QString &prefix);
 
 // specs#105 3: 「最近使用」, newest first, no duplicates, at most kMaxRecent.
 inline constexpr auto kMaxRecent = 5;
