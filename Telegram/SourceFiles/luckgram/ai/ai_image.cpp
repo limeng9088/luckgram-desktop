@@ -278,6 +278,12 @@ void Start(
 			});
 			return;
 		}
+		if (!Store::For(session).find(conversationId)) {
+			// Removed while drawing (w-1139): nothing to keep.
+			*finished = true;
+			StateFor(session).requests.remove(id);
+			return;
+		}
 		auto &state = StateFor(session);
 		if (Storage::WriteAccount(session, file, image.data)) {
 			LoadIndex(session, state);
