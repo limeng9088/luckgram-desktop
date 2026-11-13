@@ -816,7 +816,9 @@ jobs:
           echo "prefix=mac-libs-$HASH-" >> $GITHUB_OUTPUT
           # done2: the first "-done" cache was pruned without the generated
           # Libraries/local/src/wallet_engine/wallet_engine.cpp.
-          echo "done=mac-libs-$HASH-done2" >> $GITHUB_OUTPUT
+          # done3: done2 was built with skip-release (Debug only: Qt had just
+          # libQt6*_debug.a), but the macos job builds Release.
+          echo "done=mac-libs-$HASH-done3" >> $GITHUB_OUTPUT
 
       - name: Finished libraries already cached?
         id: done
@@ -863,7 +865,11 @@ jobs:
         id: prepare
         if: steps.done.outputs.cache-hit != 'true'
         timeout-minutes: 320
-        run: ./luckgram-desktop/Telegram/build/prepare/mac.sh skip-release silent
+        # No skip-release: the macos job builds Release, which links the
+        # Release libraries (libQt6Core.a, not libQt6Core_debug.a). The
+        # stages with release: sections (Qt and others) get a new key and
+        # rebuild once over a restored Debug-only cache.
+        run: ./luckgram-desktop/Telegram/build/prepare/mac.sh silent
 
       - name: Free up some disk space.
         # Keeps the generated sources (Libraries/local/src: wallet_engine.cpp,
@@ -871,9 +877,18 @@ jobs:
         if: always() && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'skipped'
         run: find Libraries '(' '(' ! '(' -name '*.a' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path 'Libraries/local/src/*' -o -perm +111 ')' -type f ')' -o -empty ')' -delete || true
 
-      - name: Check generated sources.
+      - name: Check generated sources and Release libraries.
         if: steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
-        run: test -f Libraries/local/src/wallet_engine/wallet_engine.cpp || { echo "::error::wallet_engine.cpp missing after the prune"; exit 1; }
+        run: |
+          missing=0
+          QTDIR=$(ls -d Libraries/local/Qt-* | head -n 1)
+          for f in Libraries/local/src/wallet_engine/wallet_engine.cpp \
+                   "$QTDIR/lib/libQt6Core.a" \
+                   "$QTDIR/lib/libQt6BundledFreetype.a" \
+                   "$QTDIR/plugins/platforms/libqcocoa.a"; do
+            [ -f "$f" ] || { echo "::error::$f missing after the prune"; missing=1; }
+          done
+          exit $missing
 
       - name: Save finished libraries.
         if: steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
@@ -921,7 +936,9 @@ jobs:
           HASH=$( { shasum -a 256 luckgram-desktop/$PREPARE_PATH | awk '{print $1}'; echo "$MACOSX_DEPLOYMENT_TARGET"; } | shasum -a 256 | awk '{print $1}')
           # done2: the first "-done" cache was pruned without the generated
           # Libraries/local/src/wallet_engine/wallet_engine.cpp.
-          echo "done=mac-libs-$HASH-done2" >> $GITHUB_OUTPUT
+          # done3: done2 was built with skip-release (Debug only: Qt had just
+          # libQt6*_debug.a), but the macos job builds Release.
+          echo "done=mac-libs-$HASH-done3" >> $GITHUB_OUTPUT
 
       - name: Restore libraries.
         uses: actions/cache/restore@v6
