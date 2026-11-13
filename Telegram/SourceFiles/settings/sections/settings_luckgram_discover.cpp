@@ -22,6 +22,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/userpic_view.h"
 #include "ui/widgets/fields/input_field.h"
 #include "inline_bots/bot_attach_web_view.h" // InlineBots::PeerTypes
+#include "mainwindow.h" // ::MainWindow (SessionController::widget()) -> Ui::RpWidget*
 #include "window/main_window.h" // MainWindow -> Ui::RpWidget*
 #include "window/window_session_controller_link_info.h"
 #include "luckgram/discover/luckgram_discover_logic.h"
@@ -783,8 +784,8 @@ void LuckgramNearby::pickOnMap() {
 			.accuracy = Core::GeoLocationAccuracy::Exact,
 		};
 	}
-	_state->picker = base::make_weak(Ui::LocationPicker::Show({
-		.parent = _controller->widget(),
+	const auto picker = Ui::LocationPicker::Show({
+		.parent = static_cast<Ui::RpWidget*>(_controller->widget().get()),
 		.config = config,
 		.chooseLabel = rpl::single(NearbyTx().useThisLocation()),
 		.initial = initial,
@@ -795,7 +796,8 @@ void LuckgramNearby::pickOnMap() {
 		.quit = [] {},
 		.storageId = session->local().resolveStorageIdBots(),
 		.closeRequests = rpl::never<>(),
-	}).get());
+	});
+	_state->picker = base::make_weak(picker.get());
 }
 
 void LuckgramNearby::loadList() {
