@@ -1006,6 +1006,7 @@ jobs:
           # The binary must not carry the upstream test api_hash, nor CI-only code.
           if grep -aq 344583e45741c457fe1862106095a5eb "$BIN"; then echo "::error::upstream test api_hash found"; exit 1; fi
           if grep -aq LuckgramCiTestLogin "$BIN"; then echo "::error::CI test login code found"; exit 1; fi
+          if grep -aq "Luckgram Screenshots" "$BIN"; then echo "::error::CI screenshot mode found"; exit 1; fi
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist" || true
 
