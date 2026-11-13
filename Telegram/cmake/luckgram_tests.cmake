@@ -23,6 +23,25 @@ PRIVATE
     luckgram/pro/luckgram_pro_logic.cpp
     luckgram/pro/luckgram_pro_logic.h
     luckgram/tests/luckgram_pro_logic_tests.cpp
+
+    # D7 AI (mobile 18-24, 30)
+    luckgram/ai/ai_agents_logic.cpp
+    luckgram/ai/ai_agents_logic.h
+    luckgram/ai/ai_compose_logic.cpp
+    luckgram/ai/ai_compose_logic.h
+    luckgram/ai/ai_conversation_logic.cpp
+    luckgram/ai/ai_conversation_logic.h
+    luckgram/ai/ai_market_logic.cpp
+    luckgram/ai/ai_market_logic.h
+    luckgram/ai/ai_markdown_logic.cpp
+    luckgram/ai/ai_markdown_logic.h
+    luckgram/ai/ai_summary_logic.cpp
+    luckgram/ai/ai_summary_logic.h
+    luckgram/ai/ai_compose_logic_tests.cpp
+    luckgram/ai/ai_conversation_logic_tests.cpp
+    luckgram/ai/ai_market_logic_tests.cpp
+    luckgram/ai/ai_markdown_logic_tests.cpp
+    luckgram/ai/ai_summary_logic_tests.cpp
 )
 
 target_link_libraries(luckgram_tests

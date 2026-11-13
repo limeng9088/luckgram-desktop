@@ -46,4 +46,15 @@ struct Feature {
 
 inline constexpr auto kDebugDemo = "debug_demo";
 
+// D7 AI (same keys as mobile, features.<key> in GET /v1/config).
+inline constexpr auto kAiAssistant = "ai_assistant"; // 18
+inline constexpr auto kAiAssistantRow = "ai_assistant_row"; // 18 需求 1
+inline constexpr auto kAiImage = "ai_image"; // 23
+inline constexpr auto kAiAgents = "ai_agents"; // 22
+inline constexpr auto kAiAgentMarket = "ai_agent_market"; // 30
+inline constexpr auto kAiWriting = "ai_writing"; // 21
+inline constexpr auto kAiPost = "ai_post"; // 24
+inline constexpr auto kAiReply = "ai_reply"; // 20
+inline constexpr auto kAiSummary = "ai_summary"; // 19
+
 } // namespace Luckgram::Features
