@@ -8,8 +8,10 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_storage.h"
 #include "main/main_session.h"
+#include "settings.h"
 
 #include <QtCore/QDateTime>
+#include <QtCore/QDir>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QUuid>
@@ -27,6 +29,15 @@ const auto kStorageName = QStringLiteral("ai_conversations");
 	return result;
 }
 
+// Before the D2 encrypted storage, development builds kept conversations
+// in plain tdata/luckgram_ai/<user id>.json. Removed once, not migrated.
+void RemoveLegacyPlainFolder() {
+	static auto done = false;
+	if (!base::take(done, true)) {
+		QDir(cWorkingDir() + u"tdata/luckgram_ai"_q).removeRecursively();
+	}
+}
+
 } // namespace
 
 qint64 NowMs() {
@@ -38,6 +49,7 @@ QString NewId() {
 }
 
 Store &Store::For(not_null<Main::Session*> session) {
+	RemoveLegacyPlainFolder();
 	auto &stores = Stores();
 	auto i = stores.find(session);
 	if (i == end(stores)) {
@@ -53,7 +65,7 @@ Store::Store(not_null<Main::Session*> session) : _session(session) {
 	load();
 	// D8 second space: the storage of a hidden account comes and goes.
 	DoubleBottom::ActiveChanges(
-	) | rpl::start_with_next([=] {
+	) | rpl::on_next([=] {
 		load();
 	}, _lifetime);
 }
