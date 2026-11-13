@@ -62,7 +62,12 @@ void SetupPlusIcon(not_null<Ui::IconButton*> attach) {
 	}, attach->lifetime());
 }
 
+void RightSlots::setPlusMenu(bool exists) {
+	_plusMenu = exists;
+}
+
 void RightSlots::fillPlusMenu(not_null<Ui::DropdownMenu*> menu) {
+	setPlusMenu(CompactEnabled());
 	if (!CompactEnabled()) {
 		return;
 	}
@@ -148,13 +153,18 @@ RightSlots::RightSlots(
 		rpl::combine(
 			std::move(slot.wanted),
 			send->shownValue(),
-			CompactValue()
+			CompactValue(),
+			_plusMenu.value()
 		) | rpl::map([hasPlus = bool(raw->plus)](
 				bool wanted,
 				bool sendShown,
-				bool compact) {
-			// specs#94: in the 「+」 menu instead while the bar is compact.
-			return wanted && sendShown && !(compact && hasPlus);
+				bool compact,
+				bool plusMenu) {
+			// specs#94: in the 「+」 menu instead while the bar is compact
+			// and the chat has that menu.
+			return wanted
+				&& sendShown
+				&& !(compact && hasPlus && plusMenu);
 		}) | rpl::distinct_until_changed(
 		) | rpl::on_next([=](bool shown) {
 			raw->shown = shown;

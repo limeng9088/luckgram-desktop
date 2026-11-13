@@ -75,13 +75,18 @@ public:
 
 	void raise();
 
-	// Adds the slots' 「+」 items to the attach menu (compact bar on).
+	// Adds the slots' 「+」 items to the attach menu (compact bar on) and
+	// remembers that they are there. Without such a menu (upstream builds
+	// none when no attachment can be sent, or it was built while the bar
+	// wasn't compact) the buttons stay in the bar: setPlusMenu(false).
 	void fillPlusMenu(not_null<Ui::DropdownMenu*> menu);
+	void setPlusMenu(bool exists);
 
 private:
 	struct Entry;
 
 	std::vector<std::unique_ptr<Entry>> _entries;
+	rpl::variable<bool> _plusMenu = false;
 	rpl::lifetime _lifetime;
 
 };

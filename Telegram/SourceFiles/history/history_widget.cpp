@@ -3868,6 +3868,9 @@ void HistoryWidget::injectSponsoredMessages() const {
 
 void HistoryWidget::refreshAttachBotsMenu() {
 	_attachBotsMenu = nullptr;
+	if (_luckgramSlots) {
+		_luckgramSlots->setPlusMenu(false); // Luckgram D6, until built.
+	}
 	if (!_history) {
 		return;
 	}
