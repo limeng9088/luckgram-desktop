@@ -77,3 +77,15 @@ LUCKGRAM_TEST(StorageCleanupKeepsTelegramFiles) {
 	LG_CHECK(paths.contains(U("/data/A/luckgram_translate_cache0")));
 	LG_CHECK(paths.contains(U("/data/A/luckgram_translate_cache1")));
 }
+
+LUCKGRAM_TEST(StorageAccountNeedsLocalKey) {
+	LG_CHECK(AccountUsable(true, false));
+	LG_CHECK(!AccountUsable(false, false));
+}
+
+LUCKGRAM_TEST(StorageHiddenAccountRefused) {
+	// D8 second space: reading, writing and removing are all refused, so a
+	// hidden account's saved file is never overwritten by an empty state.
+	LG_CHECK(!AccountUsable(true, true));
+	LG_CHECK(!AccountUsable(false, true));
+}

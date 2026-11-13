@@ -5,6 +5,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/luckgram_storage.h"
 
+#include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_storage_logic.h"
 #include "main/main_account.h"
 #include "main/main_session.h"
@@ -74,29 +75,42 @@ void Remove(const QString &folder, const QString &name) {
 	return account->local();
 }
 
+// D8: while an account is hidden in the second space its data is neither
+// read nor written nor removed. Refusing only reads would let a caller
+// write its empty in-memory state over the saved file.
+[[nodiscard]] MTP::AuthKeyPtr AccountKey(not_null<Main::Account*> account) {
+	auto key = AccountLocal(account).peekLegacyLocalKey();
+	const auto hidden = Luckgram::DoubleBottom::IsAccountHidden(account);
+	return AccountUsable(key != nullptr, hidden) ? key : nullptr;
+}
+
 } // namespace
 
 bool AccountAvailable(not_null<Main::Account*> account) {
-	return AccountLocal(account).peekLegacyLocalKey() != nullptr;
+	return AccountKey(account) != nullptr;
 }
 
 QByteArray ReadAccount(
 		not_null<Main::Account*> account,
 		const QString &name) {
-	auto &local = AccountLocal(account);
-	return Read(local.basePath(), local.peekLegacyLocalKey(), name);
+	return Read(AccountLocal(account).basePath(), AccountKey(account), name);
 }
 
 bool WriteAccount(
 		not_null<Main::Account*> account,
 		const QString &name,
 		const QByteArray &data) {
-	auto &local = AccountLocal(account);
-	return Write(local.basePath(), local.peekLegacyLocalKey(), name, data);
+	return Write(
+		AccountLocal(account).basePath(),
+		AccountKey(account),
+		name,
+		data);
 }
 
 void RemoveAccount(not_null<Main::Account*> account, const QString &name) {
-	Remove(AccountLocal(account).basePath(), name);
+	if (AccountAvailable(account)) {
+		Remove(AccountLocal(account).basePath(), name);
+	}
 }
 
 bool AccountAvailable(not_null<Main::Session*> session) {

@@ -60,4 +60,8 @@ QStringList LuckgramPaths(
 	return result;
 }
 
+bool AccountUsable(bool hasLocalKey, bool hidden) {
+	return hasLocalKey && !hidden;
+}
+
 } // namespace Luckgram::Storage
