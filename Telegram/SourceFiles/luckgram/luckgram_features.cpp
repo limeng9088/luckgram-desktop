@@ -15,6 +15,15 @@ namespace {
 
 	// ---- 账号与隐私 / Accounts & Privacy
 	// ---- 消息与语言 / Messages & Language
+	result.push_back({
+		.key = u"save_to_saved"_q, // spec 15
+		.group = Group::MessagesLanguage,
+		.titleZh = "一键收藏",
+		.titleEn = "Save in one tap",
+		.aboutZh = "消息菜单里一点就存到收藏夹",
+		.aboutEn = "Save a message to Saved Messages straight from its menu",
+		.defaultValue = true,
+	});
 	// ---- 媒体、通话与存储 / Media, Calls & Storage
 	// ---- 资料与整理 / Profiles & Organization
 	// ---- AI. D7 (mobile 18-24, 30): same keys, order, texts and defaults

@@ -45,6 +45,8 @@ PRIVATE
     luckgram/luckgram_compose_slots.h
     luckgram/luckgram_features.cpp
     luckgram/luckgram_features.h
+    luckgram/luckgram_save_to_saved.cpp
+    luckgram/luckgram_save_to_saved.h
     luckgram/luckgram_secure_store.cpp
     luckgram/luckgram_secure_store.h
     luckgram/luckgram_service.cpp
