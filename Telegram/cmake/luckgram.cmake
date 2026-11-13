@@ -115,6 +115,9 @@ PRIVATE
     luckgram/xray/luckgram_xray_logic.h
     settings/sections/settings_luckgram_translate.cpp
     settings/sections/settings_luckgram_translate.h
+    # D7 AI: chat summary (19)
+    luckgram/ai/ai_summary.cpp
+    luckgram/ai/ai_summary.h
     # D7 AI: pure logic (also in luckgram_tests)
     luckgram/ai/ai_agents_logic.cpp
     luckgram/ai/ai_agents_logic.h
