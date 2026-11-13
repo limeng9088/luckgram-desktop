@@ -384,10 +384,15 @@ void Request(
 		}
 		done(text);
 	};
+	// Every path ends in done() or fail(), so the entry never stays
+	// "loading" (a message deleted meanwhile counts as a failure).
 	const auto run = [=] {
 		const auto strong = weak.get();
 		const auto item = strong ? strong->data().message(id) : nullptr;
 		if (!item) {
+			if (strong) {
+				fail(false);
+			}
 			return;
 		}
 		Download(item, document, [=](QByteArray bytes) {
@@ -395,6 +400,8 @@ void Request(
 			const auto item = strong ? strong->data().message(id) : nullptr;
 			if (item) {
 				Upload(item, document, std::move(bytes), save, fail);
+			} else if (strong) {
+				fail(false);
 			}
 		}, [=] {
 			if (weak.get()) {
