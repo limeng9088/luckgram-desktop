@@ -731,13 +731,21 @@ jobs:
 
       # luckgram.cc/download: download/latest.json through the site's
       # scripts/update_latest.py (windows: setup + portable), pushed with a
-      # deploy key that can only write to luckgram-site.
+      # deploy key that can only write to luckgram-site. The site buttons
+      # are for everyone, so like api.luckgram.cc only while
+      # vars.RELEASE_PROD_WINDOWS is 'true' (the files are on dl anyway,
+      # under their own versioned path).
       - name: Update luckgram.cc download links
         continue-on-error: true
         env:
           SITE_DEPLOY_KEY: ${{ secrets.SITE_DEPLOY_KEY }}
+          RELEASE_PROD: ${{ vars.RELEASE_PROD_WINDOWS }}
         run: |
           set -euo pipefail
+          if [ "${RELEASE_PROD:-}" != "true" ]; then
+            echo "luckgram.cc not updated (repository variable RELEASE_PROD_WINDOWS is not 'true')"
+            exit 0
+          fi
           [ -n "$SITE_DEPLOY_KEY" ] || { echo "::warning::SITE_DEPLOY_KEY missing; luckgram.cc not updated"; exit 0; }
           PUBLISHED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           K="$RUNNER_TEMP/site_key"; printf '%s\n' "$SITE_DEPLOY_KEY" > "$K"; chmod 600 "$K"
