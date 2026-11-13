@@ -1,0 +1,475 @@
+/*
+This file is part of Luckgram Desktop, based on Telegram Desktop.
+
+Luckgram changes are licensed under GPL-3.0 like the upstream project.
+*/
+#include "luckgram/xray/luckgram_xray.h"
+
+#include "base/timer.h"
+#include "core/application.h"
+#include "core/core_settings.h"
+#include "luckgram/luckgram_secure_store.h"
+#include "luckgram/luckgram_settings.h"
+#include "luckgram/luckgram_strings.h"
+
+#include <QtCore/QCoreApplication>
+#include <QtCore/QDir>
+#include <QtCore/QFileInfo>
+#include <QtCore/QJsonArray>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QPointer>
+#include <QtCore/QProcess>
+
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+
+#ifdef Q_OS_WIN
+#include "base/platform/win/base_windows_h.h"
+#endif // Q_OS_WIN
+
+namespace Luckgram::Xray {
+namespace {
+
+constexpr auto kLocalHost = "127.0.0.1";
+constexpr auto kUser = "lg";
+constexpr auto kStoreKey = "_xray_nodes"; // Luckgram settings, encrypted.
+constexpr auto kSecretName = "xray_key"; // SecureStore: the AES key.
+// The core counts as running once it is still alive after this long.
+constexpr auto kStartedAfter = crl::time(800);
+
+struct Rec {
+	Node node;
+	int localPort = 0;
+	QJsonObject outbound;
+};
+
+struct State {
+	bool started = false;
+	bool loaded = false;
+	bool enabled = false; // Enabled() as of the last Apply().
+	bool applyScheduled = false;
+	QString password;
+	int portBase = 0;
+	std::vector<Rec> nodes;
+
+	QPointer<QProcess> process;
+	bool running = false;
+	QString lastError;
+	base::Timer startedTimer;
+	rpl::event_stream<> changes;
+	rpl::lifetime lifetime;
+};
+
+[[nodiscard]] State &Data() {
+	static auto result = State();
+	return result;
+}
+
+[[nodiscard]] QString BinaryPath() {
+#ifdef Q_OS_WIN
+	const auto name = u"xray.exe"_q;
+#else // Q_OS_WIN
+	const auto name = u"xray"_q;
+#endif // Q_OS_WIN
+	return QDir(QCoreApplication::applicationDirPath()).filePath(name);
+}
+
+[[nodiscard]] QByteArray RandomBytes(int size) {
+	auto result = QByteArray(size, Qt::Uninitialized);
+	if (RAND_bytes(
+			reinterpret_cast<unsigned char*>(result.data()),
+			size) != 1) {
+		return QByteArray();
+	}
+	return result;
+}
+
+// The AES key, made once per install and kept in the secure store.
+[[nodiscard]] QByteArray StoreKey(bool create) {
+	auto key = QByteArray::fromHex(SecureStore::Get(kSecretName).toLatin1());
+	if (key.size() == 32 || !create) {
+		return (key.size() == 32) ? key : QByteArray();
+	}
+	key = RandomBytes(32);
+	if (key.size() == 32) {
+		SecureStore::Set(kSecretName, QString::fromLatin1(key.toHex()));
+	}
+	return key;
+}
+
+// AES-256-GCM: nonce (12) || ciphertext || tag (16). Empty on failure.
+[[nodiscard]] QByteArray Seal(const QByteArray &key, const QByteArray &plain) {
+	const auto nonce = RandomBytes(12);
+	if (key.size() != 32 || nonce.size() != 12) {
+		return QByteArray();
+	}
+	const auto context = EVP_CIPHER_CTX_new();
+	auto out = QByteArray(plain.size() + 16, Qt::Uninitialized);
+	auto length = 0;
+	auto finalLength = 0;
+	const auto u = [](const QByteArray &bytes) {
+		return reinterpret_cast<const unsigned char*>(bytes.constData());
+	};
+	const auto w = reinterpret_cast<unsigned char*>(out.data());
+	const auto ok = context
+		&& EVP_EncryptInit_ex(context, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1
+		&& EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN, 12, nullptr) == 1
+		&& EVP_EncryptInit_ex(context, nullptr, nullptr, u(key), u(nonce)) == 1
+		&& EVP_EncryptUpdate(context, w, &length, u(plain), plain.size()) == 1
+		&& EVP_EncryptFinal_ex(context, w + length, &finalLength) == 1
+		&& EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_GET_TAG, 16, w + length + finalLength) == 1;
+	EVP_CIPHER_CTX_free(context);
+	if (!ok) {
+		return QByteArray();
+	}
+	out.resize(length + finalLength + 16);
+	return nonce + out;
+}
+
+[[nodiscard]] QByteArray Open(const QByteArray &key, const QByteArray &sealed) {
+	if (key.size() != 32 || sealed.size() < 12 + 16) {
+		return QByteArray();
+	}
+	const auto nonce = sealed.left(12);
+	const auto body = sealed.mid(12, sealed.size() - 12 - 16);
+	auto tag = sealed.right(16);
+	const auto context = EVP_CIPHER_CTX_new();
+	auto out = QByteArray(body.size() + 16, Qt::Uninitialized);
+	auto length = 0;
+	auto finalLength = 0;
+	const auto u = [](const QByteArray &bytes) {
+		return reinterpret_cast<const unsigned char*>(bytes.constData());
+	};
+	const auto w = reinterpret_cast<unsigned char*>(out.data());
+	const auto ok = context
+		&& EVP_DecryptInit_ex(context, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1
+		&& EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN, 12, nullptr) == 1
+		&& EVP_DecryptInit_ex(context, nullptr, nullptr, u(key), u(nonce)) == 1
+		&& EVP_DecryptUpdate(context, w, &length, u(body), body.size()) == 1
+		&& EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_TAG, 16, tag.data()) == 1
+		&& EVP_DecryptFinal_ex(context, w + length, &finalLength) == 1;
+	EVP_CIPHER_CTX_free(context);
+	if (!ok) {
+		OPENSSL_cleanse(out.data(), size_t(out.size()));
+		return QByteArray();
+	}
+	out.resize(length + finalLength);
+	return out;
+}
+
+void Save() {
+	auto &data = Data();
+	auto nodes = QJsonArray();
+	for (const auto &rec : data.nodes) {
+		nodes.push_back(QJsonObject{
+			{ u"link"_q, rec.node.link },
+			{ u"local"_q, rec.localPort },
+		});
+	}
+	const auto plain = QJsonDocument(QJsonObject{
+		{ u"pass"_q, data.password },
+		{ u"base"_q, data.portBase },
+		{ u"nodes"_q, nodes },
+	}).toJson(QJsonDocument::Compact);
+	const auto sealed = Seal(StoreKey(true), plain);
+	if (sealed.isEmpty()) {
+		LOG(("Luckgram Xray: could not save the nodes."));
+		return;
+	}
+	Settings::SetString(
+		QString::fromLatin1(kStoreKey),
+		QString::fromLatin1(sealed.toBase64()));
+}
+
+void Load() {
+	auto &data = Data();
+	if (data.loaded) {
+		return;
+	}
+	data.loaded = true;
+	data.nodes.clear();
+	const auto stored = Settings::GetString(QString::fromLatin1(kStoreKey));
+	const auto plain = stored.isEmpty()
+		? QByteArray()
+		: Open(StoreKey(false), QByteArray::fromBase64(stored.toLatin1()));
+	const auto json = QJsonDocument::fromJson(plain).object();
+	data.password = json.value(u"pass"_q).toString();
+	data.portBase = json.value(u"base"_q).toInt();
+	for (const auto &value : json.value(u"nodes"_q).toArray()) {
+		const auto item = value.toObject();
+		const auto node = Parse(item.value(u"link"_q).toString());
+		const auto local = item.value(u"local"_q).toInt();
+		auto outbound = node ? Outbound(node->link) : QJsonObject();
+		if (node && local > 0 && !outbound.isEmpty()) {
+			data.nodes.push_back({ *node, local, std::move(outbound) });
+		}
+	}
+	if (!stored.isEmpty() && plain.isEmpty()) {
+		LOG(("Luckgram Xray: stored nodes unreadable."));
+	}
+	if (data.password.isEmpty() || data.portBase < 20000) {
+		data.password = QString::fromLatin1(RandomBytes(18).toBase64(
+			QByteArray::Base64UrlEncoding
+				| QByteArray::OmitTrailingEquals));
+		const auto random = RandomBytes(4);
+		const auto value = (random.size() == 4)
+			? (quint32(uchar(random[0])) << 24
+				| quint32(uchar(random[1])) << 16
+				| quint32(uchar(random[2])) << 8
+				| quint32(uchar(random[3])))
+			: quint32(0);
+		data.portBase = 20000 + int(value % 35000);
+		Save();
+	}
+}
+
+[[nodiscard]] MTP::ProxyData ProxyFor(const Rec &rec) {
+	auto result = MTP::ProxyData();
+	result.type = MTP::ProxyData::Type::Socks5;
+	result.host = QString::fromLatin1(kLocalHost);
+	result.port = uint32(rec.localPort);
+	result.user = QString::fromLatin1(kUser);
+	result.password = Data().password;
+	return result;
+}
+
+[[nodiscard]] bool IsLoopbackOfOurs(const MTP::ProxyData &proxy) {
+	return (proxy.type == MTP::ProxyData::Type::Socks5)
+		&& (proxy.host == QString::fromLatin1(kLocalHost))
+		&& (proxy.user == QString::fromLatin1(kUser));
+}
+
+void SetState(bool running, QString error) {
+	auto &data = Data();
+	data.running = running;
+	data.lastError = std::move(error);
+	data.changes.fire({});
+}
+
+void Stop() {
+	auto &data = Data();
+	data.startedTimer.cancel();
+	if (const auto process = data.process.data()) {
+		data.process = nullptr;
+		QObject::disconnect(process, nullptr, nullptr, nullptr);
+		process->kill();
+		process->waitForFinished(1000);
+		delete process;
+	}
+}
+
+} // namespace
+
+void Start() {
+	auto &data = Data();
+	if (data.started) {
+		return;
+	}
+	data.started = true;
+	Load();
+	data.startedTimer.setCallback([] {
+		auto &data = Data();
+		if (data.process && data.process->state() == QProcess::Running) {
+			SetState(true, QString());
+		}
+	});
+	// The switch in Luckgram Features, or the server turning the feature
+	// off (remote config merged: empty key). Restart only on a change.
+	Settings::Changes(
+	) | rpl::filter([](const QString &key) {
+		return (key.isEmpty() || key == QString::fromLatin1(kFeatureKey))
+			&& (Enabled() != Data().enabled);
+	}) | rpl::on_next([] {
+		Apply();
+	}, data.lifetime);
+	QObject::connect(
+		QCoreApplication::instance(),
+		&QCoreApplication::aboutToQuit,
+		[] { Stop(); });
+	Reconcile();
+	Apply();
+}
+
+bool Available() {
+	return QFileInfo(BinaryPath()).isExecutable();
+}
+
+bool Enabled() {
+	return Settings::IsEnabled(QString::fromLatin1(kFeatureKey))
+		&& Available();
+}
+
+bool Running() {
+	return Data().running;
+}
+
+QString Problem() {
+	auto &data = Data();
+	if (!Available()) {
+		return Tr("这个版本没有内置代理内核", "This build has no built-in proxy core");
+	} else if (!Settings::IsEnabled(QString::fromLatin1(kFeatureKey))) {
+		return Tr(
+			"内置代理内核已关闭（设置 → Luckgram 功能）",
+			"Built-in proxy core is off (Settings → Luckgram features)");
+	} else if (data.running) {
+		return QString();
+	} else if (data.lastError.isEmpty()) {
+		return Tr("内核启动中…", "Starting core…");
+	}
+	return Tr("内核未运行：", "Core not running: ") + data.lastError;
+}
+
+rpl::producer<> StateChanges() {
+	return Data().changes.events();
+}
+
+std::optional<MTP::ProxyData> Register(const Node &node) {
+	Load();
+	auto &data = Data();
+	const auto key = node.key();
+	for (auto &rec : data.nodes) {
+		if (rec.node.key() == key) {
+			if (rec.node.name != node.name) {
+				rec.node = node; // Renamed in the subscription.
+				Save();
+			}
+			return ProxyFor(rec);
+		}
+	}
+	auto outbound = Outbound(node.link);
+	if (outbound.isEmpty()) {
+		return std::nullopt;
+	}
+	auto used = std::set<int>();
+	for (const auto &rec : data.nodes) {
+		used.emplace(rec.localPort);
+	}
+	const auto ports = PickPorts(data.portBase, used, 1);
+	if (ports.empty()) {
+		return std::nullopt;
+	}
+	data.nodes.push_back({ node, ports.front(), std::move(outbound) });
+	Save();
+	const auto result = ProxyFor(data.nodes.back());
+	if (!data.applyScheduled) {
+		// Once, after the whole import batch.
+		data.applyScheduled = true;
+		crl::on_main(&Core::App(), [] {
+			Data().applyScheduled = false;
+			Apply();
+		});
+	}
+	return result;
+}
+
+std::optional<Node> Find(const MTP::ProxyData &proxy) {
+	if (!IsLoopbackOfOurs(proxy)) {
+		return std::nullopt;
+	}
+	Load();
+	for (const auto &rec : Data().nodes) {
+		if (rec.localPort == int(proxy.port)) {
+			return rec.node;
+		}
+	}
+	return std::nullopt;
+}
+
+void Reconcile() {
+	Load();
+	auto &data = Data();
+	auto live = std::set<int>();
+	for (const auto &proxy : Core::App().settings().proxy().list()) {
+		if (IsLoopbackOfOurs(proxy)) {
+			live.emplace(int(proxy.port));
+		}
+	}
+	const auto before = data.nodes.size();
+	data.nodes.erase(ranges::remove_if(data.nodes, [&](const Rec &rec) {
+		return !live.contains(rec.localPort);
+	}), end(data.nodes));
+	if (data.nodes.size() != before) {
+		Save();
+		Apply();
+	}
+}
+
+void Apply() {
+	Load();
+	auto &data = Data();
+	Stop();
+	data.enabled = Enabled();
+	if (!data.enabled || data.nodes.empty()) {
+		SetState(false, QString());
+		return;
+	}
+	auto runs = std::vector<Run>();
+	for (const auto &rec : data.nodes) {
+		runs.push_back({ rec.localPort, rec.outbound });
+	}
+	const auto config = BuildConfig(
+		runs,
+		QString::fromLatin1(kUser),
+		data.password);
+
+	const auto process = new QProcess();
+	data.process = process;
+	process->setProgram(BinaryPath());
+	process->setArguments({ u"run"_q, u"-c"_q, u"stdin:"_q });
+	process->setWorkingDirectory(QFileInfo(BinaryPath()).absolutePath());
+	// xray's output may name hosts: never kept or logged.
+	process->setStandardOutputFile(QProcess::nullDevice());
+	process->setStandardErrorFile(QProcess::nullDevice());
+#ifdef Q_OS_WIN
+	process->setCreateProcessArgumentsModifier([](
+			QProcess::CreateProcessArguments *args) {
+		args->flags |= CREATE_NO_WINDOW;
+	});
+#endif // Q_OS_WIN
+	QObject::connect(process, &QProcess::started, [=] {
+		process->write(config);
+		process->closeWriteChannel();
+		Data().startedTimer.callOnce(kStartedAfter);
+	});
+	QObject::connect(process, &QProcess::errorOccurred, [=](
+			QProcess::ProcessError error) {
+		if (Data().process != process
+			|| error != QProcess::FailedToStart) {
+			return;
+		}
+		LOG(("Luckgram Xray: the core could not start."));
+		SetState(false, Tr("无法启动", "could not start"));
+	});
+	QObject::connect(process, &QProcess::finished, [=](
+			int exitCode,
+			QProcess::ExitStatus) {
+		if (Data().process != process) {
+			return;
+		}
+		LOG(("Luckgram Xray: the core exited, code %1.").arg(exitCode));
+		SetState(false, Luckgram::IsChinese()
+			? (u"已退出（代码 "_q + QString::number(exitCode) + u"）"_q)
+			: (u"exited (code "_q + QString::number(exitCode) + u")"_q));
+	});
+	SetState(false, QString()); // "Starting core…"
+	process->start();
+}
+
+QString CopyLinkText() {
+	return Tr("复制分享链接", "Copy Share Link");
+}
+
+QString LinkCopiedText() {
+	return Tr("链接已复制", "Link copied");
+}
+
+QString DeleteText() {
+	return Tr("删除代理", "Delete Proxy");
+}
+
+QString UnavailableText() {
+	return Tr("这个节点现在用不了", "This node can't be used now");
+}
+
+} // namespace Luckgram::Xray

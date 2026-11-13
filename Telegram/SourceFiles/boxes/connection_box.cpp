@@ -42,6 +42,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/fields/number_input.h"
 #include "ui/widgets/fields/password_input.h"
 #include "ui/widgets/labels.h"
+#include "ui/layers/generic_box.h"
 #include "ui/widgets/menu/menu_add_action_callback.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
 #include "ui/widgets/popup_menu.h"
@@ -60,6 +61,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
+#include "luckgram/xray/luckgram_xray.h"
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QClipboard>
@@ -1819,6 +1821,16 @@ ProxiesBoxController::ProxiesBoxController(not_null<Main::Account*> account)
 		}
 	}, _lifetime);
 
+	// Luckgram D12: Xray rows show whether the core runs.
+	Luckgram::Xray::StateChanges(
+	) | rpl::on_next([=] {
+		for (const auto &item : _list) {
+			if (Luckgram::Xray::Find(item.data)) {
+				updateView(item);
+			}
+		}
+	}, _lifetime);
+
 	for (auto &item : _list) {
 		refreshChecker(item);
 	}
@@ -2221,13 +2233,25 @@ void ProxiesBoxController::restoreItem(int id) {
 }
 
 void ProxiesBoxController::shareItem(int id, bool qr) {
+	// Luckgram D12: an Xray node shares its original link.
+	if (const auto node = Luckgram::Xray::Find(findById(id)->data)) {
+		QGuiApplication::clipboard()->setText(node->link);
+		if (_show) {
+			_show->showToast(Luckgram::Xray::LinkCopiedText());
+		}
+		return;
+	}
 	share(findById(id)->data, qr);
 }
 
 void ProxiesBoxController::shareItems() {
 	auto result = QString();
 	for (const auto &item : _list) {
-		if (!item.deleted && ProxyDataIsShareable(item.data)) {
+		if (const auto node = item.deleted
+				? std::nullopt
+				: Luckgram::Xray::Find(item.data)) { // Luckgram D12.
+			result += (result.isEmpty() ? QString() : u"\n\n"_q) + node->link;
+		} else if (!item.deleted && ProxyDataIsShareable(item.data)) {
 			const auto link = ProxyDataToPublicLink(_account, item.data);
 			if (!link.isEmpty()) {
 				result += (result.isEmpty() ? QString() : u"\n\n"_q) + link;
@@ -2332,6 +2356,31 @@ void ProxiesBoxController::setDeleted(int id, bool deleted) {
 }
 
 object_ptr<Ui::BoxContent> ProxiesBoxController::editItemBox(int id) {
+	// Luckgram D12: an Xray node has no SOCKS5 editor (its loopback port
+	// and password must stay): copy the share link or delete it.
+	if (const auto node = Luckgram::Xray::Find(findById(id)->data)) {
+		return Box([=](not_null<Ui::GenericBox*> box) {
+			box->setTitle(rpl::single(node->name.isEmpty()
+				? node->host
+				: node->name));
+			box->addRow(object_ptr<Ui::FlatLabel>(
+				box,
+				rpl::single(Luckgram::Xray::Label(node->protocol)
+					+ u" · "_q
+					+ node->host
+					+ u":"_q
+					+ QString::number(node->port)),
+				st::boxLabel));
+			box->addButton(rpl::single(Luckgram::Xray::CopyLinkText()), [=] {
+				QGuiApplication::clipboard()->setText(node->link);
+				box->showToast(Luckgram::Xray::LinkCopiedText());
+			});
+			box->addButton(rpl::single(Luckgram::Xray::DeleteText()), [=] {
+				box->closeBox();
+				deleteItem(id);
+			});
+		});
+	}
 	return Box<ProxyBox>(findById(id)->data, [=](const ProxyData &result) {
 		auto i = findById(id);
 		auto j = ranges::find(
@@ -2526,14 +2575,26 @@ void ProxiesBoxController::updateView(const Item &item) {
 		}
 		return ItemState::Connecting;
 	}();
-	const auto supportsShare = ProxyDataIsShareable(item.data);
+	auto supportsShare = ProxyDataIsShareable(item.data);
+	// Luckgram D12: an Xray node shows its protocol and real server (not
+	// 127.0.0.1), and why it can't be used while the core isn't running.
+	const auto xray = Luckgram::Xray::Find(item.data);
+	auto shownType = type;
+	if (xray) {
+		const auto problem = Luckgram::Xray::Problem();
+		shownType = Luckgram::Xray::Label(xray->protocol)
+			+ (problem.isEmpty() ? QString() : (u" · "_q + problem));
+		supportsShare = true;
+	}
 	_views.fire({
 		item.id,
-		type,
-		((item.data.type == Type::Web)
+		shownType,
+		(xray
+			? xray->host
+			: (item.data.type == Type::Web)
 			? item.data.webAddress()
 			: item.data.host),
-		item.data.port,
+		(xray ? uint32(xray->port) : item.data.port),
 		item.ping,
 		!deleted && selected,
 		deleted,
@@ -2561,6 +2622,8 @@ void ProxiesBoxController::Show(
 }
 
 ProxiesBoxController::~ProxiesBoxController() {
+	// Luckgram D12: nodes whose proxy was deleted here are dropped.
+	crl::on_main([] { Luckgram::Xray::Reconcile(); });
 	if (_saveTimer.isActive()) {
 		base::call_delayed(
 			kSaveSettingsDelayedTimeout,

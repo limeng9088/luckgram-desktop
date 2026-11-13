@@ -9,6 +9,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_hidden_chats.h"
 #include "luckgram/luckgram_store_restrictions.h"
 #include "luckgram/luckgram_strings.h"
+#include "luckgram/xray/luckgram_xray.h"
 #include "settings/sections/settings_luckgram_privacy.h"
 #include "settings/sections/settings_privacy_security.h"
 #include "window/window_session_controller.h"
@@ -64,6 +65,16 @@ namespace {
 	});
 	// ---- 媒体、通话与存储 / Media, Calls & Storage
 	// ---- 资料与整理 / Profiles & Organization
+	// D12 (mobile 33): the built-in Xray core, default on.
+	result.push_back({
+		.key = QString::fromLatin1(Xray::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "内置代理内核",
+		.titleEn = "Built-in proxy core",
+		.aboutZh = "在 App 内运行 Xray，可直接使用 VLESS、VMess、Trojan、Shadowsocks 节点；只代理 Luckgram 自己的流量，不用 VPN。开源组件：Xray-core（MPL-2.0，github.com/XTLS/Xray-core）",
+		.aboutEn = "Runs Xray inside the app so VLESS, VMess, Trojan and Shadowsocks nodes work; only Luckgram's own traffic, no VPN. Open source: Xray-core (MPL-2.0, github.com/XTLS/Xray-core)",
+		.defaultValue = true,
+	});
 	// D8: 12 隐藏聊天 (mobile LuckgramHiddenChats).
 	result.push_back({
 		.key = QString::fromLatin1(HiddenChats::kFeatureKey),
