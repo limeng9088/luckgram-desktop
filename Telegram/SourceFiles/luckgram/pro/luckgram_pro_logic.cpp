@@ -186,6 +186,22 @@ QString Date(int64_t ms, const QTimeZone &tz) {
 	return QDateTime::fromMSecsSinceEpoch(ms, tz).toString(L("yyyy-MM-dd"));
 }
 
+int AccountsLimit(bool pro, int remoteMaxFree) {
+	if (pro) {
+		return kAccountSlots;
+	}
+	const auto limit = (remoteMaxFree > 0) ? remoteMaxFree : kAccountsMaxFree;
+	return std::clamp(limit, 1, int(kAccountSlots));
+}
+
+bool CanAddAccount(int count, int limit) {
+	return count < limit;
+}
+
+bool OfferAccountsUpgrade(bool pro, int remoteMaxFree) {
+	return !pro && (AccountsLimit(false, remoteMaxFree) < kAccountSlots);
+}
+
 LinkStatus ParseLink(const QJsonObject &json) {
 	auto result = LinkStatus();
 	result.linked = json.value(L("linked")).toBool(false);
@@ -407,6 +423,22 @@ QString Texts::linkResult(const QString &request, int max) const {
 	return t(
 		U("没有完成绑定，请重试。"),
 		L("Linking was not completed. Please try again."));
+}
+
+QString Texts::accountsLimitReached(int max, bool offerPro) const {
+	if (offerPro) {
+		return t(
+			U("免费版最多可登录 ") + N(max) + U(" 个账号。升级 Pro 可登录的账号数量不限"),
+			L("Free accounts can log in to at most ") + N(max) + L(" accounts. Upgrade to Pro for unlimited accounts"));
+	}
+	// Pro (or a free limit as high as the slots): only the slots are left.
+	return t(
+		U("这台设备最多可登录 ") + N(max) + U(" 个账号"),
+		L("This device can log in to at most ") + N(max) + L(" accounts"));
+}
+
+QString Texts::viewPro() const {
+	return t(U("查看 Pro"), L("View Pro"));
 }
 
 QString Texts::proTitle() const {

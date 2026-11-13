@@ -6,6 +6,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/pro/luckgram_pro.h"
 
 #include "core/application.h"
+#include "main/main_domain.h"
+#include "window/window_controller.h"
 #include "luckgram/luckgram_ai.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_settings.h"
@@ -173,6 +175,49 @@ std::vector<Row> LiveRows() {
 		LivePerks(Current().perks, RemoteValue(kConfigPerks)),
 		ConfigNumbers(),
 		IsChinese());
+}
+
+static_assert(::Main::Domain::kPremiumMaxAccounts == kAccountSlots);
+
+int AccountsLimitNow() {
+	return AccountsLimit(IsPro(), RemoteInt(kConfigAccountsMaxFree, 0));
+}
+
+rpl::producer<> AccountsLimitChanges() {
+	return rpl::merge(
+		Changes(),
+		Settings::Changes() | rpl::filter([](const QString &key) {
+			return key.isEmpty(); // Remote config merged, all cleared.
+		}) | rpl::to_empty);
+}
+
+void FillAccountsLimitBox(not_null<Ui::GenericBox*> box) {
+	const auto texts = Texts(IsChinese());
+	const auto remoteMaxFree = RemoteInt(kConfigAccountsMaxFree, 0);
+	const auto offerPro = OfferAccountsUpgrade(IsPro(), remoteMaxFree)
+		&& BillingEnabled();
+	box->addRow(object_ptr<Ui::FlatLabel>(
+		box,
+		rpl::single(texts.accountsLimitReached(
+			AccountsLimitNow(),
+			OfferAccountsUpgrade(IsPro(), remoteMaxFree))),
+		st::boxLabel));
+	if (offerPro) {
+		box->addButton(rpl::single(texts.viewPro()), [=] {
+			box->closeBox();
+			const auto window = Core::App().activePrimaryWindow();
+			if (const auto controller = window
+					? window->sessionController()
+					: nullptr) {
+				controller->showSettings(::Settings::LuckgramPro::Id());
+			}
+		});
+	}
+	box->addButton(
+		offerPro
+			? Luckgram::TrValue("取消", "Cancel")
+			: Luckgram::TrValue("好", "OK"),
+		[=] { box->closeBox(); });
 }
 
 void ShowUpgrade(

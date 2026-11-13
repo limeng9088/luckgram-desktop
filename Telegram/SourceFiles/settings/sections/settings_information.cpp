@@ -1111,7 +1111,8 @@ void AccountsList::rebuild() {
 		}
 	}, inner->lifetime());
 
-	const auto premiumLimit = _controller->session().domain().maxAccounts();
+	// Luckgram D3 #6: no account is locked above the limit.
+	const auto premiumLimit = ::Main::Domain::kPremiumMaxAccounts;
 	const auto list = _controller->session().domain().orderedAccounts();
 	for (const auto &account : list) {
 		auto i = _watched.find(account);

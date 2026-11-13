@@ -36,8 +36,12 @@ public:
 		std::unique_ptr<Account> account;
 	};
 
-	static constexpr auto kMaxAccounts = 3;
-	static constexpr auto kPremiumMaxAccounts = 6;
+	// Luckgram D3 #6 (specs#135): free accounts.max_free (default 10, remote
+	// config), Pro no limit but the compiled slots. Slots cost nothing until
+	// an account is added: each logged-in account has its own MTP instance
+	// and local storage folder, an empty slot only an index.
+	static constexpr auto kMaxAccounts = 10;
+	static constexpr auto kPremiumMaxAccounts = 100;
 
 	explicit Domain(const QString &dataName);
 	~Domain();

@@ -29,12 +29,19 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/notifications_manager.h"
 #include "window/window_controller.h"
 #include "data/data_peer_values.h" // Data::AmPremiumValue.
+#include "luckgram/pro/luckgram_pro.h"
 
 namespace Main {
 
 Domain::Domain(const QString &dataName)
 : _dataName(dataName)
 , _local(std::make_unique<Storage::Domain>(this, dataName)) {
+	// Luckgram D3 #6: the limit follows Pro and the remote config.
+	Luckgram::Pro::AccountsLimitChanges(
+	) | rpl::on_next([=] {
+		_lastMaxAccounts = maxAccounts();
+	}, _lifetime);
+
 	_active.changes(
 	) | rpl::take(1) | rpl::on_next([=] {
 		// In case we had a legacy passcoded app we start settings here.
@@ -615,13 +622,8 @@ void Domain::scheduleWriteAccounts() {
 }
 
 int Domain::maxAccounts() const {
-	const auto premiumCount = ranges::count_if(accounts(), [](
-			const Main::Domain::AccountWithIndex &d) {
-		return d.account->sessionExists()
-			&& (d.account->session().premium()
-				|| d.account->session().isTestMode());
-	});
-	return std::min(int(premiumCount) + kMaxAccounts, kPremiumMaxAccounts);
+	// Luckgram D3 #6: Luckgram Pro, not Telegram Premium, raises the limit.
+	return Luckgram::Pro::AccountsLimitNow();
 }
 
 rpl::producer<int> Domain::maxAccountsChanges() const {
