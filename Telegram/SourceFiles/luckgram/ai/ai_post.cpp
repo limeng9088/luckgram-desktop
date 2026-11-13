@@ -5,6 +5,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/ai/ai_post.h"
 
+#include "base/weak_ptr.h"
 #include "chat_helpers/compose/compose_show.h"
 #include "history/history.h"
 #include "history/history_item.h"
@@ -93,6 +94,13 @@ void ShowPanel(not_null<WritingHost*> host) {
 	const auto state = panel->lifetime().make_state<State>();
 	const auto skip = st::historySendPadding * 2;
 	const auto margins = QMargins(skip, skip / 2, skip, skip / 2);
+	// w-1139: callbacks run only while the host is there. FieldHost is a
+	// base::has_weak_ptr (and WritingHost itself with #56).
+	const auto weakHost = base::make_weak(
+		dynamic_cast<base::has_weak_ptr*>(host.get()));
+	const auto alive = [=]() -> WritingHost* {
+		return weakHost.get() ? host.get() : nullptr;
+	};
 
 	panel->paintRequest() | rpl::on_next([=](QRect clip) {
 		auto p = QPainter(panel);
@@ -296,19 +304,26 @@ void ShowPanel(not_null<WritingHost*> host) {
 	};
 	// 00: the consent prompt before anything is sent.
 	const auto ask = [=](const QString &content) {
-		WithConsent(host->show(), crl::guard(panel, [=] {
+		const auto strong = alive();
+		if (!strong) {
+			return;
+		}
+		WithConsent(strong->show(), crl::guard(panel, [=] {
 			run(content);
 		}));
 	};
 	const auto startGenerate = [=] {
 		const auto text = topic->getLastText().trimmed();
+		const auto strong = alive();
 		if (text.isEmpty()) {
 			topic->showError();
+			return;
+		} else if (!strong) {
 			return;
 		}
 		// 24 需求 5: the example posts go only into this request.
 		state->examples = Examples(
-			RecentPosts(host->history()),
+			RecentPosts(strong->history()),
 			MaxInputChars() / 2);
 		ask(Post::Generate(state->examples, text));
 	};
@@ -349,16 +364,19 @@ void ShowPanel(not_null<WritingHost*> host) {
 	// Not from inside the clicked button of the panel itself.
 	const auto hideLater = [=] {
 		crl::on_main(panel, [=] {
-			host->hidePanel(panel);
+			if (const auto strong = alive()) {
+				strong->hidePanel(panel);
+			}
 		});
 	};
 	// 24 需求 4: through the field's own send path, as the admin's Send.
 	const auto post = [=](bool scheduled) {
 		const auto text = draft->getLastText().trimmed();
-		if (text.isEmpty() || state->busy) {
+		const auto strong = alive();
+		if (text.isEmpty() || state->busy || !strong) {
 			return;
 		}
-		host->send(TextWithTags{ text }, scheduled);
+		strong->send(TextWithTags{ text }, scheduled);
 		if (!scheduled) {
 			hideLater();
 		}
