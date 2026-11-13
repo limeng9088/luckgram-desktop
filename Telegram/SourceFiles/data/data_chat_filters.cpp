@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "data/data_chat_filters.h"
 
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "api/api_text_entities.h"
 #include "history/history.h"
 #include "data/data_peer.h"
@@ -339,6 +340,10 @@ const base::flat_set<not_null<History*>> &ChatFilter::never() const {
 bool ChatFilter::contains(
 		not_null<History*> history,
 		bool ignoreFakeUnread) const {
+	if (Luckgram::Keywords::IsLocalFilterId(_id)) {
+		// Luckgram D9 (06): a keyword folder, matched by its keywords.
+		return Luckgram::Keywords::Contains(history, _id);
+	}
 	const auto flag = [&] {
 		const auto peer = history->peer;
 		if (const auto user = peer->asUser()) {
@@ -511,11 +516,19 @@ void ChatFilters::received(const QVector<MTPDialogFilter> &list) {
 		++position;
 	}
 	while (position < _list.size()) {
+		// Luckgram D9 (06): local keyword folders are not on the server.
+		if (Luckgram::Keywords::IsLocalFilterId(_list[position].id())) {
+			++position;
+			continue;
+		}
 		applyRemove(position);
 		changed = true;
 	}
 	if (!ranges::contains(begin(_list), end(_list), 0, &ChatFilter::id)) {
 		_list.insert(begin(_list), ChatFilter());
+	}
+	if (luckgramArrangeLocal()) {
+		changed = true;
 	}
 	if (changed || !_loaded || _reloading) {
 		_loaded = true;
@@ -875,17 +888,81 @@ void ChatFilters::saveOrder(
 	const auto api = &_owner->session().api();
 	api->request(_saveOrderRequestId).cancel();
 
+	// Luckgram D9 (06): local keyword folders keep their place in the
+	// order on this device only; the server gets the cloud folders.
+	Luckgram::Keywords::RememberOrder(&_owner->session(), order);
 	auto ids = QVector<MTPint>();
+	auto cloudIds = QVector<MTPint>();
 	ids.reserve(order.size());
+	cloudIds.reserve(order.size());
 	for (const auto id : order) {
 		ids.push_back(MTP_int(id));
+		if (!Luckgram::Keywords::IsLocalFilterId(id)) {
+			cloudIds.push_back(MTP_int(id));
+		}
 	}
 	const auto wrapped = MTP_vector<MTPint>(ids);
 
 	apply(MTP_updateDialogFilterOrder(wrapped));
 	_saveOrderRequestId = api->request(MTPmessages_UpdateDialogFiltersOrder(
-		wrapped
+		MTP_vector<MTPint>(cloudIds)
 	)).afterRequest(_saveOrderAfterId).send();
+}
+
+void ChatFilters::luckgramRefreshLocal() {
+	luckgramArrangeLocal();
+	_listChanged.fire({});
+}
+
+bool ChatFilters::luckgramArrangeLocal() {
+	const auto ids = [&] {
+		return ranges::views::all(
+			_list
+		) | ranges::views::transform(
+			&ChatFilter::id
+		) | ranges::to_vector;
+	};
+	const auto was = ids();
+	Luckgram::Keywords::ArrangeLocal(&_owner->session(), _list);
+	const auto now = ids();
+
+	// Refill the chat lists of the local folders that were or are shown.
+	auto local = std::vector<FilterId>();
+	for (const auto id : was) {
+		if (Luckgram::Keywords::IsLocalFilterId(id)) {
+			local.push_back(id);
+		}
+	}
+	for (const auto id : now) {
+		if (Luckgram::Keywords::IsLocalFilterId(id)
+			&& !ranges::contains(local, id)) {
+			local.push_back(id);
+		}
+	}
+	for (const auto id : local) {
+		const auto i = ranges::find(_list, id, &ChatFilter::id);
+		const auto exists = (i != end(_list));
+		const auto filterList = chatsList(id);
+		const auto feedList = [&](not_null<const Dialogs::MainList*> list) {
+			for (const auto &entry : *list->indexed()) {
+				if (const auto history = entry->history()) {
+					const auto should = exists && i->contains(history);
+					if (should != history->inChatList(id)) {
+						if (should) {
+							history->addToChatList(id, filterList);
+						} else {
+							history->removeFromChatList(id, filterList);
+						}
+					}
+				}
+			}
+		};
+		feedList(_owner->chatsList());
+		if (const auto folder = _owner->folderLoaded(Data::Folder::kId)) {
+			feedList(folder->chatsList());
+		}
+	}
+	return (was != now);
 }
 
 bool ChatFilters::archiveNeeded() const {

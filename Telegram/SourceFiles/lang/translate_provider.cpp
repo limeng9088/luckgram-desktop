@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "lang/translate_provider.h"
 
+#include "luckgram/translate/translate_service.h"
+
 #include "base/options.h"
 #include "core/application.h"
 #include "core/core_settings.h"
@@ -41,6 +43,10 @@ std::unique_ptr<TranslateProvider> CreateTranslateProvider(
 	if (Core::App().settings().usePlatformTranslation()
 		&& Platform::IsTranslateProviderAvailable()) {
 		return Platform::CreateTranslateProvider();
+	}
+	// Luckgram spec 01: Telegram, then Luckgram AI (no Google fallback).
+	if (auto luckgram = Luckgram::Translate::MaybeCreateProvider(session)) {
+		return luckgram;
 	}
 	return CreateMTProtoTranslateProvider(session);
 }

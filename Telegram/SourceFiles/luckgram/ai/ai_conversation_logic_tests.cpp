@@ -218,3 +218,40 @@ LUCKGRAM_TEST(AiAgentsPinned) {
 	}));
 	LG_CHECK(ParsePinned(QString()).isEmpty());
 }
+
+// ---- 18 需求 5 "问 AI"
+
+LUCKGRAM_TEST(AiAskBuildsTextLinksAndFiles) {
+	using namespace Luckgram::AI::Ask;
+	auto first = Part();
+	first.text = QStringLiteral(" Long article text ");
+	first.links = { QStringLiteral("https://a.example/x") };
+	first.webpageUrl = QStringLiteral("https://b.example/y");
+	auto second = Part();
+	second.text = QStringLiteral("see https://b.example/y");
+	second.links = { QStringLiteral("https://a.example/x") }; // Once only.
+	second.webpageUrl = QStringLiteral("https://c.example/z");
+	auto file = Part();
+	file.fileName = QStringLiteral("notes.md");
+	file.fileContent = QStringLiteral("# Notes\n");
+	LG_EQUAL(BuildPrompt({ first, second, file }, false), QStringLiteral(
+		"Long article text\n\nsee https://b.example/y\n"
+		"Link: https://a.example/x\n"
+		"Link: https://b.example/y\n"
+		"Link: https://c.example/z\n"
+		"File: notes.md\n"
+		"File content:\n```\n# Notes\n```\n\n"));
+	auto zh = Part();
+	zh.fileName = QStringLiteral("a.pdf");
+	LG_EQUAL(BuildPrompt({ zh }, true), QString::fromUtf8("文件：a.pdf\n\n"));
+	LG_EQUAL(BuildPrompt({ Part() }, true), QString());
+}
+
+LUCKGRAM_TEST(AiAskTextFiles) {
+	using namespace Luckgram::AI::Ask;
+	LG_CHECK(IsTextFile(QStringLiteral("text/plain"), QString()));
+	LG_CHECK(IsTextFile(QStringLiteral("application/json"), QString()));
+	LG_CHECK(IsTextFile(QStringLiteral("application/octet-stream"), QStringLiteral("main.CPP")));
+	LG_CHECK(!IsTextFile(QStringLiteral("application/pdf"), QStringLiteral("a.pdf")));
+	LG_CHECK(!IsTextFile(QString(), QStringLiteral("README")));
+}

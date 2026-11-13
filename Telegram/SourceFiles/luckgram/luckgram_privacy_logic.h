@@ -99,17 +99,23 @@ enum class SecondPasscodeError {
 	quint64 userId);
 
 // The stored second-space record (luckgram.json, "double_bottom.record"):
-// salt, nonce and AES-256-GCM ciphertext + tag of the main passcode under
-// a key derived from the second passcode. Only the encoding lives here,
-// the crypto is in luckgram_double_bottom.cpp.
+// salt, nonce and AES-256-GCM ciphertext + tag of the local key under a
+// key derived from the second passcode, then the visible account list
+// sealed under a key derived from the local key. Only the encoding lives
+// here, the crypto is in luckgram_double_bottom.cpp.
 struct SecondRecord {
 	QByteArray salt;
 	QByteArray nonce;
 	QByteArray sealed; // ciphertext followed by the 16-byte GCM tag
+	// Version 2: the visible account list, AES-256-GCM under a key derived
+	// from the local key (so it can change in the main space without the
+	// second passcode). Both empty when there is none yet.
+	QByteArray visibleNonce;
+	QByteArray visibleSealed;
 	int iterations = 0;
 };
 
-inline constexpr auto kRecordVersion = 1;
+inline constexpr auto kRecordVersion = 2; // Version 1 still decodes.
 inline constexpr auto kSaltSize = 16;
 inline constexpr auto kNonceSize = 12;
 inline constexpr auto kTagSize = 16;

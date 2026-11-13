@@ -7,6 +7,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "settings/settings_common_session.h"
 
+#include "luckgram/discover/luckgram_nearby_logic.h"
+
 namespace Ui {
 class VerticalLayout;
 } // namespace Ui
@@ -54,6 +56,63 @@ private:
 	void loadMore();
 	void rebuildTabs();
 	void rebuildList();
+
+	const not_null<Window::SessionController*> _controller;
+	const not_null<Ui::VerticalLayout*> _content;
+	const std::unique_ptr<State> _state;
+
+};
+
+// D10 (mobile 25): 「附近的人」. Username first, the intro once, the silent
+// link, one position per open / refresh / renew (system location service,
+// or a place picked on the map; only ~1 km is ever sent), the list grouped
+// by distance, the card ("在附近可见" for 24 hours, renew, bio, photo),
+// report, "don't show this person", the blocked people.
+class LuckgramNearby : public Section<LuckgramNearby> {
+public:
+	LuckgramNearby(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+	~LuckgramNearby();
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	struct State;
+
+	void connectService();
+	void refresh();
+	void locate(Fn<void()> then);
+	void pickOnMap();
+	void loadList();
+	void setVisible(bool visible);
+	void uploadCard();
+	void editBio();
+	void showPerson(const Luckgram::Nearby::Person &person);
+	void rebuild();
+
+	const not_null<Window::SessionController*> _controller;
+	const not_null<Ui::VerticalLayout*> _content;
+	const std::unique_ptr<State> _state;
+
+};
+
+// D10 (mobile BlockedUsersActivity): the people blocked in People Nearby
+// and Square (one list, /v1/blocks), names from the local cache, unblock.
+class LuckgramBlocked : public Section<LuckgramBlocked> {
+public:
+	LuckgramBlocked(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+	~LuckgramBlocked();
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	struct State;
+
+	void load();
+	void rebuild();
 
 	const not_null<Window::SessionController*> _controller;
 	const not_null<Ui::VerticalLayout*> _content;

@@ -324,4 +324,12 @@ QString Texts::connecting() const { return t("正在连接附近的人服务…"
 QString Texts::connectFailed() const { return t("暂时无法连接附近的人服务，请稍后再试", "People Nearby isn't reachable right now. Please try again later."); }
 QString Texts::banned() const { return t("你的账号已被限制使用附近的人", "Your account can't use People Nearby"); }
 
+QString Texts::sourceSystem() const { return t("位置来源：系统定位（只上传约 1 公里精度的模糊位置）", "Location: from the system (only a blurred ~1 km position is uploaded)"); }
+QString Texts::sourceManual() const { return t("位置来源：你在地图上选择的位置（只保存约 1 公里精度）", "Location: the place you picked on the map (only ~1 km precision is kept)"); }
+QString Texts::systemLocationFailed() const { return t("这台电脑暂时无法获取定位。可以在系统设置里打开定位服务，或者在地图上选择你所在的位置。", "This computer couldn't get your location. Turn on location services in system settings, or pick where you are on the map."); }
+QString Texts::pickOnMap() const { return t("在地图上选择位置", "Pick on the map"); }
+QString Texts::useThisLocation() const { return t("使用这个位置", "Use this location"); }
+QString Texts::useSystemLocation() const { return t("改用系统定位", "Use system location"); }
+QString Texts::mapUnavailable() const { return t("地图暂时不可用，请稍后再试", "The map isn't available right now. Please try again later."); }
+
 } // namespace Luckgram::Nearby

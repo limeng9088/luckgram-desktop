@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "storage/storage_account.h"
+#include "luckgram/luckgram_storage.h" // Luckgram D2
 
 #include "storage/localstorage.h"
 #include "storage/storage_domain.h"
@@ -870,6 +871,9 @@ void Account::reset() {
 	_mapChanged = true;
 	writeMap();
 	writeMtpData();
+
+	// Luckgram D2: the account's encrypted Luckgram data goes with it.
+	Luckgram::Storage::ClearAccount(_basePath);
 
 	crl::async([
 		base = _basePath,

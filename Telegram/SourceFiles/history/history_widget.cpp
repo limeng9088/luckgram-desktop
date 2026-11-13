@@ -6,8 +6,11 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history_widget.h"
+#include "luckgram/luckgram_save_to_saved.h" // Luckgram D6
 
 #include "luckgram/luckgram_compose_slots.h"
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
+#include "luckgram/d9/luckgram_notes_widgets.h" // Luckgram D9
 
 #include "api/api_compose_with_ai.h"
 #include "api/api_editing.h"
@@ -602,6 +605,7 @@ HistoryWidget::HistoryWidget(
 			.field = _field,
 			.show = controller->uiShow(),
 			.history = [=] { return _history; },
+			.topicRootId = [] { return MsgId(); }, // Whole chat.
 		},
 		_send.get(),
 		[=] { updateFieldSize(); });
@@ -1157,6 +1161,15 @@ HistoryWidget::HistoryWidget(
 	_topBar->forwardSelectionRequest(
 	) | rpl::on_next([=] {
 		forwardSelected();
+	}, _topBar->lifetime());
+	_topBar->luckgramSaveSelectionRequest( // Luckgram D6 (mobile 15)
+	) | rpl::on_next([=] {
+		if (_list) {
+			Luckgram::SaveToSaved::Save(
+				controller(),
+				_list->getSelectedForwardItems(),
+				crl::guard(this, [=] { clearSelected(); }));
+		}
 	}, _topBar->lifetime());
 	_topBar->deleteSelectionRequest(
 	) | rpl::on_next([=] {
@@ -2252,6 +2265,12 @@ void HistoryWidget::orderWidgets() {
 	}
 	if (_translateBar) {
 		_translateBar->raise();
+	}
+	if (_luckgramNoteBar) {
+		_luckgramNoteBar->raise();
+	}
+	if (_luckgramJumpBar) {
+		_luckgramJumpBar->raise();
 	}
 	if (_sponsoredMessageBar) {
 		_sponsoredMessageBar->raise();
@@ -3433,6 +3452,8 @@ void HistoryWidget::showHistory(
 		_pinnedBar = nullptr;
 		_hidingPinnedBar = nullptr;
 		_translateBar = nullptr;
+		_luckgramNoteBar = nullptr;
+		_luckgramJumpBar = nullptr;
 		_pinnedTracker = nullptr;
 		_groupCallBar = nullptr;
 		_requestsBar = nullptr;
@@ -3638,6 +3659,8 @@ void HistoryWidget::showHistory(
 		_updateHistoryItems.cancel();
 
 		setupTranslateBar();
+		setupLuckgramNoteBar();
+		setupLuckgramJumpBar();
 		setupPinnedTracker();
 		setupGroupCallBar();
 		setupRequestsBar();
@@ -6375,6 +6398,12 @@ void HistoryWidget::showAnimated(
 	if (_translateBar) {
 		_translateBar->finishAnimating();
 	}
+	if (_luckgramNoteBar) {
+		_luckgramNoteBar->finishAnimating();
+	}
+	if (_luckgramJumpBar) {
+		_luckgramJumpBar->finishAnimating();
+	}
 	if (_groupCallBar) {
 		_groupCallBar->finishAnimating();
 	}
@@ -6423,6 +6452,12 @@ void HistoryWidget::showFinished() {
 	if (_translateBar) {
 		_translateBar->finishAnimating();
 	}
+	if (_luckgramNoteBar) {
+		_luckgramNoteBar->finishAnimating();
+	}
+	if (_luckgramJumpBar) {
+		_luckgramJumpBar->finishAnimating();
+	}
 	if (_groupCallBar) {
 		_groupCallBar->finishAnimating();
 	}
@@ -6458,6 +6493,12 @@ void HistoryWidget::doneShow() {
 	}
 	if (_translateBar) {
 		_translateBar->finishAnimating();
+	}
+	if (_luckgramNoteBar) {
+		_luckgramNoteBar->finishAnimating();
+	}
+	if (_luckgramJumpBar) {
+		_luckgramJumpBar->finishAnimating();
 	}
 	if (_groupCallBar) {
 		_groupCallBar->finishAnimating();
@@ -8414,8 +8455,20 @@ void HistoryWidget::updateControlsGeometry() {
 		pinnedBar->move(0, pinnedBarTop);
 		pinnedBar->resizeToWidth(innerWidth);
 	}
-	const auto sponsoredMessageBarTop = pinnedBarTop
+	const auto luckgramNoteBarTop = pinnedBarTop
 		+ (pinnedBar ? pinnedBar->height() : 0);
+	if (_luckgramNoteBar) {
+		_luckgramNoteBar->move(0, luckgramNoteBarTop);
+		_luckgramNoteBar->resizeToWidth(innerWidth);
+	}
+	const auto luckgramJumpBarTop = luckgramNoteBarTop
+		+ (_luckgramNoteBar ? _luckgramNoteBar->height() : 0);
+	if (_luckgramJumpBar) {
+		_luckgramJumpBar->move(0, luckgramJumpBarTop);
+		_luckgramJumpBar->resizeToWidth(innerWidth);
+	}
+	const auto sponsoredMessageBarTop = luckgramJumpBarTop
+		+ (_luckgramJumpBar ? _luckgramJumpBar->height() : 0);
 	if (_sponsoredMessageBar) {
 		_sponsoredMessageBar->move(0, sponsoredMessageBarTop);
 		_sponsoredMessageBar->resizeToWidth(innerWidth);
@@ -8708,6 +8761,12 @@ void HistoryWidget::updateHistoryGeometry(
 		- (_subsectionTabs ? _subsectionTabs->bottomSkip() : 0);
 	if (_translateBar) {
 		newScrollHeight -= _translateBar->height();
+	}
+	if (_luckgramNoteBar) {
+		newScrollHeight -= _luckgramNoteBar->height();
+	}
+	if (_luckgramJumpBar) {
+		newScrollHeight -= _luckgramJumpBar->height();
 	}
 	if (_sponsoredMessageBar) {
 		newScrollHeight -= _sponsoredMessageBar->height();
@@ -9842,6 +9901,72 @@ void HistoryWidget::setupTranslateBar() {
 		updateControlsGeometry();
 		_topDelta = 0;
 	}, _translateBar->lifetime());
+
+	orderWidgets();
+}
+
+void HistoryWidget::setupLuckgramNoteBar() {
+	Expects(_history != nullptr);
+
+	_luckgramNoteBar = std::make_unique<Luckgram::Notes::NoteBar>(
+		_topBars.get(),
+		controller(),
+		_history->peer);
+
+	controller()->adaptive().oneColumnValue(
+	) | rpl::on_next([=, raw = _luckgramNoteBar.get()](bool one) {
+		raw->setShadowGeometryPostprocess([=](QRect geometry) {
+			if (!one) {
+				geometry.setLeft(geometry.left() + st::lineWidth);
+			}
+			return geometry;
+		});
+	}, _luckgramNoteBar->lifetime());
+
+	_luckgramNoteBarHeight = 0;
+	_luckgramNoteBar->heightValue(
+	) | rpl::on_next([=](int height) {
+		_topDelta = _preserveScrollTop
+			? 0
+			: (height - _luckgramNoteBarHeight);
+		_luckgramNoteBarHeight = height;
+		updateHistoryGeometry();
+		updateControlsGeometry();
+		_topDelta = 0;
+	}, _luckgramNoteBar->lifetime());
+
+	orderWidgets();
+}
+
+void HistoryWidget::setupLuckgramJumpBar() {
+	Expects(_history != nullptr);
+
+	_luckgramJumpBar = std::make_unique<Luckgram::Keywords::JumpBar>(
+		_topBars.get(),
+		controller(),
+		_history);
+
+	controller()->adaptive().oneColumnValue(
+	) | rpl::on_next([=, raw = _luckgramJumpBar.get()](bool one) {
+		raw->setShadowGeometryPostprocess([=](QRect geometry) {
+			if (!one) {
+				geometry.setLeft(geometry.left() + st::lineWidth);
+			}
+			return geometry;
+		});
+	}, _luckgramJumpBar->lifetime());
+
+	_luckgramJumpBarHeight = 0;
+	_luckgramJumpBar->heightValue(
+	) | rpl::on_next([=](int height) {
+		_topDelta = _preserveScrollTop
+			? 0
+			: (height - _luckgramJumpBarHeight);
+		_luckgramJumpBarHeight = height;
+		updateHistoryGeometry();
+		updateControlsGeometry();
+		_topDelta = 0;
+	}, _luckgramJumpBar->lifetime());
 
 	orderWidgets();
 }

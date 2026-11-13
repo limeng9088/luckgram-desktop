@@ -1024,8 +1024,16 @@ void Histories::deleteMessages(const MessageIdsList &ids, bool revoke) {
 		}
 	}
 
+	// Luckgram D6 (mobile 14): at most 100 ids per request, so selections
+	// above upstream's 100 (select all from sender) delete in batches.
+	constexpr auto kDeleteBatch = 100;
 	for (const auto &[history, ids] : idsByPeer) {
-		history->owner().histories().deleteMessages(history, ids, revoke);
+		for (auto i = 0; i < ids.size(); i += kDeleteBatch) {
+			history->owner().histories().deleteMessages(
+				history,
+				ids.mid(i, kDeleteBatch),
+				revoke);
+		}
 	}
 	for (const auto &[peer, ids] : scheduledIdsByPeer) {
 		peer->session().api().request(MTPmessages_DeleteScheduledMessages(

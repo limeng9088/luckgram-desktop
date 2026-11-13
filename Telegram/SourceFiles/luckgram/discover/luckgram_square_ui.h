@@ -15,6 +15,10 @@ namespace Window {
 class SessionController;
 } // namespace Window
 
+namespace Main {
+class Account;
+} // namespace Main
+
 namespace Luckgram::Api {
 struct Error;
 } // namespace Luckgram::Api
@@ -41,6 +45,9 @@ void ShowError(
 [[nodiscard]] rpl::producer<QString> AuthorBlocked();
 void NotifyPostUpdated(const Square::Post &post);
 void NotifyPostRemoved(const QString &postId);
+// A post was just published (compose): shown at the top of 「最新」.
+[[nodiscard]] rpl::producer<Square::Post> PostCreated();
+void NotifyPostCreated(const Square::Post &post);
 
 // This user's Square author id once known (delete entries), else empty.
 [[nodiscard]] QString MyAuthorId();
@@ -75,6 +82,14 @@ void DeletePost(
 	const Square::Post &post);
 // "删除我的广场数据" (26 需求 8).
 void DeleteMyData(not_null<Window::SessionController*> controller);
+
+// Names of blocked people, cached for the block list (account storage).
+[[nodiscard]] QString BlockedNames(not_null<Main::Account*> account);
+void PutBlockedName(
+	not_null<Main::Account*> account,
+	const QString &id,
+	const QString &name);
+void RemoveBlockedName(not_null<Main::Account*> account, const QString &id);
 
 // Cached https image (Api::Download); `done` only while `guard` lives.
 void LoadImage(

@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_local_storage.h"
 
+#include "luckgram/d9/luckgram_cache_logic.h" // Luckgram D9
+#include "luckgram/luckgram_strings.h" // Luckgram D9
+#include "ui/boxes/confirm_box.h" // Luckgram D9
 #include "settings.h"
 #include "settings/settings_common.h"
 #include "data/data_session.h"
@@ -54,10 +57,17 @@ namespace Settings {
 namespace {
 
 constexpr auto kMegabyte = int64(1024 * 1024);
-constexpr auto kTotalSizeLimitsCount = 18;
+// Luckgram D9 (08): 1 / 2 / 5 / 10 / 20 / 50 GB / 不限.
+constexpr auto kTotalSizeLimitsCount = int(
+	Luckgram::Cache::kLimitOptionsGb.size());
+// "No limit": the cache database wants a positive limit, so a size no disk
+// reaches stands for it.
+constexpr auto kLuckgramUnlimitedSize = int64(1) << 50;
 constexpr auto kMediaSizeLimitsCount = 18;
 constexpr auto kMinimalSizeLimit = 100 * kMegabyte;
-constexpr auto kTimeLimitsCount = 16;
+// Luckgram D9 (08): 1 小时 / 1 天 / 3 天 / 1 周 / 1 个月 / 永久.
+constexpr auto kTimeLimitsCount = int(
+	Luckgram::Cache::kKeepOptionsSeconds.size());
 constexpr auto kMaxTimeLimitValue = std::numeric_limits<size_type>::max();
 constexpr auto kFakeMediaCacheTag = uint16(0xFFFF);
 constexpr auto kClearingMinDuration = crl::time(1200);
@@ -81,15 +91,21 @@ int ChartIndexForTag(uint16 tag) {
 	return -1;
 }
 
-int64 TotalSizeLimitInMB(int index) {
-	if (index < 8) {
-		return int64(index + 2) * 100;
-	}
-	return int64(index - 7) * 1024;
+int64 TotalSizeLimit(int index) {
+	const auto bytes = Luckgram::Cache::LimitBytes(index);
+	return bytes ? bytes : kLuckgramUnlimitedSize;
 }
 
-int64 TotalSizeLimit(int index) {
-	return TotalSizeLimitInMB(index) * kMegabyte;
+[[nodiscard]] int64 NormalizeTotalSizeLimit(int64 limit) {
+	return TotalSizeLimit(Luckgram::Cache::LimitIndex(
+		(limit >= kLuckgramUnlimitedSize) ? 0 : limit));
+}
+
+[[nodiscard]] QString TotalSizeLimitText(int64 limit) {
+	return Luckgram::Cache::LimitLabel(
+		Luckgram::Cache::LimitIndex(
+			(limit >= kLuckgramUnlimitedSize) ? 0 : limit),
+		Luckgram::IsChinese());
 }
 
 int64 MediaSizeLimitInMB(int index) {
@@ -111,41 +127,21 @@ QString SizeLimitText(int64 limit) {
 		: (QString::number(mb) + ' ' + tr::lng_size_megabytes(tr::now));
 }
 
-size_type TimeLimitInDays(int index) {
-	if (index < 3) {
-		const auto weeks = (index + 1);
-		return size_type(weeks) * 7;
-	} else if (index < 15) {
-		const auto month = (index - 2);
-		return (size_type(month) * 30)
-			+ ((month >= 12) ? 5 :
-				(month >= 10) ? 4 :
-				(month >= 8) ? 3 :
-				(month >= 7) ? 2 :
-				(month >= 5) ? 1 :
-				(month >= 3) ? 0 :
-				(month >= 2) ? -1 :
-				(month >= 1) ? 1 : 0);
-	}
-	return 0;
+size_type TimeLimit(int index) {
+	const auto seconds = Luckgram::Cache::KeepSeconds(index);
+	return seconds ? size_type(seconds) : kMaxTimeLimitValue;
 }
 
-size_type TimeLimit(int index) {
-	const auto days = TimeLimitInDays(index);
-	return days
-		? (days * 24 * 60 * 60)
-		: kMaxTimeLimitValue;
+[[nodiscard]] size_type NormalizeTimeLimit(size_type limit) {
+	// 0 = forever, as stored by the cache database.
+	return size_type(Luckgram::Cache::KeepSeconds(
+		Luckgram::Cache::KeepIndex(limit)));
 }
 
 QString TimeLimitText(size_type limit) {
-	const auto days = (limit / (24 * 60 * 60));
-	const auto weeks = (days / 7);
-	const auto months = (days / 29);
-	return (months > 0)
-		? tr::lng_months(tr::now, lt_count, months)
-		: (limit > 0)
-		? tr::lng_weeks(tr::now, lt_count, weeks)
-		: tr::lng_local_storage_limit_never(tr::now);
+	return Luckgram::Cache::KeepLabel(
+		Luckgram::Cache::KeepIndex(limit),
+		Luckgram::IsChinese());
 }
 
 size_type LimitToValue(size_type timeLimit) {
@@ -1470,6 +1466,9 @@ LocalStorage::LocalStorage(
 	_totalSizeLimit = settings.totalSizeLimit + settingsBig.totalSizeLimit;
 	_mediaSizeLimit = settingsBig.totalSizeLimit;
 	_timeLimit = settings.totalTimeLimit;
+	// Luckgram D9 (08): show the closest of the Luckgram choices.
+	_totalSizeLimit = NormalizeTotalSizeLimit(_totalSizeLimit);
+	_timeLimit = NormalizeTimeLimit(_timeLimit);
 
 	setupContent();
 }
@@ -1742,22 +1741,41 @@ void LocalStorage::clearSelected() {
 	if (_clearRequested) {
 		return;
 	}
-	_clearRequested = true;
-	_clearingStarted = false;
-	_minDurationPassed = false;
-	if (_allSelected.current()) {
-		_clearFreedBase = summary().totalSize;
-	} else {
+	const auto freed = [&] {
+		if (_allSelected.current()) {
+			return summary().totalSize;
+		}
 		const auto sizes = chartedSizes();
-		auto freed = int64();
+		auto result = int64();
 		for (auto i = 0; i != kChartPartsCount; ++i) {
 			if (_selected[i]) {
-				freed += sizes[i];
+				result += sizes[i];
 			}
 		}
-		_clearFreedBase = freed;
-	}
-	showClearingBox();
+		return result;
+	}();
+	// Luckgram D9 (08 §4): confirm with the size that will be freed.
+	const auto weak = QPointer<LocalStorage>(this);
+	controller()->show(Ui::MakeConfirmBox({
+		.text = Luckgram::Tr(
+			"将释放 %1 的本机空间。云端的文件不会被删除。",
+			"This will free up %1 on this device. Files stay in the cloud."
+		).arg(Ui::FormatSizeText(freed)),
+		.confirmed = [=](Fn<void()> close) {
+			close();
+			const auto strong = weak.data();
+			if (!strong || strong->_clearRequested) {
+				return;
+			}
+			strong->_clearRequested = true;
+			strong->_clearingStarted = false;
+			strong->_minDurationPassed = false;
+			strong->_clearFreedBase = freed;
+			strong->showClearingBox();
+		},
+		.confirmText = tr::lng_local_storage_clear(tr::now),
+		.confirmStyle = &st::attentionBoxButton,
+	}));
 }
 
 void LocalStorage::startClearing() {
@@ -2036,7 +2054,7 @@ void LocalStorage::updateTotalLimit() {
 void LocalStorage::updateTotalLabel() {
 	Expects(_totalLabel != nullptr);
 
-	_totalLabel->setText(SizeLimitText(_totalSizeLimit));
+	_totalLabel->setText(TotalSizeLimitText(_totalSizeLimit));
 }
 
 void LocalStorage::updateMediaLabel() {

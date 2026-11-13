@@ -4139,7 +4139,15 @@ void ApiWrap::forwardMessages(
 
 	ids.reserve(count);
 	randomIds.reserve(count);
+	constexpr auto kLuckgramForwardBatch = 100;
+	auto lastGroupId = MessageGroupId();
 	for (const auto &range : collected) {
+		auto groupSizes = base::flat_map<MessageGroupId, int>();
+		for (const auto &item : range.items) {
+			if (const auto group = item->groupId()) {
+				++groupSizes[group];
+			}
+		}
 		fromEphemeral = range.fromEphemeral;
 		for (const auto &item : range.items) {
 			const auto randomId = base::RandomValue<uint64>();
@@ -4170,10 +4178,20 @@ void ApiWrap::forwardMessages(
 				localIds->emplace(randomId, newId);
 			}
 			const auto newFrom = item->history()->peer;
+			const auto group = item->groupId();
 			if (forwardFrom != newFrom) {
 				sendAccumulated();
 				forwardFrom = newFrom;
+			} else if (!group || group != lastGroupId) {
+				// Luckgram D6 (mobile 14): at most 100 per request, an
+				// album that would cross the limit starts the next one.
+				const auto needed = group ? groupSizes[group] : 1;
+				if (!ids.isEmpty()
+					&& ids.size() + needed > kLuckgramForwardBatch) {
+					sendAccumulated();
+				}
 			}
+			lastGroupId = group;
 			ids.push_back(range.fromEphemeral
 				? MTP_int(_session->ephemeralMessages().lookupId(item))
 				: MTP_int(item->id));

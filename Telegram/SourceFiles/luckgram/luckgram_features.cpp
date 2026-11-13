@@ -5,17 +5,26 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/luckgram_features.h"
 
+#include "luckgram/discover/luckgram_nearby_logic.h"
 #include "luckgram/discover/luckgram_scan_logic.h"
 #include "luckgram/discover/luckgram_square_logic.h"
 #include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_hidden_chats.h"
 #include "luckgram/luckgram_store_restrictions.h"
+#include "luckgram/d9/luckgram_keyword_folders.h"
+#include "luckgram/d9/luckgram_notes.h"
+#include "luckgram/d9/luckgram_notes_widgets.h"
+#include "luckgram/d9/luckgram_profile_info.h"
+#include "luckgram/d9/luckgram_shared_activity.h"
 #include "luckgram/luckgram_strings.h"
 #include "luckgram/xray/luckgram_xray.h"
 #include "settings/sections/settings_luckgram_discover.h"
 #include "settings/sections/settings_luckgram_privacy.h"
+#include "settings/sections/settings_luckgram_translate.h"
 #include "settings/sections/settings_privacy_security.h"
 #include "window/window_session_controller.h"
+#include "luckgram/backup/luckgram_backup.h"
+#include "settings/sections/settings_luckgram_backup.h"
 
 namespace Luckgram::Features {
 namespace {
@@ -56,6 +65,17 @@ namespace {
 		.confirmDisable = ::Settings::ConfirmDoubleBottomDisable,
 		.hiddenWhen = [] { return DoubleBottom::ActiveValue(); },
 	});
+	// D12 (mobile 10, specs#150): local backup file, free, default on.
+	result.push_back({
+		.key = QString::fromLatin1(Backup::kFeatureKey),
+		.group = Group::AccountPrivacy,
+		.titleZh = "账号备份",
+		.titleEn = "Account backup",
+		.aboutZh = "把账号导出为加密文件，换手机后导入",
+		.aboutEn = "Export accounts to an encrypted file and import them on a new phone",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramBackup::Id(); },
+	});
 	// ---- 消息与语言 / Messages & Language
 	result.push_back({
 		.key = u"save_to_saved"_q, // spec 15
@@ -64,6 +84,34 @@ namespace {
 		.titleEn = "Save in one tap",
 		.aboutZh = "消息菜单里一点就存到收藏夹",
 		.aboutEn = "Save a message to Saved Messages straight from its menu",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"translate_in"_q, // spec 01 A, B
+		.group = Group::MessagesLanguage,
+		.titleZh = "收到消息翻译",
+		.titleEn = "Translate received messages",
+		.aboutZh = "右键或点消息旁的图标，译文显示在原文下方",
+		.aboutEn = "Right-click or click the icon next to a message; the translation appears below the original",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramTranslateIn::Id(); },
+	});
+	result.push_back({
+		.key = u"translate_out"_q, // spec 01 C
+		.group = Group::MessagesLanguage,
+		.titleZh = "发送前翻译",
+		.titleEn = "Translate before sending",
+		.aboutZh = "输入框旁的翻译按钮，右键发送按钮可选「翻译成…」",
+		.aboutEn = "The translate button next to the input field; right-click the send button for \"Translate to…\"",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"select_all_from_sender"_q, // D6, mobile 14
+		.group = Group::MessagesLanguage,
+		.titleZh = "全选某人的消息",
+		.titleEn = "Select all from sender",
+		.aboutZh = "右键消息一次选中这个人在本聊天的全部消息",
+		.aboutEn = "Right-click a message to select everything its sender wrote here",
 		.defaultValue = true,
 	});
 	// ---- 媒体、通话与存储 / Media, Calls & Storage
@@ -90,6 +138,45 @@ namespace {
 		.subpage = [] { return ::Settings::LuckgramHiddenChatsId(); },
 		.onToggled = HiddenChats::OnToggled,
 	});
+	// D9: same keys, texts and defaults as mobile LuckgramFeatures.
+	result.push_back({
+		.key = QString::fromLatin1(Notes::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "私人备注",
+		.titleEn = "Private notes",
+		.aboutZh = "给联系人、群组和频道写只有自己能看到的备注",
+		.aboutEn = "Notes about contacts, groups and channels that only you can see",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramNotes::Id(); },
+	});
+	result.push_back({
+		.key = QString::fromLatin1(Keywords::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "关键词文件夹",
+		.titleEn = "Keyword folders",
+		.aboutZh = "按关键词自动归类聊天（只在本机）",
+		.aboutEn = "Group chats by keyword (this device only)",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramKeywordFolders::Id(); },
+	});
+	result.push_back({
+		.key = QString::fromLatin1(ProfileInfo::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "资料详情",
+		.titleEn = "Profile details",
+		.aboutZh = "资料页显示 ID、大致注册时间，简介里的链接可以点开",
+		.aboutEn = "Show ID and approximate registration date; links in bios are clickable",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = QString::fromLatin1(SharedActivity::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "共同群动态",
+		.titleEn = "Activity in shared groups",
+		.aboutZh = "用户资料页显示对方最近在共同群组里发的消息",
+		.aboutEn = "Show a user's recent messages in your groups in common on their profile",
+		.defaultValue = true,
+	});
 	// D10: 扫一扫和代理配置 (mobile ScanLogic.FEATURE_KEY, 资料与整理).
 	result.push_back({
 		.key = QString::fromLatin1(Scan::kFeatureKey),
@@ -101,6 +188,15 @@ namespace {
 		.defaultValue = true,
 	});
 	// ---- 发现 / Discover (D10)
+	result.push_back({
+		.key = QString::fromLatin1(Nearby::kFeatureKey),
+		.group = Group::Discover,
+		.titleZh = "附近的人",
+		.titleEn = "People Nearby",
+		.aboutZh = "「发现」里的入口：找到附近同样开启的 Luckgram 用户",
+		.aboutEn = "Entry in Discover: find Luckgram users nearby who turned it on",
+		.defaultValue = true,
+	});
 	result.push_back({
 		.key = QString::fromLatin1(Square::kFeatureKey),
 		.group = Group::Discover,
@@ -194,6 +290,33 @@ namespace {
 		.aboutZh = "未读多时一键总结要点，点引用跳回原消息，还能就这些消息提问",
 		.aboutEn = "Summarize many unread messages, jump to the source, ask about them",
 		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"free_transcribe"_q, // D6, mobile 17
+		.group = Group::AI,
+		.titleZh = "免费语音转文字",
+		.titleEn = "Free voice-to-text",
+		.aboutZh = "不需要会员，把语音消息和圆形视频转成文字",
+		.aboutEn = "Transcribe voice and video messages without Premium",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"dictation"_q, // D6, mobile 17
+		.group = Group::AI,
+		.titleZh = "语音输入",
+		.titleEn = "Voice input",
+		.aboutZh = "输入框旁的按钮，说话即可输入文字",
+		.aboutEn = "A button in the message field to type by speaking",
+		.defaultValue = true,
+	});
+	result.push_back({
+		.key = u"dictation_ai_tidy"_q, // D6, mobile 17
+		.group = Group::AI,
+		.titleZh = "语音输入 AI 整理",
+		.titleEn = "Tidy voice input with AI",
+		.aboutZh = "去掉口头禅、补全标点，语言不变",
+		.aboutEn = "Remove filler words and add punctuation, same language",
+		.defaultValue = false,
 	});
 
 	// ---- 调试 / Debug (dev builds only)

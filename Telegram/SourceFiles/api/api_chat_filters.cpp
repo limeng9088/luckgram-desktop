@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "api/api_chat_filters.h"
 
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "api/api_text_entities.h"
 #include "apiwrap.h"
 #include "base/event_filter.h"
@@ -870,6 +871,9 @@ void ProcessFilterInvite(
 void SaveNewFilterPinned(
 		not_null<Main::Session*> session,
 		FilterId filterId) {
+	if (Luckgram::Keywords::IsLocalFilterId(filterId)) {
+		return; // Luckgram D9: keyword folders are never sent to Telegram.
+	}
 	const auto &order = session->data().pinnedChatsOrder(filterId);
 	auto &filters = session->data().chatsFilters();
 	const auto &filter = filters.applyUpdatedPinned(filterId, order);

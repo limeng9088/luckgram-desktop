@@ -6,6 +6,8 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_message.h"
+#include "luckgram/luckgram_save_to_saved.h" // Luckgram D6
+#include "luckgram/translate/translate_service.h" // Luckgram D6
 
 #include "api/api_suggest_post.h"
 #include "api/api_transcribes.h"
@@ -72,6 +74,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_dialogs.h"
 #include "styles/style_iv.h"
 #include "styles/style_polls.h"
+#include "styles/style_menu_icons.h" // Luckgram D6
 
 namespace HistoryView {
 namespace {
@@ -574,6 +577,18 @@ struct Message::LinkRipple {
 	QPoint maskOffset;
 	int cachedWidth = 0;
 };
+
+namespace {
+
+// Luckgram D6 (spec 01 A.2): the one-tap translate icon takes the right
+// action place when the message has no other right action.
+[[nodiscard]] bool LuckgramTranslateIcon(not_null<const Element*> view) {
+	const auto context = view->context();
+	return ((context == Context::History) || (context == Context::Replies))
+		&& Luckgram::Translate::ShowIcon(view->data());
+}
+
+} // namespace
 
 LogEntryOriginal::LogEntryOriginal() = default;
 
@@ -6036,11 +6051,16 @@ std::optional<QSize> Message::rightActionSize() const {
 				st::historyFastShareSize + st::historyFastShareBottom + st::semiboldFont->height)
 			: QSize(st::historyFastShareSize, st::historyFastShareSize);
 	}
+	if (luckgramFastSave()) {
+		return QSize(st::historyFastShareSize, st::historyFastShareSize * 2);
+	}
 	return data()->isSponsored()
 		? ((_rightAction && _rightAction->second)
 			? QSize(st::historyFastCloseSize, st::historyFastCloseSize * 2)
 			: QSize(st::historyFastCloseSize, st::historyFastCloseSize))
-		: (displayFastShare() || displayGoToOriginal())
+		: (displayFastShare()
+			|| displayGoToOriginal()
+			|| LuckgramTranslateIcon(this))
 		? QSize(st::historyFastShareSize, st::historyFastShareSize)
 		: std::optional<QSize>();
 }
@@ -6113,7 +6133,7 @@ void Message::drawRightAction(
 		_rightAction->second->ripple->paint(
 			p,
 			left,
-			top + st::historyFastCloseSize,
+			top + rightActionSecondTop(),
 			size->width(),
 			colorOverride);
 		if (_rightAction->second->ripple->empty()) {
@@ -6157,13 +6177,31 @@ void Message::drawRightAction(
 				views->repliesSmall.text,
 				views->repliesSmall.textWidth);
 		}
-	} else if (_rightAction->second) {
+	} else if (_rightAction->second && luckgramFastSave()) {
+		// Luckgram D6 (mobile 15.3): share above, 「收藏」 below.
+		st->historyFastShareIcon().paintInCenter(
+			p,
+			QRect(left, top, size->width(), size->width()));
+		st::menuIconSavedMessages.paintInCenter(
+			p,
+			QRect(left, size->width() + top, size->width(), size->width()),
+			st->msgServiceFg()->c);
+	} else if (_rightAction->second && data()->isSponsored()) {
 		st->historyFastCloseIcon().paintInCenter(
 			p,
 			QRect(left, top, size->width(), size->width()));
 		st->historyFastMoreIcon().paintInCenter(
 			p,
 			QRect(left, size->width() + top, size->width(), size->width()));
+	} else if (!data()->isSponsored()
+			&& !displayFastShare()
+			&& !displayGoToOriginal()
+			&& LuckgramTranslateIcon(this)) {
+		// Luckgram D6: the one-tap translate icon.
+		st::menuIconTranslate.paintInCenter(
+			p,
+			Rect(left, top, *size),
+			st->msgServiceFg()->c);
 	} else {
 		const auto &icon = data()->isSponsored()
 			? st->historyFastCloseIcon()
@@ -6189,18 +6227,38 @@ ClickHandlerPtr Message::rightActionLink(
 		_rightAction->lastPoint = *pressPoint;
 	}
 	if (_rightAction->second
-		&& (_rightAction->lastPoint.y() > st::historyFastCloseSize)) {
+		&& (data()->isSponsored() || luckgramFastSave())
+		&& (_rightAction->lastPoint.y() > rightActionSecondTop())) {
 		return _rightAction->second->link;
 	}
 	return _rightAction->link;
 }
 
 void Message::ensureRightAction() const {
-	if (_rightAction) {
-		return;
+	if (!_rightAction) {
+		Assert(rightActionSize().has_value());
+		_rightAction = std::make_unique<RightAction>();
 	}
-	Assert(rightActionSize().has_value());
-	_rightAction = std::make_unique<RightAction>();
+	if (!_rightAction->second && luckgramFastSave()) {
+		_rightAction->second = std::make_unique<SecondRightAction>();
+		_rightAction->second->link = Luckgram::SaveToSaved::FastSaveLink(
+			data());
+	}
+}
+
+bool Message::luckgramFastSave() const {
+	return !data()->isSponsored()
+		&& !isPinnedContext()
+		&& (context() == Context::History)
+		&& displayFastShare()
+		&& !displayRightActionComments()
+		&& Luckgram::SaveToSaved::ShowFastSave(data());
+}
+
+int Message::rightActionSecondTop() const {
+	return data()->isSponsored()
+		? st::historyFastCloseSize
+		: st::historyFastShareSize;
 }
 
 ClickHandlerPtr Message::prepareRightActionLink() const {
@@ -6211,6 +6269,10 @@ ClickHandlerPtr Message::prepareRightActionLink() const {
 	} else if ((context() != Context::SavedSublist)
 		&& displayRightActionComments()) {
 		return createGoToCommentsLink();
+	} else if (!displayFastShare()
+		&& !displayGoToOriginal()
+		&& LuckgramTranslateIcon(this)) {
+		return Luckgram::Translate::IconLink(data()); // Luckgram D6
 	}
 	const auto sessionId = data()->history()->session().uniqueId();
 	const auto owner = &data()->history()->owner();

@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/ui/dialogs_message_view.h"
 
+#include "luckgram/d9/luckgram_keyword_logic.h" // Luckgram D9
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
@@ -140,6 +141,13 @@ bool MessageView::dependsOn(not_null<const HistoryItem*> item) const {
 	return (_textCachedFor == item.get());
 }
 
+void MessageView::setLuckgramHighlight(const QStringList &keywords) {
+	if (_luckgramHighlight != keywords) {
+		_luckgramHighlight = keywords;
+		_textCachedFor = nullptr;
+	}
+}
+
 bool MessageView::prepared(
 		not_null<const HistoryItem*> item,
 		Data::Forum *forum,
@@ -213,6 +221,28 @@ void MessageView::prepare(
 	}
 	TextUtilities::Trim(preview.text);
 	auto textToCache = DialogsPreviewText(std::move(preview.text));
+
+	if (!_luckgramHighlight.isEmpty() && options.searchLowerText.isEmpty()) {
+		// Luckgram D9 (06): keyword folder hits, like search highlights.
+		const auto ranges = Luckgram::Keywords::Highlights(
+			textToCache.text,
+			_luckgramHighlight);
+		for (const auto &range : ranges) {
+			textToCache.entities.push_back(EntityInText{
+				EntityType::Colorized,
+				range.from,
+				range.length,
+			});
+		}
+		if (!ranges.empty()) {
+			std::stable_sort(
+				textToCache.entities.begin(),
+				textToCache.entities.end(),
+				[](const auto &a, const auto &b) {
+					return a.offset() < b.offset();
+				});
+		}
+	}
 
 	if (!options.searchLowerText.isEmpty()) {
 		static constexpr auto kLeftShift = 15;
