@@ -7,6 +7,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "luckgram/discover/luckgram_discover_logic.h"
 #include "luckgram/discover/luckgram_nearby_logic.h"
+#include "luckgram/discover/luckgram_square_compose.h"
 #include "luckgram/discover/luckgram_square_ui.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_settings.h"
@@ -140,6 +141,13 @@ LuckgramSquare::LuckgramSquare(
 		for (auto &[tab, feed] : _state->feeds) {
 			feed.mergeSilently({ post });
 		}
+	}, lifetime());
+	SquareUi::PostCreated() | rpl::on_next([=](const Square::Post &post) {
+		auto &latest = _state->feeds.try_emplace(
+			QString::fromLatin1(Square::kTabLatest),
+			QString::fromLatin1(Square::kTabLatest)).first->second;
+		latest.posts.insert(latest.posts.begin(), post);
+		showTab(QString::fromLatin1(Square::kTabLatest));
 	}, lifetime());
 	SquareUi::PostRemoved() | rpl::on_next([=](const QString &id) {
 		auto changed = false;
@@ -313,6 +321,12 @@ void LuckgramSquare::rebuildTabs() {
 			crl::on_main(this, [=] { showTab(tab); });
 		});
 	}
+	const auto compose = Ui::CreateChild<Ui::LinkButton>(
+		row,
+		tx.compose());
+	compose->setClickedCallback([=] {
+		Luckgram::SquareCompose::Open(_controller);
+	});
 	const auto refreshButton = Ui::CreateChild<Ui::LinkButton>(
 		row,
 		tx.refresh());
@@ -327,6 +341,12 @@ void LuckgramSquare::rebuildTabs() {
 		refreshButton->moveToRight(0, style::ConvertScale(8), width);
 		profile->moveToRight(
 			refreshButton->width() + style::ConvertScale(20),
+			style::ConvertScale(8),
+			width);
+		compose->moveToRight(
+			refreshButton->width()
+				+ profile->width()
+				+ style::ConvertScale(40),
 			style::ConvertScale(8),
 			width);
 	}, row->lifetime());

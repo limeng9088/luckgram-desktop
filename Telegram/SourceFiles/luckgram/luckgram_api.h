@@ -77,6 +77,16 @@ RequestPtr Download(
 	Fn<void(QByteArray)> done,
 	Fn<void(Error)> fail);
 
+// PUT of a body to an absolute presigned URL the API handed out (Square
+// media, D10), same proxy, no Authorization. `progress(sent, total)`.
+RequestPtr Upload(
+	const QString &url,
+	const QByteArray &contentType,
+	QByteArray body,
+	Fn<void(qint64, qint64)> progress,
+	Fn<void()> done,
+	Fn<void(Error)> fail);
+
 // Registers now if there is no token yet (startup, debug page).
 void EnsureRegistered(Fn<void()> done = nullptr, Fn<void(Error)> fail = nullptr);
 [[nodiscard]] bool HasToken();

@@ -36,10 +36,16 @@ PRIVATE
     luckgram/discover/luckgram_scan_logic.h
     luckgram/discover/luckgram_square_logic.cpp
     luckgram/discover/luckgram_square_logic.h
+    luckgram/discover/luckgram_square_compose.cpp
+    luckgram/discover/luckgram_square_compose.h
     luckgram/discover/luckgram_silent_link.cpp
     luckgram/discover/luckgram_silent_link.h
     luckgram/discover/luckgram_square_ui.cpp
     luckgram/discover/luckgram_square_ui.h
+    luckgram/media/luckgram_image_prepare.cpp
+    luckgram/media/luckgram_image_prepare.h
+    luckgram/media/luckgram_video_transcode.cpp
+    luckgram/media/luckgram_video_transcode.h
     settings/sections/settings_luckgram_discover.cpp
     settings/sections/settings_luckgram_discover.h
     luckgram/luckgram_onboarding.cpp

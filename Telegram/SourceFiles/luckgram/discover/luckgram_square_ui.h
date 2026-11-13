@@ -41,6 +41,9 @@ void ShowError(
 [[nodiscard]] rpl::producer<QString> AuthorBlocked();
 void NotifyPostUpdated(const Square::Post &post);
 void NotifyPostRemoved(const QString &postId);
+// A post was just published (compose): shown at the top of 「最新」.
+[[nodiscard]] rpl::producer<Square::Post> PostCreated();
+void NotifyPostCreated(const Square::Post &post);
 
 // This user's Square author id once known (delete entries), else empty.
 [[nodiscard]] QString MyAuthorId();
