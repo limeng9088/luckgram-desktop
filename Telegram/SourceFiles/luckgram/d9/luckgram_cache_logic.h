@@ -5,14 +5,14 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #pragma once
 
-#include "base/basic_types.h"
+#include <QtCore/QtGlobal>
 
 #include <QtCore/QString>
 
 #include <array>
 
 // D9 / mobile 08 (storage): the cache limit and keep-media choices, no UI
-// or session types, so they run in test_luckgram_d9. Desktop differences
+// or session types, so they run in luckgram_tests. Desktop differences
 // (spec D9 「桌面端差异」): one keep-media value for the whole cache, no
 // per-chat / per-category values, Saved Messages media not exempt.
 namespace Luckgram::Cache {
@@ -25,14 +25,14 @@ inline constexpr auto kKeepOptionsSeconds = std::array<int, 6>{
 	3600, 86400, 3 * 86400, 7 * 86400, 30 * 86400, 0 };
 
 // The cache database's size limit for an option: 0 = no limit.
-[[nodiscard]] int64 LimitBytes(int index);
+[[nodiscard]] qint64 LimitBytes(int index);
 // The cache database's time limit for an option: 0 = forever.
 [[nodiscard]] int KeepSeconds(int index);
 
 // Option closest to a stored value (older builds stored any value).
 // 0 (or a value above the largest option) means no limit / forever.
-[[nodiscard]] int LimitIndex(int64 bytes);
-[[nodiscard]] int KeepIndex(int64 seconds);
+[[nodiscard]] int LimitIndex(qint64 bytes);
+[[nodiscard]] int KeepIndex(qint64 seconds);
 
 [[nodiscard]] QString LimitLabel(int index, bool chinese);
 [[nodiscard]] QString KeepLabel(int index, bool chinese);

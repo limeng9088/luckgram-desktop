@@ -26,7 +26,7 @@ std::vector<Dated> NewestFirst(
 }
 
 int FloodWaitSeconds(const QString &errorType) {
-	for (const auto &prefix : { u"FLOOD_WAIT_"_q, u"FLOOD_PREMIUM_WAIT_"_q }) {
+	for (const auto &prefix : { QStringLiteral("FLOOD_WAIT_"), QStringLiteral("FLOOD_PREMIUM_WAIT_") }) {
 		if (errorType.startsWith(prefix)) {
 			auto ok = false;
 			const auto seconds = errorType.mid(prefix.size()).toInt(&ok);
@@ -36,13 +36,13 @@ int FloodWaitSeconds(const QString &errorType) {
 	return -1;
 }
 
-bool CanWaitFlood(int waitSeconds, int64 elapsedMs) {
+bool CanWaitFlood(int waitSeconds, qint64 elapsedMs) {
 	return (waitSeconds >= 0)
 		&& (waitSeconds <= kMaxFloodWaitSeconds)
-		&& (elapsedMs + waitSeconds * int64(1000) + 500 < kTimeBudgetMs);
+		&& (elapsedMs + waitSeconds * qint64(1000) + 500 < kTimeBudgetMs);
 }
 
-bool IsFresh(int64 loadedAtMs, int64 nowMs) {
+bool IsFresh(qint64 loadedAtMs, qint64 nowMs) {
 	return (loadedAtMs > 0)
 		&& (nowMs >= loadedAtMs)
 		&& (nowMs - loadedAtMs < kCacheMs);
@@ -51,13 +51,13 @@ bool IsFresh(int64 loadedAtMs, int64 nowMs) {
 QString Header(int groupCount, bool partial, bool chinese) {
 	auto result = chinese
 		? QString::fromUtf8("最近消息 · %1 个共同群组").arg(groupCount)
-		: u"Recent messages · %1 %2 in common"_q
+		: QStringLiteral("Recent messages · %1 %2 in common")
 			.arg(groupCount)
-			.arg((groupCount == 1) ? u"group"_q : u"groups"_q);
+			.arg((groupCount == 1) ? QStringLiteral("group") : QStringLiteral("groups"));
 	if (partial) {
 		result += chinese
 			? QString::fromUtf8("（部分群组未加载完，点击「刷新」重试）")
-			: u" (some groups didn't load, click Refresh to retry)"_q;
+			: QStringLiteral(" (some groups didn't load, click Refresh to retry)");
 	}
 	return result;
 }

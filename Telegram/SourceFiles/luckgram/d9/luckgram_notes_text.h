@@ -5,12 +5,12 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #pragma once
 
-#include "base/basic_types.h"
+#include <QtCore/QtGlobal>
 
 #include <QtCore/QString>
 
 // D9 / mobile 05 (private notes): text rules, no UI or session types, so
-// they run in test_luckgram_d9. Same rules as Android UserNotesText.
+// they run in luckgram_tests. Same rules as Android UserNotesText.
 namespace Luckgram::NotesText {
 
 // Counted in user-perceived characters (grapheme clusters, specs#60).

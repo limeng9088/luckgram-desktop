@@ -10,6 +10,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QJsonObject>
 
 #include <algorithm>
+#include <utility>
 
 namespace Luckgram::Keywords {
 namespace {
@@ -157,11 +158,11 @@ QByteArray Serialize(const std::vector<Folder> &folders) {
 			keywords.append(keyword);
 		}
 		list.append(QJsonObject{
-			{ u"id"_q, folder.id },
-			{ u"name"_q, folder.name },
-			{ u"keywords"_q, keywords },
-			{ u"scope"_q, folder.scope },
-			{ u"order"_q, folder.order },
+			{ QStringLiteral("id"), folder.id },
+			{ QStringLiteral("name"), folder.name },
+			{ QStringLiteral("keywords"), keywords },
+			{ QStringLiteral("scope"), folder.scope },
+			{ QStringLiteral("order"), folder.order },
 		});
 	}
 	return QJsonDocument(list).toJson(QJsonDocument::Compact);
@@ -179,13 +180,13 @@ std::vector<Folder> Deserialize(const QByteArray &json) {
 		}
 		const auto object = value.toObject();
 		auto folder = Folder{
-			.id = object.value(u"id"_q).toInt(),
-			.name = object.value(u"name"_q).toString(),
-			.scope = object.value(u"scope"_q).toInt(kScopeAll),
-			.order = object.value(u"order"_q).toInt(),
+			.id = object.value(QStringLiteral("id")).toInt(),
+			.name = object.value(QStringLiteral("name")).toString(),
+			.scope = object.value(QStringLiteral("scope")).toInt(kScopeAll),
+			.order = object.value(QStringLiteral("order")).toInt(),
 		};
 		auto keywords = QStringList();
-		for (const auto &keyword : object.value(u"keywords"_q).toArray()) {
+		for (const auto &keyword : object.value(QStringLiteral("keywords")).toArray()) {
 			keywords.push_back(keyword.toString());
 		}
 		folder.keywords = CleanKeywords(keywords);

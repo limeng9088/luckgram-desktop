@@ -17,7 +17,7 @@ namespace {
 
 [[nodiscard]] QStringList Lines(const QString &note) {
 	auto normalized = note;
-	normalized.replace(u"\r\n"_q, u"\n"_q);
+	normalized.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
 	normalized.replace(QChar('\r'), QChar('\n'));
 	return normalized.split(QChar('\n'));
 }

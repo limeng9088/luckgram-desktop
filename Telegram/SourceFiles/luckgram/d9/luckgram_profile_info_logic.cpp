@@ -73,18 +73,18 @@ const char kTable[] = R"LGTABLE(# Luckgram spec 07: approximate Telegram registr
 
 } // namespace
 
-QString DisplayId(PeerKind kind, int64 id) {
+QString DisplayId(PeerKind kind, qint64 id) {
 	switch (kind) {
-	case PeerKind::Channel: return u"-100"_q + QString::number(id);
-	case PeerKind::LegacyGroup: return u"-"_q + QString::number(id);
+	case PeerKind::Channel: return QStringLiteral("-100") + QString::number(id);
+	case PeerKind::LegacyGroup: return QStringLiteral("-") + QString::number(id);
 	case PeerKind::User: break;
 	}
 	return QString::number(id);
 }
 
-QString UserLink(PeerKind kind, int64 id) {
+QString UserLink(PeerKind kind, qint64 id) {
 	return (kind == PeerKind::User)
-		? (u"tg://user?id="_q + QString::number(id))
+		? (QStringLiteral("tg://user?id=") + QString::number(id))
 		: QString();
 }
 
@@ -116,7 +116,7 @@ std::vector<Point> ParseTable(const QString &text) {
 		if (!yearOk || !monthOk || month < 1 || month > 12) {
 			continue;
 		}
-		const auto point = Point{ int64(id), year * 12 + month - 1 };
+		const auto point = Point{ qint64(id), year * 12 + month - 1 };
 		if (!points.empty()) {
 			const auto &last = points.back();
 			if (point.id <= last.id || point.monthIndex < last.monthIndex) {
@@ -130,7 +130,7 @@ std::vector<Point> ParseTable(const QString &text) {
 
 std::optional<Estimate> EstimateRegistration(
 		const std::vector<Point> &points,
-		int64 userId) {
+		qint64 userId) {
 	if (points.size() < 2 || userId <= 0) {
 		return std::nullopt;
 	} else if (userId < points.front().id) {
@@ -164,14 +164,14 @@ QString FormatEstimate(
 	} else if (estimate->before2014) {
 		return chinese
 			? QString::fromUtf8("早于 2014 年")
-			: u"before 2014"_q;
+			: QStringLiteral("before 2014");
 	} else if (estimate->month < 1 || estimate->month > 12) {
 		return QString();
 	}
 	return chinese
 		? QString::fromUtf8("约 %1 年 %2 月"
 			).arg(estimate->year).arg(estimate->month)
-		: u"about %1 %2"_q
+		: QStringLiteral("about %1 %2")
 			.arg(QString::fromLatin1(kMonthsEn[estimate->month - 1]))
 			.arg(estimate->year);
 }

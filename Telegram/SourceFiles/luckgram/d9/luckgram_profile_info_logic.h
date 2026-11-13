@@ -5,7 +5,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #pragma once
 
-#include "base/basic_types.h"
+#include <QtCore/QtGlobal>
 
 #include <QtCore/QString>
 
@@ -13,7 +13,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <vector>
 
 // D9 / mobile 07 (profile details): pure rules, no UI or session types, so
-// they run in test_luckgram_d9. Same rules as Android ProfileInfoLogic and
+// they run in luckgram_tests. Same rules as Android ProfileInfoLogic and
 // iOS LuckgramProfileInfoLogic.
 namespace Luckgram::ProfileInfo {
 
@@ -25,15 +25,15 @@ enum class PeerKind {
 
 // ID as shown and copied: users / bots as is, legacy groups -id,
 // channels / supergroups -100id.
-[[nodiscard]] QString DisplayId(PeerKind kind, int64 id);
+[[nodiscard]] QString DisplayId(PeerKind kind, qint64 id);
 
 // Link for "Copy link": only users / bots have one (tg://user?id=...),
 // empty otherwise.
-[[nodiscard]] QString UserLink(PeerKind kind, int64 id);
+[[nodiscard]] QString UserLink(PeerKind kind, qint64 id);
 
 // One table row: first user id seen at year-month.
 struct Point {
-	int64 id = 0;
+	qint64 id = 0;
 	int monthIndex = 0; // year * 12 + (month - 1)
 };
 
@@ -52,7 +52,7 @@ struct Estimate {
 // bad id: nullopt, the row is not shown rather than guessed.
 [[nodiscard]] std::optional<Estimate> EstimateRegistration(
 	const std::vector<Point> &points,
-	int64 userId);
+	qint64 userId);
 
 // "约 2019 年 10 月" / "about Oct 2019"; "早于 2014 年" / "before 2014";
 // empty for nullopt.

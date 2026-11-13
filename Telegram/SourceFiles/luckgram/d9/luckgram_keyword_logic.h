@@ -5,7 +5,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #pragma once
 
-#include "base/basic_types.h"
+#include <QtCore/QtGlobal>
 
 #include <QtCore/QByteArray>
 #include <QtCore/QString>
@@ -14,7 +14,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <vector>
 
 // D9 / mobile 06 (keyword folders): matching rules and the folder model,
-// no UI or session types, so they run in test_luckgram_d9. Same rules as
+// no UI or session types, so they run in luckgram_tests. Same rules as
 // Android KeywordMatcher / KeywordFolder.
 namespace Luckgram::Keywords {
 
