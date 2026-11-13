@@ -66,6 +66,10 @@ public:
 		const QByteArray &passcode,
 		Fn<void(bool correct)> done);
 
+	// Luckgram D8 (mobile 11): cold start of the second space with the
+	// local key sealed under the second passcode. True when it started.
+	[[nodiscard]] bool luckgramStartWithLocalKey(const QByteArray &key);
+
 	void resetWithForgottenPasscode();
 	void finish();
 

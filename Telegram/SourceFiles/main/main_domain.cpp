@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "main/main_domain.h"
 
+#include "luckgram/luckgram_double_bottom.h" // Luckgram D8
+
 #include "luckgram/luckgram_service.h"
 
 #include "core/application.h"
@@ -40,6 +42,13 @@ Domain::Domain(const QString &dataName)
 	Luckgram::Pro::AccountsLimitChanges(
 	) | rpl::on_next([=] {
 		_lastMaxAccounts = maxAccounts();
+	}, _lifetime);
+	// Luckgram D8 (mobile 11): entering / leaving the second space changes
+	// what the account lists and the badge show.
+	Luckgram::DoubleBottom::ActiveChanges(
+	) | rpl::on_next([=] {
+		_accountsChanges.fire({});
+		scheduleUpdateUnreadBadge();
 	}, _lifetime);
 
 	_active.changes(
@@ -102,6 +111,21 @@ Storage::StartResult Domain::startWith(
 		Assert(!started());
 	}
 	return result;
+}
+
+bool Domain::luckgramStartWithLocalKey(const QByteArray &key) {
+	if (started() || _passcodeDeriving) {
+		return false;
+	}
+	const auto result = _local->luckgramStartWithLocalKey(key);
+	if (result != Storage::StartResult::Success) {
+		Assert(!started());
+		return false;
+	}
+	activateAfterStarting();
+	Wallet::DropUnusedPasscode();
+	crl::on_main(&Core::App(), [=] { suggestExportIfNeeded(); });
+	return true;
 }
 
 bool Domain::tryPasscode(
@@ -229,6 +253,10 @@ std::vector<not_null<Account*>> Domain::orderedAccounts() const {
 			: end(order);
 		return aIt < bIt;
 	});
+	// Luckgram D8 (mobile 11): the second space lists only its accounts.
+	accounts.erase(ranges::remove_if(accounts, [](not_null<Account*> a) {
+		return Luckgram::DoubleBottom::IsAccountHidden(a);
+	}), end(accounts));
 	return accounts;
 }
 
@@ -312,7 +340,9 @@ void Domain::updateUnreadBadge() {
 	_unreadBadge = 0;
 	_unreadBadgeMuted = true;
 	for (const auto &[index, account] : _accounts) {
-		if (const auto session = account->maybeSession()) {
+		if (Luckgram::DoubleBottom::IsAccountHidden(account.get())) {
+			continue; // Luckgram D8 (mobile 11).
+		} else if (const auto session = account->maybeSession()) {
 			const auto data = &session->data();
 			_unreadBadge += data->unreadBadge();
 			if (!data->unreadBadgeMuted()) {

@@ -42,6 +42,11 @@ PRIVATE
     luckgram/pro/luckgram_pro_logic.h
     luckgram/tests/luckgram_pro_logic_tests.cpp
 
+    # D8 double space, hidden chats, store-restricted channels (11, 12, 13)
+    luckgram/luckgram_privacy_logic.cpp
+    luckgram/luckgram_privacy_logic.h
+    luckgram/tests/luckgram_privacy_tests.cpp
+
     # D7 AI (mobile 18-24, 30)
     luckgram/ai/ai_agents_logic.cpp
     luckgram/ai/ai_agents_logic.h

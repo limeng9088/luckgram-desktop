@@ -26,6 +26,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
+#include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "window/window_session_controller.h"
 #include "styles/style_layers.h"
@@ -176,31 +177,69 @@ void DebugBox(
 }
 
 void AddFeatureRow(
-		not_null<Ui::VerticalLayout*> container,
+		not_null<Ui::VerticalLayout*> outer,
 		not_null<Window::SessionController*> controller,
 		const Features::Feature &feature) {
+	// D8: hiddenWhen hides the whole row (switch + its settings button).
+	const auto wrap = outer->add(
+		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+			outer,
+			object_ptr<Ui::VerticalLayout>(outer)));
+	const auto container = wrap->entity();
+	if (const auto hiddenWhen = feature.hiddenWhen) {
+		wrap->toggleOn(hiddenWhen() | rpl::map(!rpl::mappers::_1));
+	}
+	wrap->finishAnimating();
+
 	const auto key = feature.key;
 	const auto allowed = Luckgram::Settings::IsRemotelyAllowed(key);
 	auto about = allowed
 		? TrValue(feature.aboutZh, feature.aboutEn)
 		: TrValue("暂不可用", "Not available right now");
+	// D8: a declined confirm fires this to spring the switch back.
+	const auto reset = container->lifetime().make_state<rpl::event_stream<>>();
 	const auto button = AddDetailedSettingsButton(
 		container,
 		TrValue(feature.titleZh, feature.titleEn),
 		std::move(about),
 		{},
-		rpl::single(QString()) | rpl::then(
-			Luckgram::Settings::Changes()
-		) | rpl::map([=] {
+		rpl::single(QString()) | rpl::then(rpl::merge(
+			Luckgram::Settings::Changes(),
+			reset->events() | rpl::map([] { return QString(); })
+		)) | rpl::map([=] {
 			return Luckgram::Settings::IsLocallyEnabled(key);
 		}),
 		st::detailedSettingsButtonStyle);
 	button->setToggleLocked(!allowed);
+	const auto confirmEnable = feature.confirmEnable;
+	const auto confirmDisable = feature.confirmDisable;
+	const auto onToggled = feature.onToggled;
+	const auto apply = [=](bool toggled) {
+		Luckgram::Settings::SetEnabled(key, toggled);
+		if (onToggled) {
+			onToggled(toggled);
+		}
+	};
 	button->toggledChanges(
 	) | rpl::filter([=](bool toggled) {
 		return toggled != Luckgram::Settings::IsLocallyEnabled(key);
 	}) | rpl::on_next([=](bool toggled) {
-		Luckgram::Settings::SetEnabled(key, toggled);
+		const auto &confirm = toggled ? confirmEnable : confirmDisable;
+		if (!confirm) {
+			apply(toggled);
+			return;
+		}
+		const auto weak = base::make_weak(button);
+		confirm(controller, [=](bool ok) {
+			if (ok) {
+				if (toggled != Luckgram::Settings::IsLocallyEnabled(key)) {
+					apply(toggled);
+				}
+			}
+			if (weak.get()) {
+				reset->fire({}); // Shows the stored value either way.
+			}
+		});
 	}, button->lifetime());
 	if (const auto subpage = feature.subpage) {
 		AddButtonWithIcon(

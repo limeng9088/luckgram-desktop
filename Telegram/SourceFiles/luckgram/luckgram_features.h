@@ -7,6 +7,10 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "settings/settings_type.h"
 
+namespace Window {
+class SessionController;
+} // namespace Window
+
 // D2 (mobile 00): the one registry of Luckgram switches. The settings page
 // ("Luckgram 功能") is generated from it: adding an entry here is all it
 // takes for a new switch to appear. Keys are the same as mobile
@@ -35,6 +39,20 @@ struct Feature {
 	bool defaultValue = false;
 	// Own settings page ("有二级设置的点进去是自己的设置页"), or nullptr.
 	Fn<::Settings::Type()> subpage;
+
+	// Same hooks as mobile LuckgramFeature (D8, agreed with D2):
+	// asked before the switch goes on / off; done(false) springs the switch
+	// back, done(true) applies it.
+	Fn<void(
+		not_null<Window::SessionController*> controller,
+		Fn<void(bool)> done)> confirmEnable;
+	Fn<void(
+		not_null<Window::SessionController*> controller,
+		Fn<void(bool)> done)> confirmDisable;
+	// The row disappears while this is true (the producer is re-read live).
+	Fn<rpl::producer<bool>()> hiddenWhen;
+	// After the user's switch changed.
+	Fn<void(bool enabled)> onToggled;
 };
 
 [[nodiscard]] const std::vector<Feature> &All();

@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/notifications_manager.h"
 
+#include "luckgram/luckgram_double_bottom.h" // Luckgram D8
+#include "luckgram/luckgram_hidden_chats.h" // Luckgram D8
+
 #include "base/options.h"
 #include "base/platform/base_platform_info.h"
 #include "base/qt/qt_key_modifiers.h"
@@ -445,7 +448,12 @@ void System::schedule(Data::ItemNotification notification) {
 	const auto type = notification.type;
 	const auto thread = item->notificationThread();
 	const auto skip = skipNotification(notification);
-	if (skip.value == SkipState::Skip) {
+	if (skip.value == SkipState::Skip
+		// Luckgram D8: hidden chats (mobile 12, unless 「照常通知」) and
+		// the accounts the second space hides (mobile 11).
+		|| Luckgram::HiddenChats::SuppressNotification(item->history())
+		|| Luckgram::DoubleBottom::IsAccountHidden(
+			&item->history()->session().account())) {
 		thread->popNotification(notification);
 		return;
 	}
@@ -1376,7 +1384,9 @@ TextWithEntities Manager::addTargetAccountName(
 		not_null<Main::Session*> session) {
 	const auto add = [&] {
 		for (const auto &[index, account] : Core::App().domain().accounts()) {
-			if (const auto other = account->maybeSession()) {
+			if (Luckgram::DoubleBottom::IsAccountHidden(account.get())) {
+				continue; // Luckgram D8 (mobile 11).
+			} else if (const auto other = account->maybeSession()) {
 				if (other != session) {
 					return true;
 				}

@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_lock_widgets.h"
 
+#include "luckgram/luckgram_double_bottom.h" // Luckgram D8
+
 #include "base/platform/base_platform_info.h"
 #include "base/call_delayed.h"
 #include "base/openssl_help.h"
@@ -256,6 +258,7 @@ void PasscodeLockWidget::suggestSystemUnlock() {
 
 void PasscodeLockWidget::systemUnlockDone(base::SystemUnlockResult result) {
 	if (result == base::SystemUnlockResult::Success) {
+		Luckgram::DoubleBottom::OnMainUnlock(); // Luckgram D8: main space.
 		Core::App().unlockPasscode();
 		return;
 	}
@@ -283,9 +286,34 @@ void PasscodeLockWidget::paintContent(QPainter &p) {
 }
 
 void PasscodeLockWidget::submit() {
+	// Luckgram D8 (mobile 11): the second passcode first, then the main one.
+	const auto typed = _passcode->text();
+	if (!typed.isEmpty() && passcodeCanTry()) {
+		const auto second = Luckgram::DoubleBottom::TryUnlock(
+			typed,
+			crl::guard(this, [=](bool isSecond) {
+				if (!isSecond) {
+					setDeriving(false);
+					submitMain();
+					return;
+				}
+				setDeriving(false);
+				Luckgram::DoubleBottom::ApplySpace();
+				Core::App().unlockPasscode(); // Destroys this widget.
+			}));
+		if (second) {
+			setDeriving(true);
+			return;
+		}
+	}
+	submitMain();
+}
+
+void PasscodeLockWidget::submitMain() {
 	auto done = crl::guard(this, [=](bool correct) {
 		setDeriving(false);
 		if (correct) {
+			Luckgram::DoubleBottom::OnMainUnlock(); // Luckgram D8
 			Core::App().unlockPasscode(); // Destroys this widget.
 		} else {
 			error();

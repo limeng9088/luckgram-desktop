@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/dialogs_inner_widget.h"
 
+#include "luckgram/luckgram_hidden_chats.h" // Luckgram D8
+
 #include "dialogs/dialogs_three_state_icon.h"
 #include "dialogs/ui/chat_search_empty.h"
 #include "dialogs/ui/chat_search_in.h"
@@ -4516,9 +4518,29 @@ void InnerWidget::refreshFilterResults() {
 			_filterResults.back().row->recountHeight(_narrowRatio, _filterId);
 		}
 	}
+	// Luckgram D8 (mobile 12): hidden chats (also hidden contacts from
+	// contactsNoChatsList) only via 「在隐藏的聊天中搜索」.
+	const auto hidden = [](const FilterResult &result) {
+		const auto history = result.key().history();
+		return history && Luckgram::HiddenChats::IsHidden(history);
+	};
+	if (ranges::any_of(_filterResults, hidden)) {
+		_filterResults.erase(
+			ranges::remove_if(_filterResults, hidden),
+			end(_filterResults));
+		auto top = 0;
+		for (auto &result : _filterResults) {
+			result.top = top;
+			top += result.row->height();
+		}
+	}
 }
 
 void InnerWidget::appendToFiltered(Key key) {
+	if (const auto history = key.history()
+		; history && Luckgram::HiddenChats::IsHidden(history)) {
+		return; // Luckgram D8 (mobile 12).
+	}
 	for (const auto &row : _filterResults) {
 		if (row.key() == key) {
 			return;
@@ -4925,6 +4947,10 @@ void InnerWidget::searchReceived(
 	auto &results = toPreview ? _previewResults : _searchResults;
 	for (const auto &item : messages) {
 		const auto history = item->history();
+		if (history != _searchState.inChat.history()
+			&& Luckgram::HiddenChats::IsHidden(history)) {
+			continue; // Luckgram D8 (mobile 12): searched only when opened.
+		}
 		if (toPreview || !uniquePeers || !hasHistoryInResults(history)) {
 			const auto index = int(results.size());
 			const auto repaint = toPreview
@@ -4966,7 +4992,9 @@ void InnerWidget::peerSearchReceived(Api::PeerSearchResult result) {
 	const auto inlist = [&](not_null<PeerData*> peer) {
 		if (const auto history = peer->owner().historyLoaded(peer)) {
 			// Skip existing chats.
-			return history->inChatList();
+			// Luckgram D8 (mobile 12): and hidden ones.
+			return history->inChatList()
+				|| Luckgram::HiddenChats::IsHidden(history);
 		}
 		return false;
 	};
@@ -5066,6 +5094,27 @@ void InnerWidget::refresh(bool toTop) {
 			h = searchedOffset() + _loadingAnimation->height();
 		} else {
 			h = searchedOffset() + (_searchResults.size() * _st->height);
+		}
+	}
+	{ // Luckgram D8 (mobile 12): 「在隐藏的聊天中搜索」 below the results.
+		const auto query = (_state == WidgetState::Filtered
+			&& !_searchState.inChat
+			&& !_openedForum
+			&& !_savedSublists)
+			? _filter.trimmed()
+			: QString();
+		if (_luckgramHiddenSearchQuery != query) {
+			_luckgramHiddenSearchQuery = query;
+			_luckgramHiddenSearch = Luckgram::HiddenChats::CreateSearchFooter(
+				this,
+				_controller,
+				query);
+		}
+		if (_luckgramHiddenSearch) {
+			_luckgramHiddenSearch->resizeToWidth(width());
+			_luckgramHiddenSearch->moveToLeft(0, h);
+			_luckgramHiddenSearch->show();
+			h += _luckgramHiddenSearch->height();
 		}
 	}
 	resize(width(), h);

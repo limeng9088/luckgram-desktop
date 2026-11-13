@@ -762,6 +762,9 @@ private:
 	rpl::event_stream<> _changeSearchFromRequests;
 	object_ptr<Ui::RpWidget> _loadingAnimation = { nullptr };
 	object_ptr<SearchEmpty> _searchEmpty = { nullptr };
+	// Luckgram D8 (mobile 12): 「在隐藏的聊天中搜索」 below the results.
+	object_ptr<Ui::RpWidget> _luckgramHiddenSearch = { nullptr };
+	QString _luckgramHiddenSearchQuery;
 	SearchState _searchEmptyState;
 	object_ptr<Ui::FlatLabel> _empty = { nullptr };
 	object_ptr<Ui::VerticalLayout> _emptyList = { nullptr };

@@ -110,6 +110,24 @@ PRIVATE
     LUCKGRAM_COMMIT="${LUCKGRAM_COMMIT}"
 )
 
+# D8 account & privacy: double space (11), hidden chats (12), store-restricted
+# channels (13). Own block so other feature branches don't touch these lines.
+nice_target_sources(Telegram ${src_loc}
+PRIVATE
+    luckgram/luckgram_double_bottom.cpp
+    luckgram/luckgram_double_bottom.h
+    luckgram/luckgram_hidden_chats.cpp
+    luckgram/luckgram_hidden_chats.h
+    luckgram/luckgram_privacy_logic.cpp
+    luckgram/luckgram_privacy_logic.h
+    luckgram/luckgram_privacy_ui.cpp
+    luckgram/luckgram_privacy_ui.h
+    luckgram/luckgram_store_restrictions.cpp
+    luckgram/luckgram_store_restrictions.h
+    settings/sections/settings_luckgram_privacy.cpp
+    settings/sections/settings_luckgram_privacy.h
+)
+
 if (LUCKGRAM_TESTS)
     include(${CMAKE_CURRENT_LIST_DIR}/luckgram_tests.cmake)
 endif()

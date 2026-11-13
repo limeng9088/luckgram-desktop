@@ -5,7 +5,13 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/luckgram_features.h"
 
+#include "luckgram/luckgram_double_bottom.h"
+#include "luckgram/luckgram_hidden_chats.h"
+#include "luckgram/luckgram_store_restrictions.h"
 #include "luckgram/luckgram_strings.h"
+#include "settings/sections/settings_luckgram_privacy.h"
+#include "settings/sections/settings_privacy_security.h"
+#include "window/window_session_controller.h"
 
 namespace Luckgram::Features {
 namespace {
@@ -14,6 +20,38 @@ namespace {
 	auto result = std::vector<Feature>();
 
 	// ---- 账号与隐私 / Accounts & Privacy
+	// D8: 13 受限频道 (mobile StoreRestrictionsFeature).
+	result.push_back({
+		.key = QString::fromLatin1(kStoreRestrictionsKey),
+		.group = Group::AccountPrivacy,
+		.titleZh = "受限频道",
+		.titleEn = "Store-restricted channels",
+		.aboutZh = "查看只在商店版 Telegram 中被隐藏的频道和群组；点进去可调整「显示 18+ 内容」",
+		.aboutEn = "View channels and groups hidden only in store versions of Telegram; click for the 18+ content setting",
+		// On by default on desktop (w-1109, 2026-11-13): no app store
+		// review here, so never stricter than upstream Telegram Desktop.
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::PrivacySecurityId(); },
+		.confirmEnable = [](
+				not_null<Window::SessionController*> controller,
+				Fn<void(bool)> done) {
+			ConfirmStoreRestrictionsOff(controller->uiShow(), std::move(done));
+		},
+	});
+	// D8: 11 双重空间 (mobile LuckgramDoubleBottom).
+	result.push_back({
+		.key = QString::fromLatin1(DoubleBottom::kFeatureKey),
+		.group = Group::AccountPrivacy,
+		.titleZh = "双重空间",
+		.titleEn = "Double space",
+		.aboutZh = "用第二个密码解锁时只显示选定的账号",
+		.aboutEn = "A second passcode that shows only the accounts you pick",
+		.defaultValue = false,
+		.subpage = [] { return ::Settings::LuckgramDoubleBottomId(); },
+		.confirmEnable = ::Settings::ConfirmDoubleBottomEnable,
+		.confirmDisable = ::Settings::ConfirmDoubleBottomDisable,
+		.hiddenWhen = [] { return DoubleBottom::ActiveValue(); },
+	});
 	// ---- 消息与语言 / Messages & Language
 	result.push_back({
 		.key = u"save_to_saved"_q, // spec 15
@@ -26,6 +64,18 @@ namespace {
 	});
 	// ---- 媒体、通话与存储 / Media, Calls & Storage
 	// ---- 资料与整理 / Profiles & Organization
+	// D8: 12 隐藏聊天 (mobile LuckgramHiddenChats).
+	result.push_back({
+		.key = QString::fromLatin1(HiddenChats::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "隐藏聊天",
+		.titleEn = "Hidden chats",
+		.aboutZh = "把聊天从列表里藏起来，在左上角菜单里找回",
+		.aboutEn = "Hide chats from the list; find them in the top-left menu",
+		.defaultValue = true,
+		.subpage = [] { return ::Settings::LuckgramHiddenChatsId(); },
+		.onToggled = HiddenChats::OnToggled,
+	});
 	// ---- AI. D7 (mobile 18-24, 30): same keys, order, texts and defaults
 	// as Android LuckgramFeatures; the consent row is always there. D6's
 	// voice switches (free_transcribe, dictation...) go in this group too.
