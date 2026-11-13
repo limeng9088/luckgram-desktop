@@ -2843,6 +2843,12 @@ if (build_macstore)
         COMMAND rm -rf $<TARGET_FILE_DIR:Telegram>/../Frameworks/Breakpad.framework/Resources/crash_report_sender.app
         COMMAND rm -rf $<TARGET_FILE_DIR:Telegram>/../Frameworks/Breakpad.framework/Resources/Inspector
     )
+elseif (APPLE)
+    # Luckgram (M1): own bundle id and Luckgram.app, so Launch Services,
+    # notifications and the keychain never mix it up with official Telegram.
+    set(bundle_identifier "cc.luckgram.desktop")
+    set(bundle_entitlements "Telegram.entitlements")
+    set(output_name "Luckgram")
 else()
     if (CMAKE_GENERATOR STREQUAL Xcode)
         set(bundle_identifier "com.tdesktop.Telegram$<$<CONFIG:Debug>:Debug>")
