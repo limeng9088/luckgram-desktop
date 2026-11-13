@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_advanced.h"
 
+#include "luckgram/update/luckgram_update.h" // Luckgram D4
+
 #include "luckgram/luckgram_desktop.h"
 
 #include "settings/settings_common_session.h"
@@ -802,6 +804,18 @@ void BuildSystemIntegrationSection(SectionBuilder &builder) {
 		});
 		if (tgScheme) {
 			Luckgram::BindTgSchemeCheckbox(tgScheme);
+		}
+	}
+	// Luckgram D4: download updates on their own, default on.
+	if (!Platform::IsWindowsStoreBuild() && !Platform::IsMacStoreBuild()) {
+		const auto autoUpdate = builder.addCheckbox({
+			.id = u"advanced/luckgram_auto_update"_q,
+			.title = Luckgram::Update::AutoDownloadTitle(),
+			.checked = Luckgram::Update::AutoDownload(),
+			.keywords = { u"update"_q, u"更新"_q, u"download"_q },
+		});
+		if (autoUpdate) {
+			Luckgram::Update::BindAutoDownloadCheckbox(autoUpdate);
 		}
 	}
 
@@ -1912,6 +1926,10 @@ void SetupSystemIntegrationContent(
 		Luckgram::BindTgSchemeCheckbox(addCheckbox(
 			Luckgram::TgSchemeTitle(),
 			Luckgram::TgSchemeEnabled()));
+		// Luckgram D4: download updates on their own, default on.
+		Luckgram::Update::BindAutoDownloadCheckbox(addCheckbox(
+			Luckgram::Update::AutoDownloadTitle(),
+			Luckgram::Update::AutoDownload()));
 	}
 }
 

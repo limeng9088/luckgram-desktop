@@ -628,3 +628,141 @@ jobs:
           name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-screenshots
           path: screenshots/*.png
           if-no-files-found: warn
+
+  # D4: master builds go to dl.luckgram.cc (never GitHub), the Luckgram API
+  # (GET /v1/version?platform=windows, S16) and luckgram.cc/download.
+  # Same chain as the Android release: OIDC role luckgram-ci-downloads
+  # (PutObject on windows/* and macos/*, master only), curl --aws-sigv4
+  # (no AWS CLI, keys only via stdin), each file read back through the CDN
+  # and compared by SHA-256 (a mismatch fails the job). The API and the
+  # site are only told when the upload succeeded, so they never point at
+  # a file that isn't there.
+  release-windows:
+    name: Release Windows
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.build.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Version
+        run: |
+          VER=$(sed -n 's/.*AppVersionStr = "\([0-9.]*\)".*/\1/p' Telegram/SourceFiles/core/version.h)
+          [ -n "$VER" ] || { echo "::error::Could not read AppVersionStr"; exit 1; }
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "BUILD=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          echo "TAG=windows-$VER-$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Luckgram-*${{ github.run_number }}-x64*
+          path: out
+          merge-multiple: true
+
+      - name: Check packages
+        run: |
+          ls -l out
+          test -f "out/Luckgram-Setup-$VER-$BUILD-x64.exe" || { echo "::error::installer missing"; exit 1; }
+          test -f "out/Luckgram-$VER-$BUILD-x64-portable.zip" || { echo "::error::portable zip missing"; exit 1; }
+
+      - name: Configure AWS for dl.luckgram.cc
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::515517431844:role/luckgram-ci-downloads
+          aws-region: ap-southeast-1
+
+      - name: Upload to dl.luckgram.cc
+        run: |
+          set -euo pipefail
+          for f in "out/Luckgram-Setup-$VER-$BUILD-x64.exe" "out/Luckgram-$VER-$BUILD-x64-portable.zip"; do
+            case "$f" in *.exe) type=application/vnd.microsoft.portable-executable ;; *) type=application/zip ;; esac
+            key="windows/$TAG/$(basename "$f")"
+            # keys via stdin (-K -), never argv
+            printf 'user = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" | curl -sS --fail-with-body --retry 3 --retry-all-errors -K - \
+              --aws-sigv4 "aws:amz:ap-southeast-1:s3" -H "x-amz-security-token: $AWS_SESSION_TOKEN" \
+              -H "x-amz-content-sha256: UNSIGNED-PAYLOAD" -H "Content-Type: $type" \
+              -T "$f" -o /dev/null "https://luckgram-downloads-515517431844.s3.ap-southeast-1.amazonaws.com/$key"
+            # check through the CDN, same bytes
+            want=$(sha256sum "$f" | cut -d' ' -f1)
+            got=$(curl -sS --fail --retry 3 --retry-all-errors "https://dl.luckgram.cc/$key" | sha256sum | cut -d' ' -f1)
+            [ "$want" = "$got" ] || { echo "::error::dl.luckgram.cc/$key checksum mismatch"; exit 1; }
+            echo "https://dl.luckgram.cc/$key  sha256 $want  size $(stat -c %s "$f")"
+          done
+
+      # S5 / S16: GET /v1/version?platform=windows answers with this build.
+      # api-dev on every master build; api.luckgram.cc only while the
+      # repository variable RELEASE_PROD_WINDOWS is 'true' (w-1109: the
+      # first packages are tested on a real Windows machine first).
+      - name: Publish version to Luckgram API
+        env:
+          TOKEN_DEV: ${{ secrets.LUCKGRAM_RELEASE_TOKEN_DEV_WINDOWS }}
+          TOKEN_PROD: ${{ secrets.LUCKGRAM_RELEASE_TOKEN_PROD_WINDOWS }}
+          RELEASE_PROD: ${{ vars.RELEASE_PROD_WINDOWS }}
+        run: |
+          set -euo pipefail
+          SETUP="Luckgram-Setup-$VER-$BUILD-x64.exe"
+          URL="https://dl.luckgram.cc/windows/$TAG/$SETUP"
+          SHA=$(sha256sum "out/$SETUP" | cut -d' ' -f1)
+          SIZE=$(stat -c %s "out/$SETUP")
+          BODY=$(printf '{"platform":"%s","version":"%s","build":%s,"url":"%s","sha256":"%s","size":%s,"source":"%s"}' \
+            windows "$VER" "$BUILD" "$URL" "$SHA" "$SIZE" "${GITHUB_REPOSITORY}@${GITHUB_SHA} run ${GITHUB_RUN_NUMBER}")
+          # Tokens only via env -> stdin (never argv); a missing secret skips that stage.
+          publish() {
+            local host=$1 token=$2
+            if [ -z "$token" ]; then echo "skip $host (no token secret)"; return 0; fi
+            printf 'Authorization: Bearer %s\n' "$token" | curl -sS --fail-with-body --retry 3 --retry-all-errors \
+              -H @- -H 'Content-Type: application/json' -X POST -d "$BODY" "https://$host/v1/internal/release"
+            echo
+          }
+          publish api-dev.luckgram.cc "${TOKEN_DEV:-}"
+          if [ "${RELEASE_PROD:-}" = "true" ]; then
+            publish api.luckgram.cc "${TOKEN_PROD:-}"
+          else
+            echo "api.luckgram.cc not told (repository variable RELEASE_PROD_WINDOWS is not 'true')"
+          fi
+
+      # luckgram.cc/download: download/latest.json through the site's
+      # scripts/update_latest.py (windows: setup + portable), pushed with a
+      # deploy key that can only write to luckgram-site. The site buttons
+      # are for everyone, so like api.luckgram.cc only while
+      # vars.RELEASE_PROD_WINDOWS is 'true' (the files are on dl anyway,
+      # under their own versioned path).
+      - name: Update luckgram.cc download links
+        continue-on-error: true
+        env:
+          SITE_DEPLOY_KEY: ${{ secrets.SITE_DEPLOY_KEY }}
+          RELEASE_PROD: ${{ vars.RELEASE_PROD_WINDOWS }}
+        run: |
+          set -euo pipefail
+          if [ "${RELEASE_PROD:-}" != "true" ]; then
+            echo "luckgram.cc not updated (repository variable RELEASE_PROD_WINDOWS is not 'true')"
+            exit 0
+          fi
+          [ -n "$SITE_DEPLOY_KEY" ] || { echo "::warning::SITE_DEPLOY_KEY missing; luckgram.cc not updated"; exit 0; }
+          PUBLISHED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          K="$RUNNER_TEMP/site_key"; printf '%s\n' "$SITE_DEPLOY_KEY" > "$K"; chmod 600 "$K"
+          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$RUNNER_TEMP/github_known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $K -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/github_known_hosts"
+          SITE="$RUNNER_TEMP/luckgram-site"
+          for i in 1 2 3 4 5; do
+            rm -rf "$SITE"
+            git clone -q --depth 1 git@github.com:limeng9088/luckgram-site.git "$SITE"
+            python3 -I "$SITE/scripts/update_latest.py" windows --repo "$GITHUB_REPOSITORY" --tag "$TAG" \
+              --version "$VER" --build "$BUILD" --commit "$GITHUB_SHA" --published-at "$PUBLISHED" --url-base https://dl.luckgram.cc \
+              --file setup="$GITHUB_WORKSPACE/out/Luckgram-Setup-$VER-$BUILD-x64.exe" \
+              --file portable="$GITHUB_WORKSPACE/out/Luckgram-$VER-$BUILD-x64-portable.zip"
+            if git -C "$SITE" diff --quiet; then echo "latest.json already up to date"; exit 0; fi
+            git -C "$SITE" -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -qam "download: Windows $VER ($BUILD)" -m "From $GITHUB_REPOSITORY@$GITHUB_SHA run $GITHUB_RUN_ID."
+            git -C "$SITE" push -q origin HEAD:master && { echo "luckgram.cc now points at $TAG"; exit 0; }
+            sleep $((i * 5))   # another app pushed at the same time: clone again and retry
+          done
+          echo "::error::could not push download/latest.json"; exit 1

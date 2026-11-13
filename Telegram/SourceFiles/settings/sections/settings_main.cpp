@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_main.h"
 
+#include "luckgram/update/luckgram_update.h" // Luckgram D4
+
 #include "settings/sections/settings_luckgram.h"
 #include "luckgram/luckgram_onboarding.h"
 
@@ -368,6 +370,9 @@ void BuildSectionButtons(SectionBuilder &builder) {
 	const auto session = builder.session();
 	const auto controller = builder.controller();
 	const auto showOther = builder.showOther();
+
+	// Luckgram D4: "有新版本 7.4.2（23） · 更新" on top while there is one.
+	Luckgram::Update::AddSettingsButton(builder);
 
 	if (!session->supportMode()) {
 		builder.addButton({

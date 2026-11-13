@@ -88,12 +88,20 @@ Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDi
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchApp}"; Flags: nowait postinstall skipifsilent
+; D4 in-app update: Luckgram runs this installer with /VERYSILENT
+; /luckgramupdate=1 and quits; start the new version afterwards.
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall skipifnotsilent; Check: IsLuckgramUpdate
 
 [UninstallDelete]
 ; The whole program folder goes; chat data is outside it (see [Code]).
 Type: filesandordirs; Name: "{app}"
 
 [Code]
+function IsLuckgramUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:luckgramupdate|0}') = '1';
+end;
+
 function DataDir(): String;
 begin
   Result := ExpandConstant('{userappdata}\Luckgram');

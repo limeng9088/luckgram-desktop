@@ -30,6 +30,8 @@ struct Error {
 // Codes produced by the client itself (others come from the server).
 inline constexpr auto kNetworkError = "network_error";
 inline constexpr auto kCancelled = "cancelled";
+// DownloadToFile could not write the file (disk full, no access).
+inline constexpr auto kWriteFailed = "write_failed";
 inline constexpr auto kConsentDenied = "consent_denied";
 inline constexpr auto kUpstreamUnavailable = "upstream_unavailable";
 inline constexpr auto kInvalidToken = "invalid_token";
@@ -85,6 +87,17 @@ RequestPtr Upload(
 	QByteArray body,
 	Fn<void(qint64, qint64)> progress,
 	Fn<void()> done,
+	Fn<void(Error)> fail);
+
+// GET of an absolute URL streamed into `path` (D4 / M2 update packages),
+// same proxy, no Authorization: written to path + ".part" while hashing,
+// renamed to `path` when complete. progress(received, total or -1);
+// done(sha256 lowercase hex, size). The .part goes on failure or cancel.
+RequestPtr DownloadToFile(
+	const QString &url,
+	const QString &path,
+	Fn<void(qint64, qint64)> progress,
+	Fn<void(QString, qint64)> done,
 	Fn<void(Error)> fail);
 
 // Registers now if there is no token yet (startup, debug page).

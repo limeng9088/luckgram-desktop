@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_onboarding.h"
 
 #include "base/call_delayed.h"
+#include "luckgram/update/luckgram_update.h"
 #include "base/event_filter.h"
 #include "boxes/abstract_box.h"
 #include "chat_helpers/compose/compose_show.h"
@@ -360,6 +361,7 @@ void OnMainShown(not_null<Window::SessionController*> controller) {
 		return;
 	}
 	started = true;
+	Update::Start(controller); // D4: at start, then every 6 hours.
 	base::call_delayed(kAfterLoginDelay, controller, [=] {
 		NearbyState::RestoreReminder(controller); // D10: 25 reminder.
 		if (!CheckPrivacyUpdate(controller)) {
