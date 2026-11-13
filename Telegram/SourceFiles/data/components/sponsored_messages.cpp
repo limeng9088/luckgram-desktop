@@ -22,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history.h"
 #include "history/view/history_view_element.h"
 #include "lang/lang_keys.h"
+#include "luckgram/pro/luckgram_pro.h"
 #include "main/main_session.h"
 #include "ui/chat/sponsored_message_bar.h"
 #include "ui/text/text_utilities.h" // tr::rich.
@@ -302,7 +303,9 @@ HistoryItem *SponsoredMessages::injectItem(
 }
 
 bool SponsoredMessages::canHaveFor(not_null<History*> history) const {
-	if (history->peer->isChannel()) {
+	if (Luckgram::Pro::IsPro()) {
+		return false; // Luckgram D12 (29): none for Pro, nothing requested.
+	} else if (history->peer->isChannel()) {
 		return true;
 	} else if (const auto user = history->peer->asUser()) {
 		return user->isBot();
@@ -311,7 +314,8 @@ bool SponsoredMessages::canHaveFor(not_null<History*> history) const {
 }
 
 bool SponsoredMessages::canHaveFor(not_null<HistoryItem*> item) const {
-	return item->history()->peer->isBroadcast()
+	return !Luckgram::Pro::IsPro() // Luckgram D12 (29): none for Pro.
+		&& item->history()->peer->isBroadcast()
 		&& item->isRegular();
 }
 
