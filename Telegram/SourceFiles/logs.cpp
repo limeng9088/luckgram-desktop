@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "logs.h"
 
+#include "luckgram/luckgram_desktop.h"
+
 #include "platform/platform_specific.h"
 #include "core/crash_reports.h"
 #include "core/launcher.h"
@@ -366,7 +368,8 @@ void start() {
 #if (!defined Q_OS_WIN && !defined _DEBUG) || defined Q_OS_WINRT || defined OS_WIN_STORE || defined OS_MAC_STORE
 		cForceWorkingDir(psAppDataPath());
 #else // (!Q_OS_WIN && !_DEBUG) || Q_OS_WINRT || OS_WIN_STORE || OS_MAC_STORE
-		cForceWorkingDir(cExeDir());
+		// Luckgram: only the portable zip keeps data next to the exe.
+		cForceWorkingDir(Luckgram::IsPortable() ? cExeDir() : psAppDataPath());
 		if (!LogsData->openMain()) {
 			cForceWorkingDir(psAppDataPath());
 		}

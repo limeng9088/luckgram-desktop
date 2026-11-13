@@ -1,0 +1,176 @@
+/*
+This file is part of Luckgram Desktop, based on Telegram Desktop.
+
+Luckgram changes are licensed under GPL-3.0 like the upstream project.
+*/
+#include "luckgram/luckgram_desktop.h"
+
+#include "base/platform/base_platform_url_scheme.h"
+#include "core/launcher.h"
+#include "settings.h"
+#include "core/version.h"
+#include "lang/lang_instance.h"
+#include "lang/lang_keys.h"
+#include "platform/platform_specific.h"
+#include "ui/widgets/checkbox.h"
+
+#include <QtCore/QFile>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
+#include <QtCore/QSaveFile>
+
+#ifndef LUCKGRAM_BUILD_NUMBER
+#define LUCKGRAM_BUILD_NUMBER 0
+#endif // LUCKGRAM_BUILD_NUMBER
+
+#ifndef LUCKGRAM_COMMIT
+#define LUCKGRAM_COMMIT ""
+#endif // LUCKGRAM_COMMIT
+
+namespace Luckgram {
+namespace {
+
+constexpr auto kSettingsFile = "tdata/luckgram.json";
+constexpr auto kTgSchemeKey = "tg_scheme";
+constexpr auto kZhSwitchedKey = "zh_switched";
+
+[[nodiscard]] QString SettingsPath() {
+	return cWorkingDir() + QString::fromLatin1(kSettingsFile);
+}
+
+[[nodiscard]] QJsonObject ReadSettings() {
+	auto file = QFile(SettingsPath());
+	if (!file.open(QIODevice::ReadOnly)) {
+		return {};
+	}
+	return QJsonDocument::fromJson(file.readAll()).object();
+}
+
+void WriteSetting(const char *key, bool value) {
+	auto object = ReadSettings();
+	object.insert(QString::fromLatin1(key), value);
+	auto file = QSaveFile(SettingsPath());
+	if (!file.open(QIODevice::WriteOnly)) {
+		LOG(("Luckgram Error: could not write %1").arg(SettingsPath()));
+		return;
+	}
+	file.write(QJsonDocument(object).toJson(QJsonDocument::Compact));
+	file.commit();
+}
+
+[[nodiscard]] bool ReadSetting(const char *key) {
+	return ReadSettings().value(QString::fromLatin1(key)).toBool(false);
+}
+
+[[nodiscard]] bool IsChineseId(const QString &id) {
+	const auto lower = id.toLower();
+	return lower.startsWith(u"zh"_q) || lower.contains(u"-zh"_q);
+}
+
+[[nodiscard]] base::Platform::UrlSchemeDescriptor TgDescriptor() {
+	const auto arguments = Core::Launcher::Instance().customWorkingDir()
+		? u"-workdir \"%1\""_q.arg(cWorkingDir())
+		: QString();
+	// Own names everywhere, so the registry keys never touch the ones
+	// official Telegram Desktop writes ("tdesktop.tg", Software\TelegramDesktop).
+	return base::Platform::UrlSchemeDescriptor{
+		.executable = Platform::ExecutablePathForShortcuts(),
+		.arguments = arguments,
+		.protocol = u"tg"_q,
+		.protocolName = u"Luckgram Link"_q,
+		.shortAppName = u"luckgram"_q,
+		.longAppName = u"Luckgram"_q,
+		.displayAppName = AppName.utf16(),
+		.displayAppDescription = AppName.utf16(),
+	};
+}
+
+} // namespace
+
+int BuildNumber() {
+	return LUCKGRAM_BUILD_NUMBER;
+}
+
+QString CommitHash() {
+	return QString::fromLatin1(LUCKGRAM_COMMIT).left(7);
+}
+
+QString VersionSuffix(bool withCommit) {
+	auto parts = QStringList();
+	if (const auto build = BuildNumber()) {
+		parts.push_back((IsChineseId(Lang::Id()) ? u"构建 %1"_q : u"build %1"_q)
+			.arg(build));
+	}
+	if (withCommit && !CommitHash().isEmpty()) {
+		parts.push_back(CommitHash());
+	}
+	return parts.isEmpty()
+		? QString()
+		: (u" ("_q + parts.join(u" · "_q) + ')');
+}
+
+bool IsPortable() {
+	return QFile::exists(cExeDir() + QString::fromLatin1(kPortableMarker));
+}
+
+bool TgSchemeEnabled() {
+	return ReadSetting(kTgSchemeKey);
+}
+
+void SetTgSchemeEnabled(bool enabled) {
+	WriteSetting(kTgSchemeKey, enabled);
+	if (enabled) {
+		RegisterTgScheme();
+	} else {
+		UnregisterTgScheme();
+	}
+}
+
+void RegisterTgScheme() {
+	base::Platform::RegisterUrlScheme(TgDescriptor());
+}
+
+void UnregisterTgScheme() {
+	// Only removes the keys when they still point at this Luckgram.
+	base::Platform::UnregisterUrlScheme(TgDescriptor());
+}
+
+void AutoRegisterTgScheme() {
+	if (TgSchemeEnabled()) {
+		// Refresh the path, e.g. after moving the portable folder.
+		RegisterTgScheme();
+	}
+}
+
+rpl::producer<QString> TgSchemeTitle() {
+	return rpl::single(Lang::Id()) | rpl::then(
+		Lang::GetInstance().idChanges()
+	) | rpl::map([](const QString &) {
+		return IsChineseId(Lang::Id())
+			? u"用 Luckgram 打开 tg:// 链接"_q
+			: u"Open tg:// links with Luckgram"_q;
+	});
+}
+
+void BindTgSchemeCheckbox(not_null<Ui::Checkbox*> checkbox) {
+	checkbox->checkedChanges(
+	) | rpl::filter([](bool checked) {
+		return (checked != TgSchemeEnabled());
+	}) | rpl::on_next([](bool checked) {
+		SetTgSchemeEnabled(checked);
+	}, checkbox->lifetime());
+}
+
+bool ShouldSwitchToChinese(
+		const QString &currentLangPackId,
+		const QString &systemLangCode) {
+	return currentLangPackId.isEmpty()
+		&& IsChineseId(systemLangCode)
+		&& !ReadSetting(kZhSwitchedKey);
+}
+
+void MarkSwitchedToChinese() {
+	WriteSetting(kZhSwitchedKey, true);
+}
+
+} // namespace Luckgram

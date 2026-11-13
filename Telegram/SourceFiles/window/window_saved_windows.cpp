@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_saved_windows.h"
 
+#include "core/version.h" // AppName (Luckgram)
+
 #include "apiwrap.h"
 #include "base/call_delayed.h"
 #include "core/application.h"
@@ -1086,7 +1088,7 @@ QString SavedWindows::shellTitle(
 		? st::wrap_rtl(session->user()->name())
 		: QString();
 	return name.isEmpty()
-		? (user.isEmpty() ? u"Telegram"_q : user)
+		? (user.isEmpty() ? AppName.utf16() : user)
 		: user.isEmpty()
 		? name
 		: (name + u" @ "_q + user);

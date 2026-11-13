@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_restore_shell.h"
 
+#include "core/version.h" // AppName (Luckgram)
+
 #include "base/event_filter.h"
 #include "lang/lang_keys.h"
 #include "platform/platform_main_window.h"
@@ -28,7 +30,7 @@ RestoreShell::RestoreShell(
 	const QString &title,
 	Core::WindowPosition position)
 : _window(base::make_unique_q<Ui::RpWindow>()) {
-	_window->setTitle(title.isEmpty() ? u"Telegram"_q : title);
+	_window->setTitle(title.isEmpty() ? AppName.utf16() : title);
 	_window->setMinimumSize(
 		QSize(st::windowShellMinWidth, st::windowShellMinHeight));
 	setupBody();

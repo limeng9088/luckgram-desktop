@@ -1,0 +1,485 @@
+# Luckgram Desktop — Windows x64 Release build, installer and portable zip (D1).
+#
+# Two jobs, each with its own 6 hour limit on GitHub hosted runners:
+#   libs   builds the third-party libraries (Qt, ffmpeg, openssl, ...) with
+#          Telegram/build/prepare/prepare.py and caches them. A finished cache
+#          is keyed "...-done" and later runs skip this job. If it runs out of
+#          time, what was built so far is saved and the next run continues.
+#   build  restores the finished libraries, builds Luckgram.exe and packages
+#          Luckgram-Setup-<version>-<build>-x64.exe and the portable zip.
+#
+# Runner switch: repository variable WIN_RUNNER (Settings → Variables → Actions)
+#   (a manual run can override it with the 'runner' input)
+#   unset / anything else  GitHub hosted windows-latest, libraries via actions/cache.
+#   self-hosted            runs-on [self-hosted, luckgram-win]. TBuild stays in the
+#                          runner workspace between runs (no cache upload/download,
+#                          prepare.py and the app build are incremental), nothing on
+#                          the machine is deleted. Only pushes to this repository and
+#                          PRs from branches of this repository run there; PRs from
+#                          forks are skipped (public repo). Put the runner work folder
+#                          on a large disk (E:), see luckgram/windows/RUNNER.md.
+name: Build
+
+on:
+  push:
+    branches: [master]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE', 'LEGAL', 'changelog.txt']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE', 'LEGAL', 'changelog.txt']
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Windows runner (default: repository variable WIN_RUNNER)'
+        type: choice
+        options: [default, hosted, self-hosted]
+        default: default
+
+concurrency:
+  group: build-${{ github.ref }}
+  # Superseded PR runs are cancelled; master runs always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # 'true' when the Windows jobs run on [self-hosted, luckgram-win].
+  SELF_HOSTED: ${{ (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) }}
+  PREPARE_PATH: Telegram/build/prepare/prepare.py
+  QT: qt6
+
+jobs:
+  credentials:
+    name: Check API credentials
+    runs-on: ubuntu-latest
+    steps:
+      - name: TG_API_ID / TG_API_HASH secrets
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: |
+          # Never fall back to the upstream test credentials.
+          if ! [[ "$TG_API_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Secret TG_API_ID is missing or not a number. Set it in Settings → Secrets → Actions."
+            exit 1
+          fi
+          if ! [[ "$TG_API_HASH" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "::error::Secret TG_API_HASH is missing or not a 32 character hex string."
+            exit 1
+          fi
+          echo "API credentials present."
+
+  installer-check:
+    # Compiles the Inno Setup script with a placeholder exe in a few minutes,
+    # so installer mistakes show up long before the full build finishes.
+    name: Installer script check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build installer with a placeholder exe.
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP\stage"
+          New-Item -ItemType Directory -Force "$stage\modules\x64\d3d" | Out-Null
+          Copy-Item "$env:WINDIR\System32\notepad.exe" "$stage\Luckgram.exe"
+          Set-Content "$stage\modules\x64\d3d\placeholder.txt" "placeholder"
+          & ./luckgram/windows/make_installer.ps1 -Version 0.0.0 -Build ${{ github.run_number }} -SourceDir $stage -OutputDir "$env:RUNNER_TEMP\dist"
+          Get-ChildItem "$env:RUNNER_TEMP\dist"
+
+  libs:
+    name: Libraries
+    needs: credentials
+    # Self-hosted: never run code from fork PRs on our machine.
+    if: (!(inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) && fromJSON('["self-hosted","luckgram-win"]') || 'windows-latest' }}
+    timeout-minutes: 355
+    outputs:
+      cache-key: ${{ steps.key.outputs.done }}
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - name: Free disk space on C.
+        if: env.SELF_HOSTED != 'true'
+        shell: pwsh
+        run: |
+          function Free { "{0:N1} GB free on C:" -f ((Get-PSDrive C).Free / 1GB) }
+          Free
+          # Large preinstalled toolchains this build never uses (keeps VS, Strawberry Perl, Python, CMake, Git).
+          $dirs = @(
+            'C:\Android', 'C:\ghcup', 'C:\cabal', 'C:\tools\kotlinc', 'C:\SeleniumWebDrivers',
+            'C:\Program Files\MongoDB', 'C:\Program Files\MySQL', 'C:\Program Files\R',
+            'C:\Program Files\Microsoft SQL Server', 'C:\Program Files\Microsoft Service Fabric',
+            'C:\Program Files\Microsoft SDKs\Azure', 'C:\Program Files\Amazon',
+            'C:\hostedtoolcache\windows\go', 'C:\hostedtoolcache\windows\Ruby',
+            'C:\hostedtoolcache\windows\Java_Temurin-Hotspot_jdk', 'C:\hostedtoolcache\windows\PyPy',
+            'C:\hostedtoolcache\windows\stack', 'C:\hostedtoolcache\windows\node',
+            'C:\ProgramData\chocolatey\lib\maven', 'C:\ProgramData\chocolatey\lib\pulumi'
+          ) | Where-Object { Test-Path $_ }
+          $jobs = $dirs | ForEach-Object { Start-Job -ArgumentList $_ { param($d) cmd /c rmdir /s /q "`"$d`"" 2>$null } }
+          $jobs | Wait-Job -Timeout 900 | Out-Null
+          Free
+
+      - name: Prepare directories.
+        run: |
+          if "%SELF_HOSTED%"=="true" (
+            rem Persistent: the workspace (and TBuild in it) survives between runs.
+            if not exist %GITHUB_WORKSPACE%\TBuild\Libraries mkdir %GITHUB_WORKSPACE%\TBuild\Libraries
+          ) else (
+            mkdir %userprofile%\TBuild\Libraries
+            mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          )
+          echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
+          echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
+
+      - name: Clone.
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          path: TBuild\luckgram-desktop
+          # Self-hosted keeps build output (out/) for incremental builds.
+          clean: ${{ env.SELF_HOSTED != 'true' }}
+
+      - name: Cache key.
+        id: key
+        shell: bash
+        run: |
+          DOC=$TBUILD/luckgram-desktop/docs/building-win.md
+          SDK="$(grep "SDK version" $DOC | sed -r 's/.*\*\*(.*)\*\* SDK version.*/\1/')"
+          echo "SDK=$SDK" >> $GITHUB_ENV
+          HASH=$( { sha256sum $TBUILD/luckgram-desktop/$PREPARE_PATH | awk '{print $1}'; echo "$SDK"; echo "$QT"; } | sha256sum | awk '{print $1}')
+          echo "prefix=win64-libs-$HASH-" >> $GITHUB_OUTPUT
+          # done2: "-done" caches were pruned without tdesktop_rust/out.
+          echo "done=win64-libs-$HASH-done2" >> $GITHUB_OUTPUT
+
+      - name: Finished libraries already cached?
+        if: env.SELF_HOSTED != 'true'
+        id: done
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ env.TBUILD }}\Libraries
+            ${{ env.TBUILD }}\ThirdParty
+          key: ${{ steps.key.outputs.done }}
+          lookup-only: true
+
+      - name: Restore partial libraries.
+        if: env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true'
+        id: partial
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ env.TBUILD }}\Libraries
+            ${{ env.TBUILD }}\ThirdParty
+          key: ${{ steps.key.outputs.prefix }}partial-${{ github.run_id }}
+          # Last resort: any older cache of these libraries (incl. "-done"),
+          # prepare.py rebuilds what is missing or stale.
+          restore-keys: |
+            ${{ steps.key.outputs.prefix }}partial-
+            ${{ steps.key.outputs.prefix }}
+
+      - name: CMake patch.
+        if: steps.done.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          if [ "$SELF_HOSTED" != "true" ]; then
+            # Hosted only (disk space): no /Zi in Debug. Never edit the self-hosted machine's CMake.
+            sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
+          fi
+          git config --global user.email >/dev/null || git config --global user.email "ci@luckgram.invalid"
+          git config --global user.name >/dev/null || git config --global user.name "Luckgram CI"
+
+      - name: ATL for the 14.44 toolset (breakpad dump_syms).
+        if: steps.done.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          # Hosted runners have ATL only for the default toolset; breakpad's
+          # Release dump_syms (built with -vcvars_ver=14.44) needs atlbase.h.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath
+          $atl = Get-ChildItem "$vs\VC\Tools\MSVC\14.44.*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
+          if ($atl) { Write-Host "ATL already present: $($atl.FullName)"; exit 0 }
+          if ($env:SELF_HOSTED -eq 'true') {
+            Write-Error "ATL for MSVC 14.44 missing in $vs. Add component Microsoft.VisualStudio.Component.VC.14.44.17.14.ATL (C++ ATL for v143 build tools 14.44) with the Visual Studio Installer."
+            exit 1
+          }
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $p = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList `
+            'modify', '--installPath', "`"$vs`"", `
+            '--add', 'Microsoft.VisualStudio.Component.VC.14.44.17.14.ATL', `
+            '--quiet', '--norestart', '--nocache'
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { exit $p.ExitCode }
+          $atl = Get-ChildItem "$vs\VC\Tools\MSVC\14.44.*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
+          if (-not $atl) { Write-Error "ATL for 14.44 still missing"; exit 1 }
+          Write-Host "Installed: $($atl.FullName)"
+
+      - uses: Eden-CI/msvc-dev-cmd@master
+        if: steps.done.outputs.cache-hit != 'true'
+        name: Native Tools Command Prompt.
+        with:
+          arch: x64
+          sdk: ${{ env.SDK }}
+          toolset: '14.44'
+
+      - name: NuGet sources.
+        if: steps.done.outputs.cache-hit != 'true'
+        run: |
+          nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
+          nuget sources Add -Source https://api.nuget.org/v3/index.json & exit 0
+
+      - name: Repair restored libraries.
+        # Older prunes deleted the generated wallet_engine.cpp while the
+        # stage keys stayed valid; make prepare.py rebuild those stages.
+        if: env.SELF_HOSTED != 'true' && steps.partial.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          if [ -d "$LibrariesPath/cache_keys" ] && [ ! -f "$LibrariesPath/tdesktop_rust/out/src/wallet_engine/wallet_engine.cpp" ]; then
+            echo "wallet_engine.cpp missing: rebuilding tlottie, wallet-engine, tdesktop_rust"
+            rm -f "$LibrariesPath/cache_keys/tlottie" "$LibrariesPath/cache_keys/wallet-engine" "$LibrariesPath/cache_keys/tdesktop_rust"
+          fi
+
+      - name: Prune restored partial libraries.
+        # Finished stages are skipped by prepare.py (cache_keys), so their
+        # intermediate files (.obj, sources) only take disk space. Same rule
+        # as the final prune below; C: ran out of space without this.
+        if: env.SELF_HOSTED != 'true' && steps.partial.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          df -h /c | tail -1
+          find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' -o -path '*/tdesktop_rust/out/*' ')' -type f ')' -o -empty ')' -delete
+          df -h /c | tail -1
+
+      - name: Libraries.
+        id: prepare
+        if: steps.done.outputs.cache-hit != 'true'
+        timeout-minutes: 320
+        run: |
+          %TBUILD%\luckgram-desktop\Telegram\build\prepare\win.bat silent %QT%
+
+      - name: Free up some disk space.
+        if: env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
+        shell: bash
+        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' -o -path '*/tdesktop_rust/out/*' ')' -type f ')' -o -empty ')' -delete
+
+      - name: Save finished libraries.
+        if: env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ env.TBUILD }}\Libraries
+            ${{ env.TBUILD }}\ThirdParty
+          key: ${{ steps.key.outputs.done }}
+
+      - name: Prune partial libraries.
+        if: always() && env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success' && steps.prepare.outcome != 'skipped'
+        shell: bash
+        run: |
+          find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -name '*.patch' -o -path '*/tdesktop_rust/out/*' ')' -type f ')' -o -empty ')' -delete || true
+          df -h /c | tail -1
+
+      - name: Save partial libraries (continue next run).
+        if: always() && env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success' && steps.prepare.outcome != 'skipped'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ env.TBUILD }}\Libraries
+            ${{ env.TBUILD }}\ThirdParty
+          key: ${{ steps.key.outputs.prefix }}partial-${{ github.run_id }}-${{ github.run_attempt }}
+
+  build:
+    name: Luckgram x64
+    needs: libs
+    if: (!(inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) && fromJSON('["self-hosted","luckgram-win"]') || 'windows-latest' }}
+    timeout-minutes: 355
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - name: Free disk space on C.
+        if: env.SELF_HOSTED != 'true'
+        shell: pwsh
+        run: |
+          function Free { "{0:N1} GB free on C:" -f ((Get-PSDrive C).Free / 1GB) }
+          Free
+          # Large preinstalled toolchains this build never uses (keeps VS, Strawberry Perl, Python, CMake, Git).
+          $dirs = @(
+            'C:\Android', 'C:\ghcup', 'C:\cabal', 'C:\tools\kotlinc', 'C:\SeleniumWebDrivers',
+            'C:\Program Files\MongoDB', 'C:\Program Files\MySQL', 'C:\Program Files\R',
+            'C:\Program Files\Microsoft SQL Server', 'C:\Program Files\Microsoft Service Fabric',
+            'C:\Program Files\Microsoft SDKs\Azure', 'C:\Program Files\Amazon',
+            'C:\hostedtoolcache\windows\go', 'C:\hostedtoolcache\windows\Ruby',
+            'C:\hostedtoolcache\windows\Java_Temurin-Hotspot_jdk', 'C:\hostedtoolcache\windows\PyPy',
+            'C:\hostedtoolcache\windows\stack', 'C:\hostedtoolcache\windows\node',
+            'C:\ProgramData\chocolatey\lib\maven', 'C:\ProgramData\chocolatey\lib\pulumi'
+          ) | Where-Object { Test-Path $_ }
+          $jobs = $dirs | ForEach-Object { Start-Job -ArgumentList $_ { param($d) cmd /c rmdir /s /q "`"$d`"" 2>$null } }
+          $jobs | Wait-Job -Timeout 900 | Out-Null
+          Free
+
+      - name: Prepare directories.
+        run: |
+          if "%SELF_HOSTED%"=="true" (
+            rem Persistent: the workspace (and TBuild in it) survives between runs.
+            if not exist %GITHUB_WORKSPACE%\TBuild\Libraries mkdir %GITHUB_WORKSPACE%\TBuild\Libraries
+          ) else (
+            mkdir %userprofile%\TBuild\Libraries
+            mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          )
+          echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
+          echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
+
+      - name: Clone.
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          path: TBuild\luckgram-desktop
+          # Self-hosted keeps build output (out/) for incremental builds.
+          clean: ${{ env.SELF_HOSTED != 'true' }}
+
+      - name: Restore libraries.
+        if: env.SELF_HOSTED != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ env.TBUILD }}\Libraries
+            ${{ env.TBUILD }}\ThirdParty
+          key: ${{ needs.libs.outputs.cache-key }}
+          fail-on-cache-miss: true
+
+      - name: Version.
+        shell: bash
+        run: |
+          DOC=$TBUILD/luckgram-desktop/docs/building-win.md
+          SDK="$(grep "SDK version" $DOC | sed -r 's/.*\*\*(.*)\*\* SDK version.*/\1/')"
+          echo "SDK=$SDK" >> $GITHUB_ENV
+          VERSION=$(sed -n 's/.*AppVersionStr = "\([0-9.]*\)".*/\1/p' $TBUILD/luckgram-desktop/Telegram/SourceFiles/core/version.h)
+          [ -n "$VERSION" ] || { echo "::error::Could not read AppVersionStr"; exit 1; }
+          echo "LUCKGRAM_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "LUCKGRAM_BUILD=${{ github.run_number }}" >> $GITHUB_ENV
+          echo "Luckgram $VERSION build ${{ github.run_number }} (${GITHUB_SHA::7})"
+          if [ "$SELF_HOSTED" != "true" ]; then
+            sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
+          fi
+
+      - uses: Eden-CI/msvc-dev-cmd@master
+        name: Native Tools Command Prompt.
+        with:
+          arch: x64
+          sdk: ${{ env.SDK }}
+          toolset: '14.44'
+
+      - name: Configure.
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: |
+          cd %TBUILD%\luckgram-desktop\Telegram
+          call configure.bat x64 %QT% ^
+            -D TDESKTOP_API_ID=%TG_API_ID% ^
+            -D TDESKTOP_API_HASH=%TG_API_HASH% ^
+            -D LUCKGRAM_REQUIRE_API_CREDENTIALS=ON ^
+            -D LUCKGRAM_BUILD_NUMBER=%LUCKGRAM_BUILD% ^
+            -D LUCKGRAM_COMMIT=${{ github.sha }} ^
+            -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON ^
+            -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON ^
+            -D CMAKE_CONFIGURATION_TYPES=Release ^
+            -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=
+          if %errorlevel% neq 0 exit /b %errorlevel%
+
+      - name: Build.
+        env:
+          # MSBuild projects in parallel x cl /MP processes ran out of heap
+          # (C1060) on 16 GB, both hosted and self-hosted; hosted still hit it
+          # at /MP4 on the heavy Telegram TUs. Hosted: /MP2 (override with
+          # vars.WIN_HOSTED_CL_MP), one project at a time. Self-hosted:
+          # vars WIN_CL_MP / WIN_BUILD_PARALLEL.
+          _CL_: ${{ format('/MP{0}', env.SELF_HOSTED == 'true' && (vars.WIN_CL_MP || '4') || (vars.WIN_HOSTED_CL_MP || '2')) }}
+          BUILD_PARALLEL: ${{ env.SELF_HOSTED == 'true' && (vars.WIN_BUILD_PARALLEL || '2') || '1' }}
+        run: |
+          echo _CL_=%_CL_% BUILD_PARALLEL=%BUILD_PARALLEL%
+          cmake --build %TBUILD%\luckgram-desktop\out --config Release --parallel %BUILD_PARALLEL%
+
+      - name: Stage files.
+        shell: pwsh
+        run: |
+          $out = "$env:TBUILD\luckgram-desktop\out\Release"
+          $stage = "$env:GITHUB_WORKSPACE\stage\Luckgram"
+          # Self-hosted workspaces persist: start from empty output folders.
+          Remove-Item -Recurse -Force "$env:GITHUB_WORKSPACE\stage", "$env:GITHUB_WORKSPACE\portable", "$env:GITHUB_WORKSPACE\dist" -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force "$stage\modules\x64\d3d" | Out-Null
+          Copy-Item "$out\Telegram.exe" "$stage\Luckgram.exe"
+          Copy-Item "$out\modules\x64\d3d\d3dcompiler_47.dll" "$stage\modules\x64\d3d\"
+          Get-ChildItem -Recurse $stage | Select-Object FullName, Length
+
+      - name: Code signing (optional).
+        shell: pwsh
+        env:
+          WINDOWS_SIGN_PFX_BASE64: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 }}
+          WINDOWS_SIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGN_PFX_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_SIGN_PFX_BASE64) {
+            Write-Host "未签名 (unsigned): no WINDOWS_SIGN_PFX_BASE64 secret, skipping code signing."
+            "LUCKGRAM_SIGN=0" >> $env:GITHUB_ENV
+            exit 0
+          }
+          $pfx = "$env:RUNNER_TEMP\sign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_SIGN_PFX_BASE64))
+          signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $pfx /p $env:WINDOWS_SIGN_PFX_PASSWORD "$env:GITHUB_WORKSPACE\stage\Luckgram\Luckgram.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "LUCKGRAM_SIGN=1" >> $env:GITHUB_ENV
+
+      - name: Portable zip.
+        shell: pwsh
+        run: |
+          $name = "Luckgram-$env:LUCKGRAM_VERSION-$env:LUCKGRAM_BUILD-x64-portable"
+          $dir = "$env:GITHUB_WORKSPACE\portable\Luckgram"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item -Recurse "$env:GITHUB_WORKSPACE\stage\Luckgram\*" $dir
+          # Marker file: keep data (tdata) next to Luckgram.exe.
+          Set-Content -Path "$dir\luckgram-portable" -Value "Luckgram portable: data is stored in this folder." -Encoding utf8
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\dist" | Out-Null
+          Compress-Archive -Path $dir -DestinationPath "$env:GITHUB_WORKSPACE\dist\$name.zip"
+
+      - name: Installer (Inno Setup).
+        shell: pwsh
+        run: |
+          & "$env:TBUILD\luckgram-desktop\luckgram\windows\make_installer.ps1" `
+            -Version $env:LUCKGRAM_VERSION -Build $env:LUCKGRAM_BUILD `
+            -SourceDir "$env:GITHUB_WORKSPACE\stage\Luckgram" `
+            -OutputDir "$env:GITHUB_WORKSPACE\dist"
+
+      - name: Sign installer (optional).
+        if: env.LUCKGRAM_SIGN == '1'
+        shell: pwsh
+        env:
+          WINDOWS_SIGN_PFX_BASE64: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 }}
+          WINDOWS_SIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGN_PFX_PASSWORD }}
+        run: |
+          $pfx = "$env:RUNNER_TEMP\sign.pfx"
+          signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $pfx /p $env:WINDOWS_SIGN_PFX_PASSWORD (Get-ChildItem "$env:GITHUB_WORKSPACE\dist\*.exe").FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Check outputs.
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:GITHUB_WORKSPACE\dist" | Select-Object Name, Length
+          $setup = "Luckgram-Setup-$env:LUCKGRAM_VERSION-$env:LUCKGRAM_BUILD-x64.exe"
+          $zip = "Luckgram-$env:LUCKGRAM_VERSION-$env:LUCKGRAM_BUILD-x64-portable.zip"
+          foreach ($f in @($setup, $zip)) {
+            if (-not (Test-Path "$env:GITHUB_WORKSPACE\dist\$f")) { Write-Error "missing $f"; exit 1 }
+          }
+          # The exe must not carry the upstream test api_id.
+          $bytes = [IO.File]::ReadAllText("$env:GITHUB_WORKSPACE\stage\Luckgram\Luckgram.exe", [Text.Encoding]::ASCII)
+          if ($bytes.Contains("344583e45741c457fe1862106095a5eb")) { Write-Error "upstream test api_hash found in Luckgram.exe"; exit 1 }
+
+      - name: Upload installer.
+        uses: actions/upload-artifact@v7
+        with:
+          name: Luckgram-Setup-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64
+          path: dist/Luckgram-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Upload portable.
+        uses: actions/upload-artifact@v7
+        with:
+          name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64-portable
+          path: dist/Luckgram-*-portable.zip
+          if-no-files-found: error

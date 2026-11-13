@@ -18,10 +18,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #endif // TDESKTOP_ALLOW_CLOSED_ALPHA
 
 // used in Updater.cpp and Setup.iss for Windows
-constexpr auto AppId = "{53F49750-6209-4FBF-9CA8-7A333C87D1ED}"_cs;
-constexpr auto AppNameOld = "Telegram Win (Unofficial)"_cs;
-constexpr auto AppName = "Telegram Desktop"_cs;
-constexpr auto AppFile = "Telegram"_cs;
+// Luckgram: own AppId, so uninstall keys never collide with Telegram Desktop.
+constexpr auto AppId = "{6F1C2B7E-4A3D-4C59-9E21-8B5D0A7C3E14}"_cs;
+constexpr auto AppNameOld = "Luckgram (Legacy)"_cs;
+constexpr auto AppName = "Luckgram"_cs;
+constexpr auto AppFile = "Luckgram"_cs;
 constexpr auto AppVersion = 7004002;
 constexpr auto AppVersionStr = "7.4.2";
 constexpr auto AppBetaVersion = false;
