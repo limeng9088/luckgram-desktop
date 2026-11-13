@@ -5,6 +5,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/ai/ai_assistant.h"
 
+#include "base/timer.h"
 #include "chat_helpers/compose/compose_show.h"
 #include "data/data_document.h"
 #include "data/data_media_types.h"
@@ -383,6 +384,7 @@ private:
 	[[nodiscard]] Message *findMessage(const QString &id);
 	[[nodiscard]] MessageRow *findRow(const QString &id) const;
 	void layoutInput(int width);
+	void showStreamed();
 
 	const not_null<Ui::ScrollArea*> _scroll;
 	Conversation _conversation;
@@ -396,6 +398,9 @@ private:
 	Ui::RoundButton *_send = nullptr;
 	Api::RequestPtr _request;
 	QString _pendingId;
+	// Streaming re-lays out the whole reply, so redraw at most once
+	// per kStreamRedrawMs instead of on every piece.
+	base::Timer _streamTimer;
 	rpl::variable<bool> _busy = false;
 	bool _stickToBottom = true;
 
@@ -427,6 +432,7 @@ struct ChatFactory final : ::Settings::AbstractSectionFactory {
 
 // The conversation of OpenNewConversation (an id no stored one has).
 constexpr auto kNewConversation = "*new*";
+constexpr auto kStreamRedrawMs = crl::time(80);
 
 ChatSection::ChatSection(
 	QWidget *parent,
@@ -437,7 +443,8 @@ ChatSection::ChatSection(
 : AbstractSection(parent, controller)
 , _scroll(scroll)
 , _initialInput(std::move(inputText))
-, _list(Ui::CreateChild<Ui::VerticalLayout>(this)) {
+, _list(Ui::CreateChild<Ui::VerticalLayout>(this))
+, _streamTimer([=] { showStreamed(); }) {
 	RegisterAll();
 	const auto &store = Store::For(&controller->session());
 	auto found = std::optional<Conversation>();
@@ -866,8 +873,8 @@ void ChatSection::request() {
 		crl::guard(this, [=](QString, QString soFar) {
 			if (const auto pending = findMessage(_pendingId)) {
 				pending->text = soFar;
-				if (const auto row = findRow(_pendingId)) {
-					row->setMessage(*pending);
+				if (!_streamTimer.isActive()) {
+					_streamTimer.callOnce(kStreamRedrawMs);
 				}
 			}
 		}),
@@ -882,8 +889,17 @@ void ChatSection::request() {
 		}));
 }
 
+void ChatSection::showStreamed() {
+	if (const auto pending = findMessage(_pendingId)) {
+		if (const auto row = findRow(_pendingId)) {
+			row->setMessage(*pending);
+		}
+	}
+}
+
 void ChatSection::finish(const QString &text, const QString &errorCode) {
 	_request = nullptr;
+	_streamTimer.cancel();
 	const auto id = base::take(_pendingId);
 	_busy = false;
 	auto message = findMessage(id);
