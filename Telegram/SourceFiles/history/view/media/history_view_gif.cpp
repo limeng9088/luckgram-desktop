@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/media/history_view_gif.h"
+#include "luckgram/transcribe/luckgram_transcribe.h" // Luckgram D6
 
 #include "apiwrap.h"
 #include "api/api_transcribes.h"
@@ -2728,7 +2729,9 @@ void Gif::ensureTranscribeButton() const {
 		&& !_parent->data()->isAdminLogEntry()
 		&& (_parent->context() != Context::MediaEditor)
 		&& (_data->session().premium()
-			|| _data->session().api().transcribes().trialsSupport())) {
+			|| _data->session().api().transcribes().trialsSupport()
+			// Luckgram D6 (mobile 17): free for non-Premium.
+			|| Luckgram::Transcribe::FreeFor(_realParent))) {
 		if (!_transcribe) {
 			_transcribe = std::make_unique<TranscribeButton>(
 				_realParent,
