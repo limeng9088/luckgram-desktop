@@ -7,6 +7,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "base/timer.h"
 #include "core/application.h"
+#include "luckgram/discover/luckgram_discover_storage.h"
 #include "luckgram/discover/luckgram_silent_link.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_settings.h"
@@ -23,11 +24,11 @@ namespace {
 
 constexpr auto kExpiresKey = "nearby.expires_at";
 constexpr auto kIntroKey = "nearby.intro_done";
-constexpr auto kBioKey = "nearby.bio";
+constexpr auto kLegacyBioKey = "nearby.bio";
 constexpr auto kPhotoKey = "nearby.show_photo";
 constexpr auto kRemindedKey = "nearby.reminded_for";
-constexpr auto kManualLatKey = "nearby.manual_lat";
-constexpr auto kManualLonKey = "nearby.manual_lon";
+constexpr auto kLegacyLatKey = "nearby.manual_lat";
+constexpr auto kLegacyLonKey = "nearby.manual_lon";
 
 struct Shared {
 	rpl::event_stream<> changes;
@@ -114,11 +115,17 @@ void SetIntroDone() {
 }
 
 QString Bio() {
-	return Settings::GetString(K(kBioKey));
+	return DiscoverStorage::Read(
+		DiscoverStorage::Active(),
+		K(DiscoverStorage::kNearbyBio),
+		K(kLegacyBioKey));
 }
 
 void SetBio(const QString &bio) {
-	Settings::SetString(K(kBioKey), Nearby::CleanBio(bio));
+	DiscoverStorage::Write(
+		DiscoverStorage::Active(),
+		K(DiscoverStorage::kNearbyBio),
+		Nearby::CleanBio(bio));
 	Changed();
 }
 
@@ -132,13 +139,28 @@ void SetShowPhoto(bool show) {
 }
 
 std::optional<QPointF> ManualLocation() {
-	if (!Settings::Has(K(kManualLatKey)) || !Settings::Has(K(kManualLonKey))) {
+	const auto account = DiscoverStorage::Active();
+	const auto name = K(DiscoverStorage::kNearbyManualLocation);
+	if (Settings::Has(K(kLegacyLatKey)) || Settings::Has(K(kLegacyLonKey))) {
+		// Plain pre-D2 pair: moved once into the encrypted "lat,lon".
+		const auto lat = Settings::GetString(K(kLegacyLatKey));
+		const auto lon = Settings::GetString(K(kLegacyLonKey));
+		Settings::Remove(K(kLegacyLatKey));
+		Settings::Remove(K(kLegacyLonKey));
+		if (!lat.isEmpty()
+			&& !lon.isEmpty()
+			&& DiscoverStorage::Read(account, name).isEmpty()) {
+			DiscoverStorage::Write(account, name, lat + QChar(',') + lon);
+		}
+	}
+	const auto parts = DiscoverStorage::Read(account, name).split(QChar(','));
+	if (parts.size() != 2) {
 		return std::nullopt;
 	}
 	auto okLat = false;
 	auto okLon = false;
-	const auto lat = Settings::GetString(K(kManualLatKey)).toDouble(&okLat);
-	const auto lon = Settings::GetString(K(kManualLonKey)).toDouble(&okLon);
+	const auto lat = parts[0].toDouble(&okLat);
+	const auto lon = parts[1].toDouble(&okLon);
 	if (!okLat || !okLon || !Nearby::IsValidLocation(lat, lon)) {
 		return std::nullopt;
 	}
@@ -146,13 +168,16 @@ std::optional<QPointF> ManualLocation() {
 }
 
 void SetManualLocation(std::optional<QPointF> point) {
+	const auto account = DiscoverStorage::Active();
+	const auto name = K(DiscoverStorage::kNearbyManualLocation);
 	if (point && Nearby::IsValidLocation(point->x(), point->y())) {
 		// Only the coarsened value is ever stored.
-		Settings::SetString(K(kManualLatKey), Nearby::Coord(point->x()));
-		Settings::SetString(K(kManualLonKey), Nearby::Coord(point->y()));
+		DiscoverStorage::Write(
+			account,
+			name,
+			Nearby::Coord(point->x()) + QChar(',') + Nearby::Coord(point->y()));
 	} else {
-		Settings::Remove(K(kManualLatKey));
-		Settings::Remove(K(kManualLonKey));
+		DiscoverStorage::Write(account, name, QString());
 	}
 	Changed();
 }
@@ -200,6 +225,7 @@ void TurnOff(Fn<void()> done, Fn<void(Api::Error)> fail) {
 
 void OnLoggedOutCompletely() {
 	SilentLink::ClearCache();
+	DiscoverStorage::ClearMemory();
 	if (!IsVisible() || !Api::HasToken()) {
 		return;
 	}
