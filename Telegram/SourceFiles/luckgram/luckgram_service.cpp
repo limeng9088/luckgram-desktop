@@ -10,6 +10,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "base/timer.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_settings.h"
+#include "luckgram/translate/translate_service.h"
 #include "luckgram/pro/luckgram_pro.h"
 #include "luckgram/xray/luckgram_xray.h"
 
@@ -79,6 +80,7 @@ void OnLoggedOutCompletely() {
 	}
 	NearbyState::OnLoggedOutCompletely(); // D10: card off before the token goes.
 	Settings::ClearAll();
+	Translate::ClearAll();
 	Api::ForgetToken();
 	LOG(("Luckgram: logged out of every account, local data cleared."));
 }

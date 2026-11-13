@@ -95,6 +95,22 @@ PRIVATE
     luckgram/luckgram_storage_logic.h
     luckgram/luckgram_strings.cpp
     luckgram/luckgram_strings.h
+    luckgram/translate/translate_logic.cpp
+    luckgram/translate/translate_logic.h
+    luckgram/selectall/select_all.cpp
+    luckgram/selectall/select_all.h
+    luckgram/selectall/select_all_logic.cpp
+    luckgram/selectall/select_all_logic.h
+    luckgram/transcribe/luckgram_dictation.cpp
+    luckgram/transcribe/luckgram_dictation.h
+    luckgram/transcribe/luckgram_transcribe.cpp
+    luckgram/transcribe/luckgram_transcribe.h
+    luckgram/transcribe/luckgram_transcribe_logic.cpp
+    luckgram/transcribe/luckgram_transcribe_logic.h
+    luckgram/translate/translate_out.cpp
+    luckgram/translate/translate_out.h
+    luckgram/translate/translate_service.cpp
+    luckgram/translate/translate_service.h
     settings/sections/settings_luckgram.cpp
     settings/sections/settings_luckgram.h
     # D12 Pro, account link
@@ -109,6 +125,15 @@ PRIVATE
     luckgram/xray/luckgram_xray.h
     luckgram/xray/luckgram_xray_logic.cpp
     luckgram/xray/luckgram_xray_logic.h
+    settings/sections/settings_luckgram_translate.cpp
+    settings/sections/settings_luckgram_translate.h
+    # D7 AI
+    luckgram/ai/ai_assistant.cpp
+    luckgram/ai/ai_assistant.h
+    luckgram/ai/ai_registry.cpp
+    luckgram/ai/ai_registry.h
+    luckgram/ai/ai_store.cpp
+    luckgram/ai/ai_store.h
     # D7 AI: pure logic (also in luckgram_tests)
     luckgram/ai/ai_agents_logic.cpp
     luckgram/ai/ai_agents_logic.h
@@ -122,6 +147,15 @@ PRIVATE
     luckgram/ai/ai_markdown_logic.h
     luckgram/ai/ai_summary_logic.cpp
     luckgram/ai/ai_summary_logic.h
+    # D12 account backup file
+    luckgram/backup/luckgram_backup.cpp
+    luckgram/backup/luckgram_backup.h
+    luckgram/backup/luckgram_backup_format.cpp
+    luckgram/backup/luckgram_backup_format.h
+    settings/sections/settings_luckgram_backup.cpp
+    settings/sections/settings_luckgram_backup.h
+    luckgram/ai/ai_text_logic.cpp
+    luckgram/ai/ai_text_logic.h
 )
 
 # A generated header rather than a compile definition: switching the option

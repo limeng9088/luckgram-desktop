@@ -53,6 +53,10 @@ public:
 	using ItemPreview = HistoryView::ItemPreview;
 
 	void itemInvalidated(not_null<const HistoryItem*> item);
+
+	// Luckgram D9 (06): keywords to highlight while a keyword folder is
+	// shown (empty otherwise); a change re-prepares the preview.
+	void setLuckgramHighlight(const QStringList &keywords);
 	[[nodiscard]] bool dependsOn(not_null<const HistoryItem*> item) const;
 
 	[[nodiscard]] bool prepared(
@@ -96,6 +100,7 @@ private:
 		int width1) const;
 
 	mutable const HistoryItem *_textCachedFor = nullptr;
+	QStringList _luckgramHighlight; // Luckgram D9 (06)
 	mutable Text::String _senderCache;
 	mutable std::unique_ptr<TopicsView> _topics;
 	mutable Text::String _textCache;

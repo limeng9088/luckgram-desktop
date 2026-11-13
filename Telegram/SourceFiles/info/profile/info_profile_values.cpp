@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "info/profile/info_profile_values.h"
 
+#include "luckgram/d9/luckgram_profile_info.h" // Luckgram D9
 #include "api/api_chat_participants.h"
 #include "apiwrap.h"
 #include "info/profile/info_profile_phone_menu.h"
@@ -255,9 +256,15 @@ TextWithEntities AboutWithEntities(
 	} else if (isBot) {
 		flags |= TextParseHashtags | TextParseBotCommands;
 	}
-	const auto stripExternal = peer->isChat()
-		|| peer->isMegagroup()
-		|| (user && !isBot && !isPremium);
+	// Luckgram D9 (07): links, @usernames and #hashtags in every bio.
+	const auto luckgramLinks = Luckgram::ProfileInfo::BioLinksEnabled();
+	if (luckgramLinks) {
+		flags |= TextParseHashtags;
+	}
+	const auto stripExternal = !luckgramLinks
+		&& (peer->isChat()
+			|| peer->isMegagroup()
+			|| (user && !isBot && !isPremium));
 	auto result = TextWithEntities{ value };
 	TextUtilities::ParseEntities(result, flags);
 	if (stripExternal) {

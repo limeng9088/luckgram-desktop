@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/media/history_view_document.h"
+#include "luckgram/transcribe/luckgram_transcribe.h" // Luckgram D6
 
 #include "base/random.h"
 #include "lang/lang_keys.h"
@@ -507,6 +508,8 @@ QSize Document::countOptimalSize() {
 				&& !transcribes->freeFor(_realParent)
 				&& !transcribes->trialsSupport())
 			|| (!session->premium()
+				// Luckgram D6 (mobile 17): any length.
+				&& !Luckgram::Transcribe::FreeFor(_realParent)
 				&& _data->duration() > transcribes->trialsMaxLengthMs())) {
 			voice->transcribe = nullptr;
 			voice->transcribeText = {};
@@ -534,8 +537,12 @@ QSize Document::countOptimalSize() {
 				? TextWithEntities()
 				: entry.toolong
 				? tr::italic(tr::lng_audio_transcribe_long(tr::now))
+				: (entry.failed && Luckgram::Transcribe::FreeFor(_realParent))
+				? Luckgram::Transcribe::FailedText(_realParent) // Luckgram D6
 				: entry.failed
 				? tr::italic(tr::lng_attach_failed(tr::now))
+				: Luckgram::Transcribe::FreeFor(_realParent) // Luckgram D6
+				? Luckgram::Transcribe::ResultText(_realParent, entry.result)
 				: TextWithEntities{ entry.result }.append(
 					pending
 						? Ui::Text::LottieEmoji(descriptor)

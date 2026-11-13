@@ -18,6 +18,8 @@ class Session;
 //
 // Names: lowercase latin, digits, '_' and '-' (IsValidName), stored as
 // "luckgram_<name>". A bad name is refused (Write returns false).
+//
+// Main thread only (like upstream's Storage::Account).
 namespace Luckgram::Storage {
 
 // 1) Account level: messages, translations, AI chats, private notes,
@@ -28,8 +30,11 @@ namespace Luckgram::Storage {
 // of an account hidden in the second space (D8) is hidden with it.
 // Storage::Account::reset() (log out) removes all of it (ClearAccount).
 //
-// Before the account's local key exists (not started yet) Read returns an
-// empty array and Write returns false: keep such data in memory only.
+// Before the account's local key exists (not started yet), and while the
+// account is hidden in the second space (D8), Read returns an empty array,
+// Write returns false and Remove does nothing: keep such data in memory only
+// and don't drop the saved copy. Data loaded while hidden is empty: load
+// again when Luckgram::DoubleBottom::ActiveChanges() fires.
 [[nodiscard]] bool AccountAvailable(not_null<Main::Account*> account);
 [[nodiscard]] QByteArray ReadAccount(
 	not_null<Main::Account*> account,
@@ -57,8 +62,11 @@ void ClearAccount(const QString &basePath);
 // passcode is entered - proxies, subscription URLs, Xray nodes.
 //
 // Stored in tdata/ and encrypted with the key of upstream's "settings"
-// file, exactly like upstream keeps its proxy list. That key does not
-// depend on the passcode, so do NOT put message content here.
+// file, exactly like upstream keeps its proxy list. That key does NOT
+// depend on the local passcode: anyone with a copy of tdata/ can read it.
+// Only switches, preferences and proxy data (proxies, subscription URLs,
+// Xray nodes) go here - never messages, translations, AI chats, notes,
+// keywords, drafts or anything else written by or to the user.
 [[nodiscard]] bool SettingsAvailable();
 [[nodiscard]] QByteArray ReadSettings(const QString &name);
 bool WriteSettings(const QString &name, const QByteArray &data);

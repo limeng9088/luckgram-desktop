@@ -187,17 +187,18 @@ QString EncodeRecord(const SecondRecord &record) {
 		QString::fromLatin1(record.salt.toBase64()),
 		QString::fromLatin1(record.nonce.toBase64()),
 		QString::fromLatin1(record.sealed.toBase64()),
+		QString::fromLatin1(record.visibleNonce.toBase64()),
+		QString::fromLatin1(record.visibleSealed.toBase64()),
 	}.join(QChar(':'));
 }
 
 std::optional<SecondRecord> DecodeRecord(const QString &value) {
 	const auto parts = value.split(QChar(':'));
-	if (parts.size() != 5) {
-		return std::nullopt;
-	}
 	auto ok = false;
-	const auto version = parts[0].toInt(&ok);
-	if (!ok || version != kRecordVersion) {
+	const auto version = parts.isEmpty() ? 0 : parts[0].toInt(&ok);
+	if (!ok
+		|| !((version == 1 && parts.size() == 5)
+			|| (version == kRecordVersion && parts.size() == 7))) {
 		return std::nullopt;
 	}
 	const auto iterations = parts[1].toInt(&ok);
@@ -222,12 +223,25 @@ std::optional<SecondRecord> DecodeRecord(const QString &value) {
 		|| sealed->size() <= kTagSize) {
 		return std::nullopt;
 	}
-	return SecondRecord{
+	auto result = SecondRecord{
 		.salt = *salt,
 		.nonce = *nonce,
 		.sealed = *sealed,
 		.iterations = iterations,
 	};
+	if (version == kRecordVersion
+		&& !(parts[5].isEmpty() && parts[6].isEmpty())) {
+		const auto visibleNonce = decode(parts[5]);
+		const auto visibleSealed = decode(parts[6]);
+		if (!visibleNonce || !visibleSealed
+			|| visibleNonce->size() != kNonceSize
+			|| visibleSealed->size() <= kTagSize) {
+			return std::nullopt;
+		}
+		result.visibleNonce = *visibleNonce;
+		result.visibleSealed = *visibleSealed;
+	}
+	return result;
 }
 
 } // namespace Luckgram::Privacy

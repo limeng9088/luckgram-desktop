@@ -16,6 +16,9 @@ class Show;
 namespace Ui {
 class RpWidget;
 class InputField;
+class PopupMenu;
+class DropdownMenu;
+class IconButton;
 } // namespace Ui
 
 namespace Luckgram::Compose {
@@ -30,6 +33,10 @@ struct SlotContext {
 	not_null<Ui::InputField*> field;
 	std::shared_ptr<ChatHelpers::Show> show;
 	Fn<History*()> history; // The current chat, may be nullptr.
+	// The current topic / reply thread root (ComposeControls), 0 for the
+	// whole chat (HistoryWidget, or when not set).
+	Fn<MsgId()> topicRootId;
+	Ui::RpWidget *send = nullptr; // The send button (AddSendMenuItems).
 };
 
 struct Slot {
@@ -37,7 +44,18 @@ struct Slot {
 	// When the slot wants to be shown. The button is shown only while the
 	// send button is shown too (not while recording, not when restricted).
 	rpl::producer<bool> wanted = rpl::single(true);
+	// specs#94 compact input bar: the slot's item in the 「+」 menu (the
+	// attach menu); while the compact bar is on the button itself hides.
+	Fn<void(not_null<Ui::DropdownMenu*>)> plus;
 };
+
+// specs#94: 「精简输入栏」 (compact_input_bar, default on).
+inline constexpr auto kCompactFeature = "compact_input_bar";
+[[nodiscard]] bool CompactEnabled();
+[[nodiscard]] rpl::producer<bool> CompactValue();
+
+// The attach button shows 「+」 while the compact bar is on.
+void SetupPlusIcon(not_null<Ui::IconButton*> attach);
 
 class RightSlots final {
 public:
@@ -57,6 +75,9 @@ public:
 
 	void raise();
 
+	// Adds the slots' 「+」 items to the attach menu (compact bar on).
+	void fillPlusMenu(not_null<Ui::DropdownMenu*> menu);
+
 private:
 	struct Entry;
 
@@ -64,5 +85,14 @@ private:
 	rpl::lifetime _lifetime;
 
 };
+
+// Items a slot adds to the send button's right-click menu, after the
+// upstream ones (SendMenu::FillSendMenu calls FillSendMenu). Removed with
+// `lifetime`.
+void AddSendMenuItems(
+	not_null<QWidget*> send,
+	Fn<void(not_null<Ui::PopupMenu*>)> fill,
+	rpl::lifetime &lifetime);
+void FillSendMenu(QWidget *send, not_null<Ui::PopupMenu*> menu);
 
 } // namespace Luckgram::Compose

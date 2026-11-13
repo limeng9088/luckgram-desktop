@@ -8,6 +8,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_peer_menu.h"
 #include "luckgram/luckgram_hidden_chats.h" // Luckgram D8
 
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
+#include "luckgram/translate/translate_service.h" // Luckgram D6
 #include "base/call_delayed.h"
 #include "menu/menu_check_item.h"
 #include "menu/menu_mark_as_read.h"
@@ -546,6 +548,8 @@ void Filler::addToggleTopicClosed() {
 void Filler::addTogglePin() {
 	if ((!_sublist && !_peer) || (_topic && !_topic->canTogglePinned())) {
 		return;
+	} else if (Luckgram::Keywords::IsLocalFilterId(_request.filterId)) {
+		return; // Luckgram D9: no pinning inside keyword folders.
 	} else if (_request.section == Section::SubsectionTabsMenu
 		&& !_sublist
 		&& !_topic) {
@@ -1959,6 +1963,8 @@ void Filler::fillHistoryActions() {
 	addDirectMessages();
 	addExportChat();
 	addTranslate();
+	// Luckgram D6 (specs#105): 「翻译设置…」, the chat's reading language.
+	Luckgram::Translate::AddChatMenuAction(_controller, _peer, _addAction);
 	addReport();
 	addClearHistory();
 	addDeleteChat();

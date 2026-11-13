@@ -60,4 +60,20 @@ QStringList LuckgramPaths(
 	return result;
 }
 
+QStringList ClearPaths(
+		const QString &folder,
+		const QStringList &fileNamesOnDisk,
+		const QStringList &namesWritten) {
+	auto result = LuckgramPaths(folder, fileNamesOnDisk);
+	for (const auto &name : namesWritten) {
+		result.append(RecordPaths(folder, name));
+	}
+	result.removeDuplicates();
+	return result;
+}
+
+bool AccountUsable(bool hasLocalKey, bool hidden) {
+	return hasLocalKey && !hidden;
+}
+
 } // namespace Luckgram::Storage

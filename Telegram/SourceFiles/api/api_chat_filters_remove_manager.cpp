@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "api/api_chat_filters_remove_manager.h"
 
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "api/api_chat_filters.h"
 #include "apiwrap.h"
 #include "data/data_chat_filters.h"
@@ -60,6 +61,12 @@ void RemoveComplexChatFilter::request(
 		base::weak_qptr<Ui::RpWidget> widget,
 		base::weak_ptr<Window::SessionController> weak,
 		FilterId id) {
+	if (Luckgram::Keywords::IsLocalFilterId(id)) {
+		if (const auto strong = weak.get()) {
+			Luckgram::Keywords::ConfirmDelete(strong, id); // Luckgram D9
+		}
+		return;
+	}
 	const auto session = &weak->session();
 	const auto &list = session->data().chatsFilters().list();
 	const auto i = ranges::find(list, id, &Data::ChatFilter::id);

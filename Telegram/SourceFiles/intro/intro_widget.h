@@ -204,6 +204,8 @@ private:
 	object_ptr<Ui::FadeWrap<Ui::IconButton>> _back;
 	object_ptr<Ui::FadeWrap<Ui::RoundButton>> _update = { nullptr };
 	object_ptr<Ui::FadeWrap<Ui::RoundButton>> _settings;
+	// Luckgram D12: 「从备份恢复」 left of 「设置」 (switch account_backup).
+	object_ptr<Ui::FadeWrap<Ui::RoundButton>> _luckgramRestore = { nullptr };
 	object_ptr<Ui::FadeWrap<Ui::FlatLabel>> _testModeLabel = { nullptr };
 
 	object_ptr<Ui::FadeWrap<Ui::RoundButton>> _next;

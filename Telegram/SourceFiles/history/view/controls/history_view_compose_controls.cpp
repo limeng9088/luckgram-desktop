@@ -2851,9 +2851,13 @@ void ComposeControls::init() {
 			.field = _field,
 			.show = _show,
 			.history = [=] { return _history; },
+			.topicRootId = [=] { return _topicRootId; },
 		},
 		_send.get(),
 		[=] { updateControlsGeometry(_wrap->size()); });
+	if (_attachBotsMenu) {
+		updateAttachBotsMenu(); // Luckgram D6: with the 「+」 items now.
+	}
 	if (session().settings().shouldShowStashHint()) {
 		_stashHintManager = std::make_unique<Controls::StashHintManager>(
 			Controls::StashHintDescriptor{
@@ -5749,6 +5753,10 @@ void ComposeControls::updateAttachBotsMenu() {
 		}));
 	if (!_attachBotsMenu) {
 		return;
+	}
+	if (_luckgramSlots && _attachToggle) { // Luckgram D6 (specs#94).
+		Luckgram::Compose::SetupPlusIcon(_attachToggle);
+		_luckgramSlots->fillPlusMenu(_attachBotsMenu.get());
 	}
 	_attachBotsMenu->setOrigin(
 		Ui::PanelAnimation::Origin::BottomLeft);

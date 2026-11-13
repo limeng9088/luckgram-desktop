@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_folders.h"
 
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "api/api_chat_filters.h"
 #include "apiwrap.h"
 #include "boxes/filters/edit_filter_box.h"
@@ -551,7 +552,9 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 	};
 	const auto &list = session->data().chatsFilters().list();
 	for (const auto &filter : list) {
-		if (filter.id()) {
+		// Luckgram D9: keyword folders are listed on their own page.
+		if (filter.id()
+			&& !Luckgram::Keywords::IsLocalFilterId(filter.id())) {
 			addFilter(filter);
 		}
 	}
@@ -579,6 +582,15 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 	if (highlights) {
 		highlights->push_back({ u"folders/create"_q, { createButton.get() } });
 	}
+	// Luckgram D9 (06 §1): 「关键词文件夹」 entry.
+	AddButtonWithIcon(
+		container,
+		rpl::single(Luckgram::Keywords::Title()),
+		st::settingsButtonActive,
+		{ &st::settingsIconAdd, IconType::Round, &st::windowBgActive }
+	)->setClickedCallback([=] {
+		controller->showSettings(LuckgramKeywordFolders::Id());
+	});
 	createButton->setClickedCallback([=] {
 		if (showLimitReached()) {
 			return;

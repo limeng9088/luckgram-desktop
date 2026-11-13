@@ -74,6 +74,31 @@ PRIVATE
     luckgram/xray/luckgram_xray_logic.h
     luckgram/tests/luckgram_xray_logic_tests.cpp
 
+    # D6 messages and language (mobile 01, 02, 14, 15, 17)
+    luckgram/translate/translate_logic.cpp
+    luckgram/translate/translate_logic.h
+    luckgram/translate/translate_logic_tests.cpp
+    luckgram/selectall/select_all_logic.cpp
+    luckgram/selectall/select_all_logic.h
+    luckgram/tests/luckgram_select_all_tests.cpp
+    luckgram/transcribe/luckgram_transcribe_logic.cpp
+    luckgram/transcribe/luckgram_transcribe_logic.h
+    luckgram/tests/luckgram_transcribe_tests.cpp
+
+    # D9 profile details, private notes, keyword folders, shared-group
+    # activity, storage options (mobile 05 / 06 / 07 / 08 / 16)
+    luckgram/d9/luckgram_cache_logic.cpp
+    luckgram/d9/luckgram_cache_logic.h
+    luckgram/d9/luckgram_keyword_logic.cpp
+    luckgram/d9/luckgram_keyword_logic.h
+    luckgram/d9/luckgram_notes_text.cpp
+    luckgram/d9/luckgram_notes_text.h
+    luckgram/d9/luckgram_profile_info_logic.cpp
+    luckgram/d9/luckgram_profile_info_logic.h
+    luckgram/d9/luckgram_shared_activity_logic.cpp
+    luckgram/d9/luckgram_shared_activity_logic.h
+    luckgram/tests/luckgram_d9_tests.cpp
+
     # D7 AI (mobile 18-24, 30)
     luckgram/ai/ai_agents_logic.cpp
     luckgram/ai/ai_agents_logic.h
@@ -87,17 +112,27 @@ PRIVATE
     luckgram/ai/ai_markdown_logic.h
     luckgram/ai/ai_summary_logic.cpp
     luckgram/ai/ai_summary_logic.h
+    luckgram/ai/ai_text_logic.cpp
+    luckgram/ai/ai_text_logic.h
     luckgram/ai/ai_compose_logic_tests.cpp
     luckgram/ai/ai_conversation_logic_tests.cpp
     luckgram/ai/ai_market_logic_tests.cpp
     luckgram/ai/ai_markdown_logic_tests.cpp
     luckgram/ai/ai_summary_logic_tests.cpp
+
+    # D12 account backup file (PBKDF2 / AES-GCM: OpenSSL, linked below)
+    luckgram/backup/luckgram_backup_format.cpp
+    luckgram/backup/luckgram_backup_format.h
+    luckgram/tests/luckgram_backup_format_tests.cpp
+    luckgram/ai/ai_text_logic_tests.cpp
 )
 
 target_link_libraries(luckgram_tests
 PRIVATE
     desktop-app::external_qt
     desktop-app::external_qt_static_plugins # JPEG / PNG (D10 media tests).
+
+    desktop-app::external_openssl # D12 backup format.
 )
 
 set_target_properties(luckgram_tests PROPERTIES

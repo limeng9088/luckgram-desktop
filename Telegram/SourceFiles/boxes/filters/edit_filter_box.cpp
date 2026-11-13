@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "boxes/filters/edit_filter_box.h"
 
+#include "luckgram/d9/luckgram_keyword_folders.h" // Luckgram D9
 #include "apiwrap.h"
 #include "base/event_filter.h"
 #include "boxes/filters/edit_filter_chats_list.h"
@@ -1143,6 +1144,10 @@ void EditExistingFilter(
 		FilterId id) {
 	Expects(id != 0);
 
+	if (Luckgram::Keywords::IsLocalFilterId(id)) {
+		Luckgram::Keywords::ShowEdit(window, id); // Luckgram D9
+		return;
+	}
 	const auto session = &window->session();
 	const auto &list = session->data().chatsFilters().list();
 	const auto i = ranges::find(list, id, &Data::ChatFilter::id);

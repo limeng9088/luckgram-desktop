@@ -15,6 +15,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/qthelp_regex.h"
 #include "base/qthelp_url.h"
 #include "lang/lang_cloud_manager.h"
+#include "luckgram/transcribe/luckgram_transcribe.h" // Luckgram D6
+#include "luckgram/translate/translate_service.h" // Luckgram D6
 #include "lang/lang_keys.h"
 #include "core/update_checker.h"
 #include "core/application.h"
@@ -1015,6 +1017,26 @@ bool CopyPeerId(
 		});
 	}
 	return true;
+}
+
+// Luckgram D6 (specs#105): 「🌐 中文 ▾」 in a translation's header.
+bool LuckgramTranslateLanguage(
+		Window::SessionController *controller,
+		const Match &match,
+		const QVariant &context) {
+	return controller
+		&& Luckgram::Translate::HandleLanguageLink(
+			controller,
+			match->captured(1));
+}
+
+// Luckgram D6 (mobile 17, 01 B): 「重试」 / 「翻译」 in a transcript.
+bool LuckgramTranscribe(
+		Window::SessionController *controller,
+		const Match &match,
+		const QVariant &context) {
+	return controller
+		&& Luckgram::Transcribe::HandleLink(controller, match->captured(1));
 }
 
 bool ShowSearchTagsPromo(
@@ -2042,6 +2064,14 @@ const std::vector<LocalUrlHandler> &InternalUrlHandlers() {
 		{
 			u"^about_tags$"_q,
 			ShowSearchTagsPromo
+		},
+		{
+			u"^(luckgram_translate_lang:-?\\d+:-?\\d+)$"_q,
+			LuckgramTranslateLanguage, // Luckgram D6
+		},
+		{
+			u"^(luckgram_transcribe:[a-z]+:-?\\d+:-?\\d+)$"_q,
+			LuckgramTranscribe, // Luckgram D6
 		},
 		{
 			u"^edit_birthday(.*)$"_q,

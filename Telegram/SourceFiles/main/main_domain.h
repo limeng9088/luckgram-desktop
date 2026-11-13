@@ -102,7 +102,11 @@ public:
 	[[nodiscard]] rpl::producer<> unreadBadgeChanges() const;
 	void notifyUnreadBadgeChanged();
 
-	[[nodiscard]] not_null<Main::Account*> add(MTP::Environment environment);
+	// Luckgram D12: a serialized MTP authorization (account backup restore)
+	// makes the new account start logged in with that key.
+	[[nodiscard]] not_null<Main::Account*> add(
+		MTP::Environment environment,
+		const QByteArray &luckgramAuthorization = QByteArray());
 	void maybeActivate(not_null<Main::Account*> account);
 	void activate(not_null<Main::Account*> account);
 	void addActivated(MTP::Environment environment, bool newWindow = false);

@@ -181,4 +181,36 @@ LUCKGRAM_TEST(PrivacyRecordRoundTrip) {
 	LG_CHECK(!DecodeRecord(EncodeRecord(onlyTag))); // no ciphertext
 	LG_CHECK(!DecodeRecord(U("1:100000:!!:!!:!!"))); // bad base64
 	LG_CHECK(!DecodeRecord(QString()));
+	LG_CHECK(decoded && decoded->visibleNonce.isEmpty()); // none yet
+}
+
+LUCKGRAM_TEST(PrivacyRecordVisibleList) {
+	const auto record = SecondRecord{
+		.salt = QByteArray(kSaltSize, 's'),
+		.nonce = QByteArray(kNonceSize, 'n'),
+		.sealed = QByteArray(256 + kTagSize, 'c'),
+		.visibleNonce = QByteArray(kNonceSize, 'v'),
+		.visibleSealed = QByteArray(8 + kTagSize, 'w'),
+		.iterations = 100000,
+	};
+	const auto decoded = DecodeRecord(EncodeRecord(record));
+	LG_CHECK(decoded && decoded->visibleNonce == record.visibleNonce);
+	LG_CHECK(decoded && decoded->visibleSealed == record.visibleSealed);
+
+	auto half = record;
+	half.visibleSealed = QByteArray();
+	LG_CHECK(!DecodeRecord(EncodeRecord(half))); // both or none
+
+	// Version 1 (before the list moved in) still opens.
+	const auto v1 = QStringList{
+		U("1"),
+		U("100000"),
+		QString::fromLatin1(record.salt.toBase64()),
+		QString::fromLatin1(record.nonce.toBase64()),
+		QString::fromLatin1(record.sealed.toBase64()),
+	}.join(QChar(':'));
+	const auto old = DecodeRecord(v1);
+	LG_CHECK(old && old->sealed == record.sealed);
+	LG_CHECK(old && old->visibleNonce.isEmpty());
+	LG_CHECK(!DecodeRecord(v1 + U("::"))); // version 1 has 5 parts
 }
