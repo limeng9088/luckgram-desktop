@@ -7,7 +7,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 // CI-only login to Telegram's *test* servers, for screenshots of the logged
 // in UI. The real implementation is compiled only with the CMake option
-// LUCKGRAM_CI_TEST_LOGIN=ON (CI screenshot build on the self-hosted runner,
+// LUCKGRAM_CI_BUILD=ON (CI screenshot build on the self-hosted runner,
 // never the release build; CI checks the released exe for the marker
 // string); otherwise these are stubs.
 namespace Luckgram {
