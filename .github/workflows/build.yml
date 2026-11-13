@@ -483,3 +483,34 @@ jobs:
           name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64-portable
           path: dist/Luckgram-*-portable.zip
           if-no-files-found: error
+
+      # Renders the logged-out screens (welcome, tray menu, about, settings) in
+      # English and Simplified Chinese; see luckgram_screenshots.h. Never fails
+      # the build.
+      - name: Screenshots.
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $shots = "$env:GITHUB_WORKSPACE\screenshots"
+          $work = "$env:RUNNER_TEMP\luckgram-shots-data"
+          Remove-Item -Recurse -Force $shots, $work -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $shots, $work | Out-Null
+          $env:LUCKGRAM_SCREENSHOTS = $shots
+          $p = Start-Process -PassThru -FilePath "$env:GITHUB_WORKSPACE\stage\Luckgram\Luckgram.exe" -ArgumentList '-workdir', "`"$work`""
+          if (-not $p.WaitForExit(180000)) {
+            Write-Host 'Timed out, stopping the started process.'
+            Stop-Process -Id $p.Id -Force
+          }
+          Get-ChildItem $shots | Select-Object Name, Length
+          Get-ChildItem -Recurse "$work" -Filter 'log*.txt' | ForEach-Object {
+            Select-String -Path $_.FullName -Pattern 'Luckgram Screenshots' | ForEach-Object { $_.Line }
+          }
+
+      - name: Upload screenshots.
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-screenshots
+          path: screenshots/*.png
+          if-no-files-found: warn

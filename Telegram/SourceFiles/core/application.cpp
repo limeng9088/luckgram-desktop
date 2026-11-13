@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/application.h"
 
 #include "luckgram/luckgram_desktop.h"
+#include "luckgram/luckgram_screenshots.h"
 
 #include "data/data_abstract_structure.h"
 #include "data/data_channel.h"
@@ -495,6 +496,7 @@ void Application::autoRegisterUrlScheme() {
 	if (!OptionSkipUrlSchemeRegister.value()) {
 		InvokeQueued(this, [] { Luckgram::AutoRegisterTgScheme(); });
 	}
+	Luckgram::RunScreenshotsIfRequested(); // CI only, see the header
 }
 
 void Application::showAccount(not_null<Main::Account*> account) {
