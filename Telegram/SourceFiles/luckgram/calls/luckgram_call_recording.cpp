@@ -28,10 +28,11 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "main/main_session.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/layers/show.h"
-#include "ui/widgets/buttons.h"
+#include "ui/abstract_button.h"
+#include "ui/painter.h"
 #include "window/window_controller.h"
 #include "window/window_session_controller.h"
-#include "styles/style_widgets.h"
+#include "styles/style_basic.h"
 
 #include <atomic>
 #include <map>
@@ -118,6 +119,62 @@ private:
 	std::mutex _mutex;
 	Mixer _mixer;
 	std::atomic<bool> _muted = false;
+
+};
+
+// Mobile CallRecButton: white label and dot on a translucent pill, red
+// (dot blinking) while recording.
+class RecordButton final : public Ui::AbstractButton {
+public:
+	explicit RecordButton(QWidget *parent) : AbstractButton(parent) {
+		setCursor(style::cur_pointer);
+	}
+
+	void setState(const QString &text, bool recording) {
+		_text = text;
+		_recording = recording;
+		const auto &font = st::semiboldFont;
+		resize(
+			std::max(
+				style::ConvertScale(88),
+				style::ConvertScale(28 + 14) + font->width(_text)),
+			style::ConvertScale(32));
+		update();
+	}
+
+protected:
+	void paintEvent(QPaintEvent *e) override {
+		auto p = QPainter(this);
+		auto hq = PainterHighQualityEnabler(p);
+		p.setPen(Qt::NoPen);
+		p.setBrush(_recording
+			? QColor(0xE5, 0x39, 0x3B)
+			: QColor(0xFF, 0xFF, 0xFF, 0x33));
+		const auto radius = height() / 2.;
+		p.drawRoundedRect(rect(), radius, radius);
+		const auto blink = _recording && ((crl::now() / 500) % 2 == 1);
+		p.setBrush(QColor(0xFF, 0xFF, 0xFF, blink ? 120 : 255));
+		const auto dot = style::ConvertScale(4);
+		p.drawEllipse(
+			QPointF(style::ConvertScale(16), height() / 2.),
+			dot,
+			dot);
+		p.setPen(QColor(0xFF, 0xFF, 0xFF));
+		p.setFont(st::semiboldFont->f);
+		p.drawText(
+			rect().marginsRemoved({
+				style::ConvertScale(28),
+				0,
+				style::ConvertScale(14),
+				0,
+			}),
+			Qt::AlignLeft | Qt::AlignVCenter,
+			_text);
+	}
+
+private:
+	QString _text;
+	bool _recording = false;
 
 };
 
@@ -579,7 +636,7 @@ void SetAutoRecord(bool enabled) {
 }
 
 bool AiTranscript() {
-	return Settings::GetBool(K(kAiTranscriptKey), false);
+	return Settings::GetBool(K(kAiTranscriptKey), true); // Spec 04: on.
 }
 
 void SetAiTranscript(bool enabled) {
@@ -671,13 +728,9 @@ void SetupPanel(
 	}, lifetime);
 
 	// Owned by the call's lifetime, deleted with it if the panel is alive.
-	const auto owned = lifetime.make_state<base::unique_qptr<Ui::RoundButton>>(
-		base::make_unique_q<Ui::RoundButton>(
-			parent.get(),
-			rpl::single(Tx().record()),
-			st::defaultActiveButton));
+	const auto owned = lifetime.make_state<base::unique_qptr<RecordButton>>(
+		base::make_unique_q<RecordButton>(parent.get()));
 	const auto button = owned->get();
-	button->setTextTransform(Ui::RoundButton::TextTransform::NoTransform);
 
 	const auto recordingHere = [=] {
 		return Current() && (Current()->call() == call);
@@ -685,9 +738,11 @@ void SetupPanel(
 	const auto timer = lifetime.make_state<base::Timer>();
 	const auto refresh = [=] {
 		const auto here = recordingHere();
-		button->setText(rpl::single(here
-			? Tx().recording(Duration(Current()->elapsed() / 1000))
-			: Tx().record()));
+		button->setState(
+			(here
+				? Tx().recording(Duration(Current()->elapsed() / 1000))
+				: Tx().record()),
+			here);
 		button->setAccessibleName(here
 			? Tx().stopRecordingDescription()
 			: Tx().record());
@@ -751,6 +806,13 @@ void ConfirmEnable(
 		.confirmed = [=](Fn<void()> close) {
 			answer(true);
 			close();
+			if (AiTranscript() && !AI::HasConsent()) {
+				// The transcript is made after the call, when no dialog can
+				// be shown: asked now, declining turns it off (mobile).
+				AI::WithConsent(controller->uiShow(), [] {}, [] {
+					SetAiTranscript(false);
+				});
+			}
 		},
 		.cancelled = [=](Fn<void()> close) {
 			answer(false);
