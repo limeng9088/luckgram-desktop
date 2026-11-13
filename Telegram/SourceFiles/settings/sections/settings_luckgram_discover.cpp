@@ -21,6 +21,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/text/text_utilities.h"
 #include "ui/userpic_view.h"
 #include "ui/widgets/fields/input_field.h"
+#include "inline_bots/bot_attach_web_view.h" // InlineBots::PeerTypes
+#include "window/main_window.h" // MainWindow -> Ui::RpWidget*
 #include "window/window_session_controller_link_info.h"
 #include "luckgram/discover/luckgram_discover_logic.h"
 #include "luckgram/discover/luckgram_discover_storage.h"
@@ -829,7 +831,7 @@ void LuckgramNearby::loadList() {
 	}));
 }
 
-void LuckgramNearby::setVisible(bool visible) {
+void LuckgramNearby::setNearbyVisible(bool visible) {
 	if (_state->busy) {
 		return;
 	} else if (!visible) {
@@ -898,7 +900,7 @@ void LuckgramNearby::editBio() {
 		NearbyState::SetBio(bio);
 		_controller->showToast(NearbyTx().cardSaved());
 		if (NearbyState::IsVisible()) {
-			setVisible(true);
+			setNearbyVisible(true);
 		}
 	})));
 }
@@ -989,10 +991,10 @@ void LuckgramNearby::rebuild() {
 	) | rpl::filter([=](bool on) {
 		return on != NearbyState::IsVisible();
 	}) | rpl::on_next([=](bool on) {
-		crl::on_main(this, [=] { setVisible(on); });
+		crl::on_main(this, [=] { setNearbyVisible(on); });
 	}, toggle->lifetime());
 	if (visible) {
-		action(tx.renew(), [=] { setVisible(true); });
+		action(tx.renew(), [=] { setNearbyVisible(true); });
 	}
 	const auto bio = NearbyState::Bio();
 	AddButtonWithLabel(
@@ -1013,7 +1015,7 @@ void LuckgramNearby::rebuild() {
 		crl::on_main(this, [=] {
 			NearbyState::SetShowPhoto(on);
 			if (NearbyState::IsVisible()) {
-				setVisible(true);
+				setNearbyVisible(true);
 			}
 		});
 	}, photo->lifetime());

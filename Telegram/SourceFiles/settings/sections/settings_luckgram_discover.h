@@ -85,7 +85,8 @@ private:
 	void locate(Fn<void()> then);
 	void pickOnMap();
 	void loadList();
-	void setVisible(bool visible);
+	// Not setVisible(): that one is RpWidget's (final).
+	void setNearbyVisible(bool visible);
 	void uploadCard();
 	void editBio();
 	void showPerson(const Luckgram::Nearby::Person &person);
