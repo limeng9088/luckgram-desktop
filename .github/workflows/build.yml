@@ -807,7 +807,9 @@ jobs:
         run: |
           HASH=$( { shasum -a 256 luckgram-desktop/$PREPARE_PATH | awk '{print $1}'; echo "$MACOSX_DEPLOYMENT_TARGET"; } | shasum -a 256 | awk '{print $1}')
           echo "prefix=mac-libs-$HASH-" >> $GITHUB_OUTPUT
-          echo "done=mac-libs-$HASH-done" >> $GITHUB_OUTPUT
+          # done2: the first "-done" cache was pruned without the generated
+          # Libraries/local/src/wallet_engine/wallet_engine.cpp.
+          echo "done=mac-libs-$HASH-done2" >> $GITHUB_OUTPUT
 
       - name: Finished libraries already cached?
         id: done
@@ -831,6 +833,17 @@ jobs:
             ${{ steps.key.outputs.prefix }}partial-
             ${{ steps.key.outputs.prefix }}
 
+      - name: Repair restored libraries.
+        # A restored cache (the first "-done" one, or a partial one) may have
+        # lost the generated wallet_engine.cpp while the stage keys stayed
+        # valid; make prepare.py rebuild those stages (same as Windows).
+        if: steps.done.outputs.cache-hit != 'true'
+        run: |
+          if [ -d Libraries/cache_keys ] && [ ! -f Libraries/local/src/wallet_engine/wallet_engine.cpp ]; then
+            echo "wallet_engine.cpp missing: rebuilding tlottie, wallet-engine, tdesktop_rust"
+            rm -f Libraries/cache_keys/tlottie Libraries/cache_keys/wallet-engine Libraries/cache_keys/tdesktop_rust
+          fi
+
       - name: First set up.
         if: steps.done.outputs.cache-hit != 'true'
         run: |
@@ -846,8 +859,14 @@ jobs:
         run: ./luckgram-desktop/Telegram/build/prepare/mac.sh skip-release silent
 
       - name: Free up some disk space.
+        # Keeps the generated sources (Libraries/local/src: wallet_engine.cpp,
+        # which cmake/external/wallet_engine compiles).
         if: always() && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'skipped'
-        run: find Libraries '(' '(' ! '(' -name '*.a' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -perm +111 ')' -type f ')' -o -empty ')' -delete || true
+        run: find Libraries '(' '(' ! '(' -name '*.a' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path 'Libraries/local/src/*' -o -path '*/tdesktop_rust/out/*' -o -perm +111 ')' -type f ')' -o -empty ')' -delete || true
+
+      - name: Check generated sources.
+        if: steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
+        run: test -f Libraries/local/src/wallet_engine/wallet_engine.cpp || { echo "::error::wallet_engine.cpp missing after the prune"; exit 1; }
 
       - name: Save finished libraries.
         if: steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
@@ -893,7 +912,9 @@ jobs:
         id: key
         run: |
           HASH=$( { shasum -a 256 luckgram-desktop/$PREPARE_PATH | awk '{print $1}'; echo "$MACOSX_DEPLOYMENT_TARGET"; } | shasum -a 256 | awk '{print $1}')
-          echo "done=mac-libs-$HASH-done" >> $GITHUB_OUTPUT
+          # done2: the first "-done" cache was pruned without the generated
+          # Libraries/local/src/wallet_engine/wallet_engine.cpp.
+          echo "done=mac-libs-$HASH-done2" >> $GITHUB_OUTPUT
 
       - name: Restore libraries.
         uses: actions/cache/restore@v6
