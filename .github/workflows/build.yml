@@ -450,6 +450,18 @@ jobs:
           New-Item -ItemType Directory -Force "$stage\modules\x64\d3d" | Out-Null
           Copy-Item "$out\Telegram.exe" "$stage\Luckgram.exe"
           Copy-Item "$out\modules\x64\d3d\d3dcompiler_47.dll" "$stage\modules\x64\d3d\"
+          # Luckgram D12: the built-in Xray core (spec 33), official release
+          # pinned by version and SHA-256 (luckgram/xray/xray-core.lock).
+          $lock = Get-Content "$env:TBUILD\luckgram-desktop\luckgram\xray\xray-core.lock" | ConvertFrom-StringData
+          $zip = "$env:RUNNER_TEMP\Xray-windows-64.zip"
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/download/$($lock.version)/Xray-windows-64.zip" -OutFile $zip
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower()
+          if ($hash -ne $lock.'windows-64') { throw "Xray-windows-64.zip SHA-256 mismatch: $hash" }
+          $xray = "$env:RUNNER_TEMP\xray"
+          Remove-Item -Recurse -Force $xray -ErrorAction SilentlyContinue
+          Expand-Archive -Path $zip -DestinationPath $xray
+          Copy-Item "$xray\xray.exe" "$stage\xray.exe"
+          Copy-Item "$xray\LICENSE" "$stage\xray-LICENSE.txt"
           Get-ChildItem -Recurse $stage | Select-Object FullName, Length
 
       - name: Code signing (optional).
@@ -465,7 +477,7 @@ jobs:
           }
           $pfx = "$env:RUNNER_TEMP\sign.pfx"
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_SIGN_PFX_BASE64))
-          signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $pfx /p $env:WINDOWS_SIGN_PFX_PASSWORD "$env:GITHUB_WORKSPACE\stage\Luckgram\Luckgram.exe"
+          signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $pfx /p $env:WINDOWS_SIGN_PFX_PASSWORD "$env:GITHUB_WORKSPACE\stage\Luckgram\Luckgram.exe" "$env:GITHUB_WORKSPACE\stage\Luckgram\xray.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "LUCKGRAM_SIGN=1" >> $env:GITHUB_ENV
 
