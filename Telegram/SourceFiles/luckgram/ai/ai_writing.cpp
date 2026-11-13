@@ -111,7 +111,7 @@ void RestoreDraft(
 }
 
 // The WritingHost of one message field (21 需求 6).
-class FieldHost final : public WritingHost, public base::has_weak_ptr {
+class FieldHost final : public WritingHost {
 public:
 	explicit FieldHost(const Compose::SlotContext &context);
 	~FieldHost();
@@ -119,6 +119,7 @@ public:
 	not_null<Main::Session*> session() override;
 	std::shared_ptr<ChatHelpers::Show> show() override;
 	History *history() override;
+	MsgId topicRootId() override;
 	TextWithTags text() override;
 	void setText(const TextWithTags &text, bool undoable) override;
 	bool canUndo() override;
@@ -144,6 +145,7 @@ private:
 	const not_null<Ui::InputField*> _field;
 	const std::shared_ptr<ChatHelpers::Show> _show;
 	const Fn<History*()> _history;
+	const Fn<MsgId()> _topicRootId;
 	std::optional<TextWithTags> _undoText;
 	Api::RequestPtr _request;
 	rpl::lifetime _requestLifetime;
@@ -158,6 +160,7 @@ FieldHost::FieldHost(const Compose::SlotContext &context)
 : _field(context.field)
 , _show(context.show)
 , _history(context.history)
+, _topicRootId(context.topicRootId)
 , _undoHintTimer([=] { hideUndoHint(); }) {
 }
 
@@ -177,6 +180,10 @@ std::shared_ptr<ChatHelpers::Show> FieldHost::show() {
 
 History *FieldHost::history() {
 	return _history ? _history() : nullptr;
+}
+
+MsgId FieldHost::topicRootId() {
+	return _topicRootId ? _topicRootId() : MsgId();
 }
 
 TextWithTags FieldHost::text() {

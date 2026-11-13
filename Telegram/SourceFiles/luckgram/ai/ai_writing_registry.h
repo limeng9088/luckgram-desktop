@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #pragma once
 
 #include "base/object_ptr.h"
+#include "base/weak_ptr.h"
 #include "ui/style/style_core_types.h"
 
 class History;
@@ -47,8 +48,9 @@ class RpWidget;
 namespace Luckgram::AI {
 
 // What a menu item or panel can do with the message field of the open chat
-// (history, topic or replies). Lives as long as that field.
-class WritingHost {
+// (history, topic or replies). Lives as long as that field; late callbacks
+// (consent box, AI answers) guard on it: crl::guard(host.get(), ...).
+class WritingHost : public base::has_weak_ptr {
 public:
 	virtual ~WritingHost() = default;
 
@@ -56,6 +58,8 @@ public:
 	[[nodiscard]] virtual std::shared_ptr<ChatHelpers::Show> show() = 0;
 	// The open chat (may be nullptr between chats).
 	[[nodiscard]] virtual History *history() = 0;
+	// The topic / replies thread of the field, 0 for the whole chat.
+	[[nodiscard]] virtual MsgId topicRootId() = 0;
 
 	// The field's text with formatting.
 	[[nodiscard]] virtual TextWithTags text() = 0;

@@ -139,6 +139,8 @@ PRIVATE
     luckgram/ai/ai_store.cpp
     luckgram/ai/ai_store.h
     # D7 AI: ✦ writing menu
+    luckgram/ai/ai_reply.cpp
+    luckgram/ai/ai_reply.h
     luckgram/ai/ai_post.cpp
     luckgram/ai/ai_post.h
     luckgram/ai/ai_writing.cpp
