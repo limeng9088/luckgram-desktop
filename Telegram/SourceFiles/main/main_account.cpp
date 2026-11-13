@@ -6,6 +6,8 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "main/main_account.h"
+#include "luckgram/luckgram_logout_logic.h" // Luckgram D2
+#include "luckgram/luckgram_service.h" // Luckgram D2
 
 #include "base/platform/base_platform_info.h"
 #include "core/application.h"
@@ -559,6 +561,18 @@ void Account::loggedOut() {
 	Tgw::EraseStorage(this);
 	local().reset();
 	cSetOtherOnline(0);
+
+	// Luckgram D2: the last logged in account logged out.
+	auto sessionsLeft = 0;
+	for (const auto &[index, account] : domain().accounts()) {
+		if (account->sessionExists()) {
+			++sessionsLeft;
+		}
+	}
+	using namespace Luckgram::Logout;
+	if (ClearsDeviceData(Event::AccountLoggedOut, sessionsLeft)) {
+		Luckgram::OnLoggedOutCompletely();
+	}
 }
 
 void Account::destroyMtpKeys(MTP::AuthKeysList &&keys) {
