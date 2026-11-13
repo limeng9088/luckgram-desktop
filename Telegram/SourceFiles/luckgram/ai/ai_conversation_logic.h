@@ -7,6 +7,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include <QtCore/QJsonObject>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 
 #include <functional>
 #include <optional>
@@ -99,3 +100,29 @@ using ContextText = std::function<QString(const Message&)>;
 void SortForHistory(std::vector<Conversation> &list);
 
 } // namespace Luckgram::AI::Conversations
+
+// 18 需求 5: "问 AI" in the message menu. The text that goes into the
+// assistant's input field: the message text, its links, the file name and,
+// for downloaded text files of at most 1 MB, their content. Same format as
+// Android LuckgramAskAi.
+namespace Luckgram::AI::Ask {
+
+inline constexpr qint64 kMaxTextFile = 1024 * 1024;
+
+struct Part {
+	QString text;
+	QStringList links; // Text links (custom URLs) of the message.
+	QString webpageUrl; // Link preview; added when the text lacks it.
+	QString fileName; // Documents that are not voice / round / sticker.
+	std::optional<QString> fileContent;
+};
+
+[[nodiscard]] bool IsTextFile(const QString &mime, const QString &name);
+
+// "" when there is nothing; else the text ending with an empty line, so the
+// user types the question after it.
+[[nodiscard]] QString BuildPrompt(
+	const std::vector<Part> &parts,
+	bool chinese);
+
+} // namespace Luckgram::AI::Ask

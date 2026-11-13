@@ -4,6 +4,7 @@ This file is part of Luckgram Desktop, based on Telegram Desktop.
 Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/ai/ai_conversation_logic.h"
+#include "luckgram/ai/ai_text_logic.h"
 
 #include <QtCore/QJsonArray>
 #include <QtCore/QUuid>
@@ -160,7 +161,7 @@ std::vector<RequestMessage> RequestMessages(
 			if (picked.empty()) {
 				// The newest message alone is too long: send its end, the
 				// server would reject all of it.
-				text = text.right(std::max(0, maxChars - chars));
+				text = Text::SafeRight(text, std::max(0, maxChars - chars));
 			} else {
 				break;
 			}
@@ -187,7 +188,7 @@ QString AutoTitle(const QString &firstUserText) {
 	auto t = firstUserText;
 	t.replace(QChar('\n'), QChar(' '));
 	t = t.trimmed();
-	return (t.size() > 40) ? (t.left(40) + QString::fromUtf8("…")) : t;
+	return (t.size() > 40) ? (Text::SafeLeft(t, 40) + QString::fromUtf8("…")) : t;
 }
 
 QString PreviewText(const Conversation &conversation) {
@@ -212,3 +213,80 @@ void SortForHistory(std::vector<Conversation> &list) {
 }
 
 } // namespace Luckgram::AI::Conversations
+
+namespace Luckgram::AI::Ask {
+
+bool IsTextFile(const QString &mime, const QString &name) {
+	if (mime.startsWith(QLatin1String("text/"))
+		|| mime == QLatin1String("application/json")
+		|| mime == QLatin1String("application/xml")) {
+		return true;
+	}
+	const auto dot = name.lastIndexOf(QChar('.'));
+	if (dot < 0) {
+		return false;
+	}
+	static const char *kExtensions[] = {
+		"txt", "md", "markdown", "csv", "tsv", "json", "xml", "html", "htm",
+		"log", "yaml", "yml", "ini", "conf", "srt", "vtt", "java", "kt",
+		"swift", "js", "ts", "py", "go", "rs", "c", "h", "cpp", "hpp", "cs",
+		"rb", "php", "sh", "sql", "css",
+	};
+	const auto extension = name.mid(dot + 1).toLower();
+	for (const auto known : kExtensions) {
+		if (extension == QLatin1String(known)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+QString BuildPrompt(const std::vector<Part> &parts, bool chinese) {
+	auto text = QString();
+	auto links = QStringList();
+	auto files = QString();
+	const auto addLink = [&](const QString &link) {
+		if (!link.isEmpty() && !links.contains(link)) {
+			links.push_back(link);
+		}
+	};
+	for (const auto &part : parts) {
+		const auto body = part.text.trimmed();
+		if (!body.isEmpty()) {
+			if (!text.isEmpty()) {
+				text += QStringLiteral("\n\n");
+			}
+			text += body;
+		}
+		for (const auto &link : part.links) {
+			addLink(link);
+		}
+		if (!part.webpageUrl.isEmpty()
+			&& !part.text.contains(part.webpageUrl)) {
+			addLink(part.webpageUrl);
+		}
+		if (!part.fileName.isEmpty()) {
+			files += QChar('\n')
+				+ QString::fromUtf8(chinese ? "文件：" : "File: ")
+				+ part.fileName;
+		}
+		if (part.fileContent) {
+			files += QChar('\n')
+				+ QString::fromUtf8(chinese ? "文件内容：" : "File content:")
+				+ QStringLiteral("\n```\n")
+				+ part.fileContent->trimmed()
+				+ QStringLiteral("\n```");
+		}
+	}
+	auto out = text;
+	for (const auto &link : links) {
+		out += QChar('\n')
+			+ QString::fromUtf8(chinese ? "链接：" : "Link: ")
+			+ link;
+	}
+	out += files;
+	const auto result = out.trimmed();
+	return result.isEmpty() ? QString() : (result + QStringLiteral("\n\n"));
+}
+
+} // namespace Luckgram::AI::Ask

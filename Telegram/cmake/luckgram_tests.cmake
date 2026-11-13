@@ -106,17 +106,27 @@ PRIVATE
     luckgram/ai/ai_markdown_logic.h
     luckgram/ai/ai_summary_logic.cpp
     luckgram/ai/ai_summary_logic.h
+    luckgram/ai/ai_text_logic.cpp
+    luckgram/ai/ai_text_logic.h
     luckgram/ai/ai_compose_logic_tests.cpp
     luckgram/ai/ai_conversation_logic_tests.cpp
     luckgram/ai/ai_market_logic_tests.cpp
     luckgram/ai/ai_markdown_logic_tests.cpp
     luckgram/ai/ai_summary_logic_tests.cpp
+
+    # D12 account backup file (PBKDF2 / AES-GCM: OpenSSL, linked below)
+    luckgram/backup/luckgram_backup_format.cpp
+    luckgram/backup/luckgram_backup_format.h
+    luckgram/tests/luckgram_backup_format_tests.cpp
+    luckgram/ai/ai_text_logic_tests.cpp
 )
 
 target_link_libraries(luckgram_tests
 PRIVATE
     desktop-app::external_qt
     desktop-app::external_qt_static_plugins # JPEG / PNG (D10 media tests).
+
+    desktop-app::external_openssl # D12 backup format.
 )
 
 set_target_properties(luckgram_tests PROPERTIES
