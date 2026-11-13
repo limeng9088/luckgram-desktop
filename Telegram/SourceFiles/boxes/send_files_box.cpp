@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "boxes/send_files_box.h"
 
+#include "luckgram/media/luckgram_round_video.h"
+
 #include "lang/lang_keys.h"
 #include "storage/localimageloader.h"
 #include "storage/localstorage.h"
@@ -1491,6 +1493,14 @@ void SendFilesBox::addMenuButton() {
 				[=] { unpackArchives(); },
 				&st::menuIconUnarchive);
 		}
+		Luckgram::RoundVideo::AddSendFilesMenuAction( // Luckgram D11 (03)
+			_menu.get(),
+			_show,
+			_list,
+			_toPeer,
+			_replyTo,
+			(_sendType != Api::SendType::Normal),
+			crl::guard(this, [=] { closeBox(); }));
 		const auto result = SendMenu::FillSendMenu(
 			_menu.get(),
 			_show,

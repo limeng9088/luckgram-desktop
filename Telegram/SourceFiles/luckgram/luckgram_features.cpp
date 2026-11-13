@@ -6,7 +6,12 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_features.h"
 
 #include "luckgram/discover/luckgram_nearby_logic.h"
+#include "luckgram/discover/luckgram_scan_logic.h"
 #include "luckgram/discover/luckgram_square_logic.h"
+#include "luckgram/calls/luckgram_call_recording.h"
+#include "luckgram/calls/luckgram_call_recording_logic.h"
+#include "luckgram/media/luckgram_round_video_logic.h"
+#include "settings/sections/settings_luckgram_call_recording.h"
 #include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_hidden_chats.h"
 #include "luckgram/luckgram_store_restrictions.h"
@@ -146,6 +151,29 @@ namespace {
 		.subpage = [] { return ::Settings::LuckgramHiddenChatsId(); },
 		.onToggled = HiddenChats::OnToggled,
 	});
+	// D11: 03 (mobile ROUND_VIDEO_FROM_GALLERY, 媒体、通话与存储).
+	result.push_back({
+		.key = QString::fromLatin1(RoundVideo::kFeatureKey),
+		.group = Group::MediaCallsStorage,
+		.titleZh = "视频文件发成圆形视频",
+		.titleEn = "Video file as round video",
+		.aboutZh = "发送文件时选一个视频，在「…」菜单里可作为圆形视频发送",
+		.aboutEn = "Pick one video to send, then send it as a round video from the \"…\" menu",
+		.defaultValue = true,
+	});
+	// D11: 04 通话录音 (mobile CallRecSettings.KEY_ENABLED, same texts).
+	result.push_back({
+		.key = QString::fromLatin1(CallRecording::kFeatureKey),
+		.group = Group::MediaCallsStorage,
+		.titleZh = "通话录音",
+		.titleEn = "Call recording",
+		.aboutZh = "一对一通话中录音，挂断后保存到收藏夹",
+		.aboutEn = "Record one-on-one calls and save them to Saved Messages",
+		.defaultValue = false,
+		.subpage = [] { return ::Settings::LuckgramCallRecordingId(); },
+		// Legal reminder before it is switched on (spec 04 §1, #58).
+		.confirmEnable = CallRecording::ConfirmEnable,
+	});
 	// D9: same keys, texts and defaults as mobile LuckgramFeatures.
 	result.push_back({
 		.key = QString::fromLatin1(Notes::kFeatureKey),
@@ -183,6 +211,16 @@ namespace {
 		.titleEn = "Activity in shared groups",
 		.aboutZh = "用户资料页显示对方最近在共同群组里发的消息",
 		.aboutEn = "Show a user's recent messages in your groups in common on their profile",
+		.defaultValue = true,
+	});
+	// D10: 扫一扫和代理配置 (mobile ScanLogic.FEATURE_KEY, 资料与整理).
+	result.push_back({
+		.key = QString::fromLatin1(Scan::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "扫一扫和代理配置",
+		.titleEn = "Scan and proxy settings",
+		.aboutZh = "主菜单里：扫一扫加好友、代理配置",
+		.aboutEn = "In the main menu: scan to add friends, proxy settings",
 		.defaultValue = true,
 	});
 	// ---- 发现 / Discover (D10)

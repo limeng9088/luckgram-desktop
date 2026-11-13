@@ -8,7 +8,11 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QByteArray>
 #include <QtCore/QString>
 
+#include <QtCore/QRect>
+#include <QtGui/QImage>
+
 #include <atomic>
+#include <optional>
 #include <memory>
 
 // D10 / D11: re-encodes a local video to H.264 / AAC MP4 with the bundled
@@ -35,6 +39,11 @@ struct TranscodeArgs {
 	bool withAudio = true;
 	// Set from the main thread to stop early (the box was closed).
 	std::shared_ptr<std::atomic<bool>> cancelled;
+	// D11 round video: the part from startMs, the crop square in display
+	// pixels (rotation applied), scaled to a squareSide x squareSide video.
+	qint64 startMs = 0;
+	std::optional<QRect> crop;
+	int squareSide = 0;
 };
 
 struct TranscodeResult {
@@ -47,6 +56,9 @@ struct TranscodeResult {
 };
 
 [[nodiscard]] VideoInfo Probe(const QString &path);
+
+// The first frame at or after atMs, rotation applied (blocking).
+[[nodiscard]] QImage ReadFrame(const QString &path, qint64 atMs = 0);
 
 // `progress` gets 0..100, called on the worker thread.
 [[nodiscard]] TranscodeResult Transcode(

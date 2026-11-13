@@ -382,6 +382,14 @@ public:
 		const QByteArray &fileContent,
 		SendMediaType type,
 		const SendAction &action);
+	// Luckgram (D11 call recording): in-memory file, named, captioned.
+	void luckgramSendFile(
+		const QByteArray &fileContent,
+		const QString &displayName,
+		TextWithTags caption,
+		bool forceFile,
+		uint64 idOverride, // The local document id, to find the message.
+		const SendAction &action);
 
 	void editMedia(
 		Ui::PreparedList &&list,
