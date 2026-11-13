@@ -53,3 +53,13 @@ LUCKGRAM_TEST(AiTextLimitsInTheLogicUseIt) {
 	LG_EQUAL(request.size(), size_t(1));
 	LG_EQUAL(request[0].content, QString(9, QChar('y')));
 }
+
+LUCKGRAM_TEST(AiTextQuickPrefixReplacesAnotherOne) {
+	const auto summarize = QString::fromUtf8("总结一下：");
+	const auto explain = QString::fromUtf8("讲解一下：");
+	LG_EQUAL(FillPrefix(QStringLiteral("long text"), summarize), summarize + QStringLiteral("long text"));
+	LG_EQUAL(FillPrefix(summarize + QStringLiteral("long text"), explain), explain + QStringLiteral("long text"));
+	LG_EQUAL(FillPrefix(QStringLiteral("Rewrite this: x"), QStringLiteral("Solve this: ")), QStringLiteral("Solve this: x"));
+	LG_EQUAL(FillPrefix(QString(), summarize), summarize);
+	LG_EQUAL(int(QuickPrefixes().size()), 8);
+}

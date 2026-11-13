@@ -31,4 +31,29 @@ QString SafeRight(const QString &s, int n) {
 	return s.right(n);
 }
 
+const QStringList &QuickPrefixes() {
+	static const auto result = QStringList{
+		QString::fromUtf8("总结一下："),
+		QString::fromUtf8("改写一下："),
+		QString::fromUtf8("讲解一下："),
+		QString::fromUtf8("解这道题："),
+		QStringLiteral("Summarize this: "),
+		QStringLiteral("Rewrite this: "),
+		QStringLiteral("Explain this: "),
+		QStringLiteral("Solve this: "),
+	};
+	return result;
+}
+
+QString FillPrefix(const QString &current, const QString &prefix) {
+	auto rest = current;
+	for (const auto &known : QuickPrefixes()) {
+		if (rest.startsWith(known)) {
+			rest = rest.mid(known.size());
+			break;
+		}
+	}
+	return prefix + rest;
+}
+
 } // namespace Luckgram::AI::Text

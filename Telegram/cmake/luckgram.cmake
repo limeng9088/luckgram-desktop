@@ -105,6 +105,13 @@ PRIVATE
     luckgram/xray/luckgram_xray_logic.h
     settings/sections/settings_luckgram_translate.cpp
     settings/sections/settings_luckgram_translate.h
+    # D7 AI
+    luckgram/ai/ai_assistant.cpp
+    luckgram/ai/ai_assistant.h
+    luckgram/ai/ai_registry.cpp
+    luckgram/ai/ai_registry.h
+    luckgram/ai/ai_store.cpp
+    luckgram/ai/ai_store.h
     # D7 AI: pure logic (also in luckgram_tests)
     luckgram/ai/ai_agents_logic.cpp
     luckgram/ai/ai_agents_logic.h

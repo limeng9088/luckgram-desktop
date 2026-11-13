@@ -8,6 +8,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/discover/luckgram_nearby_state.h"
 
 #include "base/timer.h"
+#include "luckgram/ai/ai_store.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/translate/translate_service.h"
@@ -81,6 +82,7 @@ void OnLoggedOutCompletely() {
 	NearbyState::OnLoggedOutCompletely(); // D10: card off before the token goes.
 	Settings::ClearAll();
 	Translate::ClearAll();
+	AI::Store::ClearAll(); // D7: local AI conversations.
 	Api::ForgetToken();
 	LOG(("Luckgram: logged out of every account, local data cleared."));
 }
