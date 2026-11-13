@@ -2851,6 +2851,7 @@ void ComposeControls::init() {
 			.field = _field,
 			.show = _show,
 			.history = [=] { return _history; },
+			.topicRootId = [=] { return _topicRootId; },
 		},
 		_send.get(),
 		[=] { updateControlsGeometry(_wrap->size()); });
