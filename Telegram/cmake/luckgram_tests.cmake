@@ -17,6 +17,11 @@ PRIVATE
     luckgram/tests/luckgram_test.cpp
     luckgram/tests/luckgram_test.h
 
+    # D2 encrypted storage naming
+    luckgram/luckgram_storage_logic.cpp
+    luckgram/luckgram_storage_logic.h
+    luckgram/tests/luckgram_storage_tests.cpp
+
     # D5-D12: logic files and their tests, one block per task.
 
     # D5 welcome, privacy, onboarding, version, login code help
