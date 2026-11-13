@@ -153,6 +153,15 @@ public:
 	[[nodiscard]] QString connectFailed() const;
 	[[nodiscard]] QString banned() const;
 
+	// Desktop only (D10 "桌面端差异": where the position comes from).
+	[[nodiscard]] QString sourceSystem() const;
+	[[nodiscard]] QString sourceManual() const;
+	[[nodiscard]] QString systemLocationFailed() const;
+	[[nodiscard]] QString pickOnMap() const;
+	[[nodiscard]] QString useThisLocation() const;
+	[[nodiscard]] QString useSystemLocation() const;
+	[[nodiscard]] QString mapUnavailable() const;
+
 private:
 	[[nodiscard]] QString t(const char *zh, const char *en) const;
 

@@ -30,8 +30,12 @@ PRIVATE
     luckgram/luckgram_intro.h
     luckgram/discover/luckgram_discover_logic.cpp
     luckgram/discover/luckgram_discover_logic.h
+    luckgram/discover/luckgram_discover_storage.cpp
+    luckgram/discover/luckgram_discover_storage.h
     luckgram/discover/luckgram_nearby_logic.cpp
     luckgram/discover/luckgram_nearby_logic.h
+    luckgram/discover/luckgram_nearby_state.cpp
+    luckgram/discover/luckgram_nearby_state.h
     luckgram/discover/luckgram_scan_logic.cpp
     luckgram/discover/luckgram_scan_logic.h
     luckgram/discover/luckgram_square_logic.cpp

@@ -45,6 +45,8 @@ struct State {
 	rpl::variable<QString> status;
 	rpl::variable<int> attachmentsVersion = 0;
 	std::vector<Api::RequestPtr> requests;
+	std::shared_ptr<std::atomic<bool>> cancelled
+		= std::make_shared<std::atomic<bool>>(false);
 };
 
 [[nodiscard]] QString L(const char *text) {
@@ -237,6 +239,7 @@ void PublishVideo(
 			.path = path,
 			.maxEdge = Square::kVideoMaxEdge,
 			.maxDurationMs = maxSeconds * 1000,
+			.cancelled = state->cancelled,
 		}, [=](int percent) {
 			crl::on_main([=] {
 				if (weak) {
@@ -463,6 +466,7 @@ void ComposeBox(
 	});
 	box->addButton(rpl::single(tx.cancel()), [=] { box->closeBox(); });
 	box->boxClosing() | rpl::on_next([=] {
+		state->cancelled->store(true);
 		for (const auto &request : base::take(state->requests)) {
 			request->cancel();
 		}
