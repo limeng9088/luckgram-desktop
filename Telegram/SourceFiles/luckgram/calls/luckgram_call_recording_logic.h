@@ -28,6 +28,13 @@ inline constexpr auto kRate = 48'000;
 inline constexpr auto kFrame = 960; // 20 ms at 48 kHz (an Opus frame).
 // A side that stopped delivering doesn't hold the other back longer.
 inline constexpr auto kMaxLagSamples = kRate * 3 / 10;
+inline constexpr auto kBitrate = 32'000;
+// Shorter recordings are dropped (mobile MIN_DURATION_MS).
+inline constexpr auto kMinDurationMs = 1'000;
+// Telegram's text limit is 4096; room for the "continued" header.
+inline constexpr auto kMaxTextChunk = 4'000;
+inline constexpr auto kDefaultTranscribeMaxMb = 4; // ai.transcribe_max_mb
+inline constexpr auto kDefaultMaxInputChars = 60'000; // ai.max_input_chars
 
 // Mono, 48 kHz, 16 bit; both sides pushed from their audio threads (the
 // caller locks), frames taken out by Drain() / Flush().
@@ -78,8 +85,15 @@ private:
 
 // "12:34" / "1:02:03".
 [[nodiscard]] QString Duration(qint64 seconds);
-// "2026-10-26 15.04" (no ':' in file names).
+// "2026-10-26 15.04.09" (no ':' in file names).
 [[nodiscard]] QString FileDateTime(const QDateTime &when);
+// \ / : * ? " < > | and line breaks / tabs become '_', then trimmed.
+[[nodiscard]] QString SanitizeFileName(const QString &name);
+// Size of one Ogg segment sent to /v1/ai/transcribe: a tenth below
+// ai.transcribe_max_mb, so the page that crosses it still fits.
+[[nodiscard]] qint64 SegmentLimitBytes(qint64 transcribeMaxMb);
+// Seconds shown in the caption, at least 1 (rounded).
+[[nodiscard]] qint64 DurationSeconds(qint64 durationMs);
 
 class Texts final {
 public:
@@ -120,6 +134,12 @@ public:
 	[[nodiscard]] QString transcriptPartial(const QString &reason) const;
 	[[nodiscard]] QString transcriptFailed(const QString &reason) const;
 	[[nodiscard]] QString savedToast(const QString &target) const;
+
+	// Reply under the audio: summary (if any), transcript, partial note.
+	[[nodiscard]] QString reply(
+		const QString &summary,
+		const QString &transcript,
+		const QString &partialReason) const;
 
 private:
 	[[nodiscard]] QString t(const char *zh, const char *en) const;

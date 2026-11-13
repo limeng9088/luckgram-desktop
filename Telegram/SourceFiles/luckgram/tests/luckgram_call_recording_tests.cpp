@@ -185,10 +185,22 @@ LUCKGRAM_TEST(CallRecLimit) {
 LUCKGRAM_TEST(CallRecNamesAndTexts) {
 	LG_EQUAL(Duration(754), U("12:34"));
 	LG_EQUAL(Duration(3723), U("1:02:03"));
-	LG_EQUAL(FileDateTime(QDateTime(QDate(2026, 10, 26), QTime(15, 4))), U("2026-10-26 15.04"));
-	LG_EQUAL(Texts(true).fileTitle(U("张三"), U("2026-10-26 15.04")), U("通话 张三 2026-10-26 15.04"));
+	LG_EQUAL(FileDateTime(QDateTime(QDate(2026, 10, 26), QTime(15, 4, 9))), U("2026-10-26 15.04.09"));
+	LG_EQUAL(Texts(true).fileTitle(U("张三"), U("2026-10-26 15.04.09")), U("通话 张三 2026-10-26 15.04.09"));
+	LG_EQUAL(SanitizeFileName(U(" Call a/b:c*d?\"e<f>g|h\ni ")), U("Call a_b_c_d__e_f_g_h_i"));
+	LG_EQUAL(SegmentLimitBytes(4), qint64(4 * 1024 * 1024 * 9 / 10));
+	LG_EQUAL(SegmentLimitBytes(0), SegmentLimitBytes(kDefaultTranscribeMaxMb));
+	LG_EQUAL(DurationSeconds(0), qint64(1));
+	LG_EQUAL(DurationSeconds(1499), qint64(1));
+	LG_EQUAL(DurationSeconds(1500), qint64(2));
 	LG_EQUAL(Texts(false).caption(U("Ann"), U("1:02")), U("Call with Ann · 1:02"));
 	LG_EQUAL(Texts(true).recording(U("0:21")), U("录音 0:21"));
 	LG_CHECK(Texts(true).legalText().contains(U("取得同意")));
 	LG_CHECK(!Texts(false).autoRecordInfo().contains(U("Tap")));
+}
+
+LUCKGRAM_TEST(CallRecReply) {
+	const auto tx = Texts(true);
+	LG_EQUAL(tx.reply(U(" - a\n- b "), U("hello"), QString()), U("要点总结\n- a\n- b\n\n文字稿\nhello"));
+	LG_EQUAL(tx.reply(QString(), U("hi"), U("额度用完")), U("文字稿\nhi\n\n（后面的部分未转写：额度用完）"));
 }

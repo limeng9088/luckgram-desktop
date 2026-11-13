@@ -199,7 +199,31 @@ QString Duration(qint64 seconds) {
 }
 
 QString FileDateTime(const QDateTime &when) {
-	return when.toString(QStringLiteral("yyyy-MM-dd HH.mm"));
+	return when.toString(QStringLiteral("yyyy-MM-dd HH.mm.ss"));
+}
+
+QString SanitizeFileName(const QString &name) {
+	auto result = name;
+	for (auto &ch : result) {
+		switch (ch.unicode()) {
+		case '\\': case '/': case ':': case '*': case '?': case '"':
+		case '<': case '>': case '|': case '\n': case '\r': case '\t':
+			ch = QChar('_');
+			break;
+		}
+	}
+	return result.trimmed();
+}
+
+qint64 SegmentLimitBytes(qint64 transcribeMaxMb) {
+	const auto mb = (transcribeMaxMb > 0)
+		? transcribeMaxMb
+		: qint64(kDefaultTranscribeMaxMb);
+	return mb * 1024 * 1024 * 9 / 10;
+}
+
+qint64 DurationSeconds(qint64 durationMs) {
+	return std::max(qint64(1), (durationMs + 500) / 1000);
 }
 
 QString Texts::t(const char *zh, const char *en) const {
@@ -255,6 +279,21 @@ QString Texts::transcriptPartial(const QString &reason) const {
 
 QString Texts::transcriptFailed(const QString &reason) const {
 	return t("文字稿生成失败：", "Couldn't make a transcript: ") + reason;
+}
+
+QString Texts::reply(
+		const QString &summary,
+		const QString &transcript,
+		const QString &partialReason) const {
+	auto result = QString();
+	if (!summary.trimmed().isEmpty()) {
+		result += summaryHeader() + QChar('\n') + summary.trimmed() + QStringLiteral("\n\n");
+	}
+	result += transcriptHeader() + QChar('\n') + transcript.trimmed();
+	if (!partialReason.isEmpty()) {
+		result += QStringLiteral("\n\n") + transcriptPartial(partialReason);
+	}
+	return result;
 }
 
 QString Texts::savedToast(const QString &target) const {
