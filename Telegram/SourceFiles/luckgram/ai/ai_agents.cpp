@@ -8,6 +8,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/ai/ai_assistant.h"
 #include "luckgram/ai/ai_registry.h"
 #include "luckgram/ai/ai_store.h"
+#include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_features.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/luckgram_storage.h"
@@ -47,6 +48,17 @@ bool Enabled() {
 }
 
 Mine::Mine(not_null<Main::Session*> session) : _session(session) {
+	// D8 second space: the account's storage goes away / comes back; read
+	// again then (and drop what belonged to the hidden state).
+	DoubleBottom::ActiveChanges(
+	) | rpl::on_next([=] {
+		_loaded = false;
+		_custom.clear();
+		_pinned.clear();
+		_removedUnsaved.clear();
+		_unpinnedUnsaved.clear();
+		_changes.fire({});
+	}, _lifetime);
 }
 
 Mine &Mine::For(not_null<Main::Session*> session) {
@@ -69,8 +81,15 @@ void Mine::load() {
 		return; // Memory only until the account storage is there.
 	}
 	_loaded = true;
+	const auto unsaved = !_custom.empty()
+		|| !_pinned.isEmpty()
+		|| !_removedUnsaved.empty()
+		|| !_unpinnedUnsaved.empty();
 	auto stored = ParseCustom(QString::fromUtf8(
 		Storage::ReadAccount(_session, QString::fromLatin1(kCustomName))));
+	for (const auto &id : _removedUnsaved) {
+		stored = DeleteCustom(std::move(stored), id);
+	}
 	// Agents made while the storage wasn't there win (same id).
 	for (const auto &agent : _custom) {
 		stored = SaveCustom(std::move(stored), agent);
@@ -78,10 +97,18 @@ void Mine::load() {
 	_custom = std::move(stored);
 	auto pinned = ParsePinned(QString::fromUtf8(
 		Storage::ReadAccount(_session, QString::fromLatin1(kPinnedName))));
+	for (const auto &id : _unpinnedUnsaved) {
+		pinned = SetPinned(std::move(pinned), id, false);
+	}
 	for (const auto &id : _pinned) {
 		pinned = SetPinned(std::move(pinned), id, true);
 	}
 	_pinned = std::move(pinned);
+	_removedUnsaved.clear();
+	_unpinnedUnsaved.clear();
+	if (unsaved) {
+		write();
+	}
 }
 
 void Mine::write() {
@@ -120,6 +147,7 @@ std::optional<Agent> Mine::find(const QString &id) {
 
 void Mine::save(const Agent &agent) {
 	load();
+	_removedUnsaved.remove(agent.id);
 	_custom = SaveCustom(std::move(_custom), agent);
 	write();
 	_changes.fire({});
@@ -127,6 +155,10 @@ void Mine::save(const Agent &agent) {
 
 void Mine::remove(const QString &id) {
 	load();
+	if (!_loaded) {
+		_removedUnsaved.emplace(id);
+		_unpinnedUnsaved.emplace(id);
+	}
 	_custom = DeleteCustom(std::move(_custom), id);
 	_pinned = SetPinned(std::move(_pinned), id, false);
 	write();
@@ -148,6 +180,13 @@ bool Mine::isPinned(const QString &id) {
 
 void Mine::setPinned(const QString &id, bool value) {
 	load();
+	if (!_loaded) {
+		if (value) {
+			_unpinnedUnsaved.remove(id);
+		} else {
+			_unpinnedUnsaved.emplace(id);
+		}
+	}
 	_pinned = SetPinned(std::move(_pinned), id, value);
 	write();
 	_changes.fire({});

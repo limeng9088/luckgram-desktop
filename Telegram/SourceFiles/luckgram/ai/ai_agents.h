@@ -57,8 +57,13 @@ private:
 	const not_null<Main::Session*> _session;
 	std::vector<Agent> _custom;
 	QStringList _pinned;
+	// Deleted / unpinned while the storage wasn't readable: must not come
+	// back from the stored lists on the next load.
+	base::flat_set<QString> _removedUnsaved;
+	base::flat_set<QString> _unpinnedUnsaved;
 	bool _loaded = false;
 	rpl::event_stream<> _changes;
+	rpl::lifetime _lifetime;
 
 };
 
