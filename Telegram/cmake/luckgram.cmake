@@ -85,6 +85,10 @@ PRIVATE
     luckgram/luckgram_strings.h
     luckgram/translate/translate_logic.cpp
     luckgram/translate/translate_logic.h
+    luckgram/selectall/select_all.cpp
+    luckgram/selectall/select_all.h
+    luckgram/selectall/select_all_logic.cpp
+    luckgram/selectall/select_all_logic.h
     luckgram/transcribe/luckgram_dictation.cpp
     luckgram/transcribe/luckgram_dictation.h
     luckgram/transcribe/luckgram_transcribe.cpp
