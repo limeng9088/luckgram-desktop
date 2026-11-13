@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_context_menu.h"
 
 #include "luckgram/luckgram_save_to_saved.h"
+#include "luckgram/translate/translate_service.h"
 
 #include "api/api_attached_stickers.h"
 #include "api/api_editing.h"
@@ -1920,6 +1921,12 @@ void FillContextMenuItems(
 					.append(item->originalText()))
 				: item->originalText();
 			if ((!item->translation() || !item->history()->translatedTo())
+				&& Luckgram::Translate::AddMessageMenuAction(
+					result,
+					list->controller(),
+					item)) {
+				// Luckgram spec 01: 「翻译」 / 「撤销翻译」 in the bubble.
+			} else if ((!item->translation() || !item->history()->translatedTo())
 				&& !translate.text.isEmpty()
 				&& !Ui::SkipTranslate(translate)) {
 				result->addAction(tr::lng_context_translate(tr::now), [=] {

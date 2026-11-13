@@ -68,6 +68,11 @@ PRIVATE
     luckgram/xray/luckgram_xray_logic.h
     luckgram/tests/luckgram_xray_logic_tests.cpp
 
+    # D6 messages and language (mobile 01, 02, 14, 15, 17)
+    luckgram/translate/translate_logic.cpp
+    luckgram/translate/translate_logic.h
+    luckgram/translate/translate_logic_tests.cpp
+
     # D7 AI (mobile 18-24, 30)
     luckgram/ai/ai_agents_logic.cpp
     luckgram/ai/ai_agents_logic.h
