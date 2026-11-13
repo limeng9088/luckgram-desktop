@@ -31,6 +31,9 @@ struct SlotContext {
 	not_null<Ui::InputField*> field;
 	std::shared_ptr<ChatHelpers::Show> show;
 	Fn<History*()> history; // The current chat, may be nullptr.
+	// The current topic / reply thread root (ComposeControls), 0 for the
+	// whole chat (HistoryWidget, or when not set).
+	Fn<MsgId()> topicRootId;
 	Ui::RpWidget *send = nullptr; // The send button (AddSendMenuItems).
 };
 

@@ -604,6 +604,7 @@ HistoryWidget::HistoryWidget(
 			.field = _field,
 			.show = controller->uiShow(),
 			.history = [=] { return _history; },
+			.topicRootId = [] { return MsgId(); }, // Whole chat.
 		},
 		_send.get(),
 		[=] { updateFieldSize(); });
