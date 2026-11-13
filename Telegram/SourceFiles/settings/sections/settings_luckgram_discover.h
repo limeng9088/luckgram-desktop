@@ -121,7 +121,7 @@ private:
 };
 
 // The 「发现」 item of the main menu (one line in window_main_menu.cpp),
-// shown while Discover has a row.
+// shown while Discover has a row; then 「扫一扫」 and 「代理配置」.
 void AddLuckgramDiscoverMenuItem(
 	not_null<Ui::VerticalLayout*> menu,
 	not_null<Window::SessionController*> controller);

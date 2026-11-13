@@ -6,6 +6,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_features.h"
 
 #include "luckgram/discover/luckgram_nearby_logic.h"
+#include "luckgram/discover/luckgram_scan_logic.h"
 #include "luckgram/discover/luckgram_square_logic.h"
 #include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_hidden_chats.h"
@@ -183,6 +184,16 @@ namespace {
 		.titleEn = "Activity in shared groups",
 		.aboutZh = "用户资料页显示对方最近在共同群组里发的消息",
 		.aboutEn = "Show a user's recent messages in your groups in common on their profile",
+		.defaultValue = true,
+	});
+	// D10: 扫一扫和代理配置 (mobile ScanLogic.FEATURE_KEY, 资料与整理).
+	result.push_back({
+		.key = QString::fromLatin1(Scan::kFeatureKey),
+		.group = Group::ProfileOrganize,
+		.titleZh = "扫一扫和代理配置",
+		.titleEn = "Scan and proxy settings",
+		.aboutZh = "主菜单里：扫一扫加好友、代理配置",
+		.aboutEn = "In the main menu: scan to add friends, proxy settings",
 		.defaultValue = true,
 	});
 	// ---- 发现 / Discover (D10)
