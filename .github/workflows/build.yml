@@ -868,8 +868,11 @@ jobs:
         # No skip-release: the macos job builds Release, which links the
         # Release libraries (libQt6Core.a, not libQt6Core_debug.a). The
         # stages with release: sections (Qt and others) get a new key and
-        # rebuild once over a restored Debug-only cache.
-        run: ./luckgram-desktop/Telegram/build/prepare/mac.sh silent
+        # rebuild once over a restored Debug-only cache. qt-release-only:
+        # Qt is configured -release instead of -debug-and-release (CI never
+        # uses the Debug Qt; the universal debug-and-release build would be
+        # close to the 320 minute limit, and a timed-out stage restarts).
+        run: ./luckgram-desktop/Telegram/build/prepare/mac.sh qt-release-only silent
 
       - name: Free up some disk space.
         # Keeps the generated sources (Libraries/local/src: wallet_engine.cpp,
