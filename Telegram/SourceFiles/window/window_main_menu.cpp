@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_luckgram_discover.h"
 
 #include "core/version.h" // AppName (Luckgram)
+#include "luckgram/ai/ai_assistant.h" // Luckgram D7
 #include "apiwrap.h"
 #include "base/event_filter.h"
 #include "base/qt_signal_producer.h"
@@ -729,6 +730,7 @@ void MainMenu::setupMenu() {
 		// Luckgram D8 (mobile 12): the desktop way into hidden chats.
 		Luckgram::HiddenChats::AddMainMenuEntry(_menu, controller);
 		AddLuckgramDiscoverMenuItem(_menu, controller); // Luckgram D10
+		Luckgram::AI::AddMainMenuEntry(_menu, controller); // Luckgram D7
 		const auto session = &controller->session();
 		const auto wallet = _menu->add(
 			object_ptr<Ui::SlideWrap<Ui::SettingsButton>>(

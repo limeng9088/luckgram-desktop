@@ -106,6 +106,8 @@ PRIVATE
     luckgram/ai/ai_markdown_logic.h
     luckgram/ai/ai_summary_logic.cpp
     luckgram/ai/ai_summary_logic.h
+    luckgram/ai/ai_text_logic.cpp
+    luckgram/ai/ai_text_logic.h
     luckgram/ai/ai_compose_logic_tests.cpp
     luckgram/ai/ai_conversation_logic_tests.cpp
     luckgram/ai/ai_market_logic_tests.cpp
@@ -116,6 +118,7 @@ PRIVATE
     luckgram/backup/luckgram_backup_format.cpp
     luckgram/backup/luckgram_backup_format.h
     luckgram/tests/luckgram_backup_format_tests.cpp
+    luckgram/ai/ai_text_logic_tests.cpp
 )
 
 target_link_libraries(luckgram_tests

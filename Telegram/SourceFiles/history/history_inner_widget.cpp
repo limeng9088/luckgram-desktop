@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "luckgram/luckgram_strings.h" // Luckgram D6
 #include "luckgram/selectall/select_all.h" // Luckgram D6
 #include "luckgram/selectall/select_all_logic.h" // Luckgram D6
+#include "luckgram/ai/ai_assistant.h" // Luckgram D7
 
 #include "api/api_polls.h"
 #include "chat_helpers/stickers_emoji_pack.h"
@@ -3765,6 +3766,9 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 									hasRestriction));
 							}, &st::menuIconTranslate);
 						}
+					}
+					if (!hasRestriction) {
+						Luckgram::AI::AddAskAiAction(_menu.get(), controller, item); // Luckgram D7
 					}
 				}
 				if (view) {
