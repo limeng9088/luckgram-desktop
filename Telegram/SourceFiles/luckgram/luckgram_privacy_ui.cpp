@@ -14,6 +14,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/layers/show.h"
 #include "ui/widgets/fields/password_input.h"
 #include "ui/widgets/labels.h"
+#include "ui/ui_utility.h"
 #include "ui/vertical_list.h"
 #include "styles/style_boxes.h"
 #include "styles/style_layers.h"
@@ -42,10 +43,22 @@ bool CheckMain(const QString &typed, Fn<void(bool correct)> done) {
 [[nodiscard]] not_null<Ui::PasswordInput*> AddField(
 		not_null<Ui::GenericBox*> box,
 		rpl::producer<QString> placeholder) {
-	return box->addRow(object_ptr<Ui::PasswordInput>(
-		box,
+	// GenericBox::addRow() takes RpWidget-derived rows only and
+	// PasswordInput is RpWidgetBase<QLineEdit>: wrap it in a plain row that
+	// keeps the field's height and passes its width on.
+	const auto wrap = box->addRow(object_ptr<Ui::RpWidget>(box));
+	const auto field = Ui::CreateChild<Ui::PasswordInput>(
+		wrap,
 		st::defaultInputField,
-		std::move(placeholder)));
+		std::move(placeholder));
+	field->show();
+	wrap->resize(wrap->width(), field->height());
+	wrap->widthValue(
+	) | rpl::on_next([=](int width) {
+		field->resize(width, field->height());
+		field->moveToLeft(0, 0);
+	}, field->lifetime());
+	return field;
 }
 
 [[nodiscard]] not_null<rpl::variable<QString>*> AddErrorLabel(
