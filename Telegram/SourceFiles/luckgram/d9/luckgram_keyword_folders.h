@@ -35,7 +35,7 @@ class SessionController;
 // (a Data::ChatFilter with an id from kFilterIdBase up) next to the cloud
 // folders and can be reordered with them, but is never sent to Telegram:
 // Data::ChatFilters skips local ids whenever it talks to the server. Stored
-// per account (luckgram_account_store.h). Matching rules live in
+// per account, encrypted (luckgram/luckgram_storage.h). Matching rules live in
 // luckgram_keyword_logic.h.
 namespace Luckgram::Keywords {
 

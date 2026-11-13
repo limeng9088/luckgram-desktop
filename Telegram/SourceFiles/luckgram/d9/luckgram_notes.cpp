@@ -9,9 +9,10 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "data/data_peer.h"
 #include "data/data_peer_id.h"
 #include "lang/lang_keys.h"
-#include "luckgram/d9/luckgram_account_store.h"
 #include "luckgram/d9/luckgram_notes_text.h"
+#include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_settings.h"
+#include "luckgram/luckgram_storage.h"
 #include "luckgram/luckgram_strings.h"
 #include "main/main_session.h"
 #include "ui/boxes/confirm_box.h"
@@ -36,7 +37,12 @@ const auto kFileName = u"notes"_q;
 struct State {
 	base::flat_map<PeerId, Entry> notes;
 	base::flat_set<PeerId> expanded;
+	// The file was read while the account's storage was available. Until
+	// then (no local key yet, or the account is hidden in the second space)
+	// notes stay in memory and the file is never overwritten.
+	bool loaded = false;
 	rpl::event_stream<PeerId> changes;
+	rpl::lifetime lifetime;
 };
 
 [[nodiscard]] base::flat_map<
@@ -59,8 +65,14 @@ struct State {
 }
 
 void Load(not_null<Main::Session*> session, State &state) {
+	state.notes.clear();
+	state.expanded.clear();
+	state.loaded = Storage::AccountAvailable(session);
+	if (!state.loaded) {
+		return;
+	}
 	const auto document = QJsonDocument::fromJson(
-		AccountStore::Read(session, kFileName));
+		Storage::ReadAccount(session, kFileName));
 	const auto root = document.object();
 	for (const auto &value : root.value(u"notes"_q).toArray()) {
 		const auto object = value.toObject();
@@ -83,6 +95,9 @@ void Load(not_null<Main::Session*> session, State &state) {
 }
 
 void Save(not_null<Main::Session*> session, const State &state) {
+	if (!state.loaded) {
+		return;
+	}
 	auto notes = QJsonArray();
 	for (const auto &[peer, entry] : state.notes) {
 		notes.append(QJsonObject{
@@ -100,7 +115,8 @@ void Save(not_null<Main::Session*> session, const State &state) {
 		{ u"notes"_q, notes },
 		{ u"expanded"_q, expanded },
 	};
-	AccountStore::Write(
+	// False when the storage went away (hidden account): memory only.
+	Storage::WriteAccount(
 		session,
 		kFileName,
 		QJsonDocument(root).toJson(QJsonDocument::Compact));
@@ -118,6 +134,23 @@ void Save(not_null<Main::Session*> session, const State &state) {
 	session->lifetime().add([=] {
 		States().remove(session);
 	});
+	// Switching spaces (D8) can show or hide this account's storage:
+	// read the file again and tell everyone showing a note.
+	DoubleBottom::ActiveChanges(
+	) | rpl::on_next([=] {
+		auto &current = *raw;
+		auto peers = base::flat_set<PeerId>();
+		for (const auto &[peer, entry] : current.notes) {
+			peers.emplace(peer);
+		}
+		Load(session, current);
+		for (const auto &[peer, entry] : current.notes) {
+			peers.emplace(peer);
+		}
+		for (const auto peer : peers) {
+			current.changes.fire_copy(peer);
+		}
+	}, raw->lifetime);
 	return *raw;
 }
 

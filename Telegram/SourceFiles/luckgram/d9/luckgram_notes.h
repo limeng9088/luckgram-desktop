@@ -20,7 +20,7 @@ class SessionController;
 } // namespace Window
 
 // D9 / mobile 05: private notes about users, groups and channels. Only on
-// this device, per account (luckgram_account_store.h), never uploaded.
+// this device, per account, encrypted (luckgram/luckgram_storage.h), never uploaded.
 // Telegram's own contact notes are a separate thing and stay untouched.
 namespace Luckgram::Notes {
 

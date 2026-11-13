@@ -19,8 +19,9 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "history/history_item.h"
 #include "history/view/history_view_element.h"
 #include "lang/lang_keys.h"
-#include "luckgram/d9/luckgram_account_store.h"
+#include "luckgram/luckgram_double_bottom.h"
 #include "luckgram/luckgram_settings.h"
+#include "luckgram/luckgram_storage.h"
 #include "luckgram/luckgram_strings.h"
 #include "main/main_session.h"
 #include "settings/settings_common.h"
@@ -54,6 +55,10 @@ struct State {
 	base::flat_set<not_null<History*>> pendingRecheck;
 	bool recheckScheduled = false;
 	bool lastEnabled = false;
+	// The file was read while the account's storage was available. Until
+	// then (no local key yet, or the account is hidden in the second space)
+	// folders stay in memory and the file is never overwritten.
+	bool loaded = false;
 	rpl::event_stream<> changes;
 	rpl::lifetime lifetime;
 };
@@ -123,7 +128,17 @@ void EnumerateRecent(not_null<History*> history, int limit, Callback &&callback)
 }
 
 void Save(not_null<Main::Session*> session, const State &state) {
-	AccountStore::Write(session, kFileName, Serialize(state.folders));
+	if (state.loaded) {
+		// False when the storage went away (hidden account): memory only.
+		Storage::WriteAccount(session, kFileName, Serialize(state.folders));
+	}
+}
+
+void Load(not_null<Main::Session*> session, State &state) {
+	state.loaded = Storage::AccountAvailable(session);
+	state.folders = state.loaded
+		? Deserialize(Storage::ReadAccount(session, kFileName))
+		: std::vector<Folder>();
 }
 
 State &Lookup(not_null<Main::Session*> session);
@@ -226,6 +241,16 @@ void Subscribe(not_null<Main::Session*> session, State &state) {
 		ScheduleRecheck(session, item->history());
 	}, state.lifetime);
 
+	// Switching spaces (D8) can show or hide this account's storage.
+	DoubleBottom::ActiveChanges(
+	) | rpl::on_next([=] {
+		auto &current = Lookup(session);
+		Load(session, current);
+		Rescan(session);
+		RefreshFilters(session);
+		current.changes.fire({});
+	}, state.lifetime);
+
 	Settings::EnabledValue(
 		QString::fromLatin1(kFeatureKey)
 	) | rpl::filter([=](bool enabled) {
@@ -243,7 +268,7 @@ State &Lookup(not_null<Main::Session*> session) {
 		return *i->second;
 	}
 	auto state = std::make_unique<State>();
-	state->folders = Deserialize(AccountStore::Read(session, kFileName));
+	Load(session, *state);
 	state->lastEnabled = Enabled();
 	const auto raw = state.get();
 	states.emplace(session, std::move(state));

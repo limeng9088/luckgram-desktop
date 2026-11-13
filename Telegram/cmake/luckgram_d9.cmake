@@ -4,8 +4,6 @@
 
 nice_target_sources(Telegram ${src_loc}
 PRIVATE
-    luckgram/d9/luckgram_account_store.cpp
-    luckgram/d9/luckgram_account_store.h
     luckgram/d9/luckgram_cache_logic.cpp
     luckgram/d9/luckgram_cache_logic.h
     luckgram/d9/luckgram_keyword_folders.cpp
