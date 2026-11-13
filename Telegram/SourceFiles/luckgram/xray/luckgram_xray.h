@@ -18,8 +18,9 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 // SOCKS5. Only Luckgram's own traffic, no VPN / TUN, no system proxy.
 //
 // The config goes to xray over stdin (never written to disk); the nodes,
-// ports and password are stored encrypted (AES-256-GCM, the key in Windows
-// Credential Manager / macOS Keychain); no node detail is logged. A core
+// ports and password are in the settings-level Luckgram storage (encrypted
+// like upstream's proxy list, readable before login and passcode unlock);
+// no node detail is logged. A core
 // that doesn't start or dies never turns a node into a direct connection:
 // the loopback port is just closed and Problem() says why.
 namespace Luckgram::Xray {
