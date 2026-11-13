@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/update_checker.h"
 #include "core/version.h"
 #include "luckgram/luckgram_desktop.h"
+#include "luckgram/luckgram_onboarding.h"
 #include "lang/lang_keys.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/painter.h"
@@ -73,10 +74,7 @@ void AboutBox(not_null<Ui::GenericBox*> box) {
 	const auto version = layout->add(
 		object_ptr<Ui::LinkButton>(
 			box,
-			tr::lng_about_version(
-				tr::now,
-				lt_version,
-				currentVersionText()),
+			Luckgram::CurrentVersionLine(), // Luckgram D5 (28)
 			st::aboutVersionLink),
 		QMargins(
 			st::boxRowPadding.left(),
@@ -111,12 +109,7 @@ void AboutBox(not_null<Ui::GenericBox*> box) {
 					"version of Telegram Desktop was copied "
 					"to the clipboard."));
 		} else {
-			// Luckgram: the source of exactly this build.
-			const auto commit = Luckgram::CommitHash();
-			File::OpenUrl(commit.isEmpty()
-				? u"https://github.com/limeng9088/luckgram-desktop"_q
-				: (u"https://github.com/limeng9088/luckgram-desktop/commit/"_q
-					+ commit));
+			Luckgram::CopyVersionLine(box->uiShow()); // Luckgram D5 (28)
 		}
 	});
 

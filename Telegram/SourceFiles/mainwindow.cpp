@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "mainwindow.h"
 
+#include "luckgram/luckgram_onboarding.h"
+
 #include "data/data_document.h"
 #include "data/data_session.h"
 #include "data/data_document_media.h"
@@ -355,6 +357,7 @@ void MainWindow::setupMain(
 			_main->activate();
 		}
 		Core::App().checkStartUrls();
+		Luckgram::OnMainShown(sessionController()); // D5: privacy, onboarding
 	}
 	fixOrder();
 	if (const auto strong = weakAnimatedLayer.get()) {

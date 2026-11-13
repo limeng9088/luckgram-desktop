@@ -13,6 +13,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_ai.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_features.h"
+#include "luckgram/luckgram_onboarding.h"
 #include "luckgram/luckgram_service.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/luckgram_strings.h"
@@ -281,18 +282,23 @@ void SetupLuckgramContent(
 		}
 		Ui::AddSkip(container);
 	}
-	// D2 §2: version + 「Luckgram 是基于 Telegram 开源代码的独立应用」.
-	const auto version = QString::fromLatin1(AppVersionStr);
+	// D2 §2: version + 「Luckgram 是基于 Telegram 开源代码的独立应用」;
+	// D5: the version line in the 28 format, click copies.
 	Ui::AddDividerText(
 		container,
-		TrValue("", "") | rpl::map([=] {
-			return u"Luckgram "_q + version + u"\n"_q + Tr(
-				"Luckgram 是基于 Telegram 开源代码的独立应用",
-				"Luckgram is an independent app based on Telegram's open-source code");
-		}));
+		TrValue(
+			"Luckgram 是基于 Telegram 开源代码的独立应用",
+			"Luckgram is an independent app based on Telegram's open-source code"));
+	Luckgram::AddVersionRow(container, controller);
 }
 
 } // namespace
+
+void ShowLuckgramDebugBox(not_null<Window::SessionController*> controller) {
+	if (Features::IsDevBuild()) {
+		controller->show(Box(DebugBox, controller));
+	}
+}
 
 LuckgramFeatures::LuckgramFeatures(
 	QWidget *parent,

@@ -33,4 +33,7 @@ private:
 // Premium isn't available.
 void AddLuckgramFeaturesButton(Builder::SectionBuilder &builder);
 
+// D5: dev builds only (right click on the version line).
+void ShowLuckgramDebugBox(not_null<Window::SessionController*> controller);
+
 } // namespace Settings

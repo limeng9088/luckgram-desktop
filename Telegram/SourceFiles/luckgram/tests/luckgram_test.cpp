@@ -72,5 +72,9 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	std::printf("luckgram_tests: %d passed, %d failed\n", passed, failed);
+	if (!passed && !failed) {
+		std::fprintf(stderr, "No test matches \"%s\".\n", filter.toUtf8().constData());
+		return 1;
+	}
 	return failed ? 1 : 0;
 }

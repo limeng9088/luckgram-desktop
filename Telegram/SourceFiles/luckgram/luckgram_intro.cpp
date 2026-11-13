@@ -7,6 +7,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include "lang/lang_instance.h"
 #include "lang/lang_keys.h"
+#include "luckgram/luckgram_onboarding_logic.h"
+#include "luckgram/luckgram_strings.h"
 #include "ui/painter.h"
 #include "styles/style_intro.h"
 
@@ -16,12 +18,15 @@ namespace {
 // Colors of the mobile welcome page (LuckgramWelcomeActivity).
 constexpr auto kCoverBg = QColor(0x00, 0x00, 0x00);
 constexpr auto kTileBg = QColor(0x1C, 0x1C, 0x1E);
+// D5 "桌面端差异": the welcome texts are at most 480px wide.
+constexpr auto kMaxTextWidth = 480;
 
-[[nodiscard]] rpl::producer<QString> ZhEn(QString zh, QString en) {
-	return rpl::single(Lang::Id()) | rpl::then(
-		Lang::GetInstance().idChanges()
-	) | rpl::map([=](const QString &id) {
-		return id.startsWith(u"zh"_q, Qt::CaseInsensitive) ? zh : en;
+[[nodiscard]] rpl::producer<QString> TextValue(
+		QString (Onboarding::Texts::*method)() const) {
+	return rpl::single(rpl::empty) | rpl::then(
+		Lang::GetInstance().updated()
+	) | rpl::map([=] {
+		return (Onboarding::Texts(IsChinese()).*method)();
 	});
 }
 
@@ -33,17 +38,24 @@ constexpr auto kTileBg = QColor(0x1C, 0x1C, 0x1E);
 } // namespace
 
 rpl::producer<QString> WelcomeTitle() {
-	return ZhEn(u"欢迎使用 Luckgram"_q, u"Welcome to Luckgram"_q);
+	return TextValue(&Onboarding::Texts::welcomeTitle);
 }
 
 rpl::producer<QString> WelcomeDescription() {
-	return ZhEn(
-		u"基于 Telegram 的开源客户端"_q,
-		u"An open-source Telegram client"_q);
+	return TextValue(&Onboarding::Texts::intro); // D5: mobile's full intro.
 }
 
 rpl::producer<QString> WelcomeButton() {
-	return ZhEn(u"开始使用"_q, u"Get Started"_q);
+	return TextValue(&Onboarding::Texts::getStarted);
+}
+
+int WelcomeTextWidth(int outerWidth) {
+	const auto padding = style::ConvertScale(24);
+	return std::max(
+		std::min(
+			outerWidth - 2 * padding,
+			style::ConvertScale(kMaxTextWidth)),
+		1);
 }
 
 void PaintIntroCover(QPainter &p, int width, int top) {

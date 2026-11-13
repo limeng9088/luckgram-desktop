@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_account.h"
 #include "main/main_app_config.h"
 #include "luckgram/luckgram_intro.h"
+#include "luckgram/luckgram_onboarding.h"
 
 namespace Intro {
 namespace details {
@@ -27,10 +28,16 @@ StartWidget::StartWidget(
 	setMouseTracking(true);
 	setTitleText(Luckgram::WelcomeTitle());
 	setDescriptionText(Luckgram::WelcomeDescription());
+	Luckgram::SetupWelcomePage(this); // D5: privacy policy
 	show();
 }
 
 void StartWidget::submit() {
+	if (!Luckgram::ConfirmPrivacyBeforeStart(crl::guard(this, [=] {
+			submit();
+		}))) {
+		return; // Luckgram D5: the privacy policy first.
+	}
 	account().destroyStaleAuthorizationKeys();
 	goNext<QrWidget>();
 }
