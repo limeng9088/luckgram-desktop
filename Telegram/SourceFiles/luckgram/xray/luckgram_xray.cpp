@@ -19,6 +19,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QJsonDocument>
 #include <QtCore/QPointer>
 #include <QtCore/QProcess>
+#include <QtNetwork/QHostAddress>
+#include <QtNetwork/QTcpServer>
 
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -240,6 +242,52 @@ void Load() {
 		&& (proxy.user == QString::fromLatin1(kUser));
 }
 
+#ifdef Q_OS_WIN
+// All cores are in one job that dies with the app (even after a crash or
+// a kill), so no orphan xray keeps the ports.
+void AddToKillOnCloseJob(qint64 pid) {
+	static const auto job = [] {
+		const auto result = CreateJobObjectW(nullptr, nullptr);
+		if (result) {
+			auto info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
+			info.BasicLimitInformation.LimitFlags
+				= JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+			SetInformationJobObject(
+				result,
+				JobObjectExtendedLimitInformation,
+				&info,
+				sizeof(info));
+		}
+		return result; // Kept open for the app's lifetime on purpose.
+	}();
+	if (!job || pid <= 0) {
+		return;
+	}
+	const auto process = OpenProcess(
+		PROCESS_SET_QUOTA | PROCESS_TERMINATE,
+		FALSE,
+		DWORD(pid));
+	if (process) {
+		if (!AssignProcessToJobObject(job, process)) {
+			LOG(("Luckgram Xray: could not add the core to the job."));
+		}
+		CloseHandle(process);
+	}
+}
+#endif // Q_OS_WIN
+
+// A loopback port some other program (or a left-over core) already holds.
+[[nodiscard]] int FirstBusyPort(const std::vector<Run> &runs) {
+	for (const auto &run : runs) {
+		auto server = QTcpServer();
+		if (!server.listen(QHostAddress::LocalHost, quint16(run.localPort))) {
+			return run.localPort;
+		}
+		server.close();
+	}
+	return 0;
+}
+
 void SetState(bool running, QString error) {
 	auto &data = Data();
 	data.running = running;
@@ -408,6 +456,14 @@ void Apply() {
 	for (const auto &rec : data.nodes) {
 		runs.push_back({ rec.localPort, rec.outbound });
 	}
+	if (const auto busy = FirstBusyPort(runs)) {
+		// Don't start: xray would exit anyway. Say which port.
+		LOG(("Luckgram Xray: local port %1 is in use.").arg(busy));
+		SetState(false, Luckgram::IsChinese()
+			? (u"本机端口 "_q + QString::number(busy) + u" 被占用"_q)
+			: (u"local port "_q + QString::number(busy) + u" is in use"_q));
+		return;
+	}
 	const auto config = BuildConfig(
 		runs,
 		QString::fromLatin1(kUser),
@@ -428,6 +484,9 @@ void Apply() {
 	});
 #endif // Q_OS_WIN
 	QObject::connect(process, &QProcess::started, [=] {
+#ifdef Q_OS_WIN
+		AddToKillOnCloseJob(process->processId());
+#endif // Q_OS_WIN
 		process->write(config);
 		process->closeWriteChannel();
 		Data().startedTimer.callOnce(kStartedAfter);
