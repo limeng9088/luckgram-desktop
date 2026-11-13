@@ -5,6 +5,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/d9/luckgram_profile_info_logic.h"
 
+#include <QtCore/QStringList>
+
 #include <cmath>
 
 namespace Luckgram::ProfileInfo {
