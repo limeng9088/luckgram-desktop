@@ -15,6 +15,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/text/text_utilities.h"
 #include "ui/toast/toast.h"
 #include "ui/widgets/buttons.h"
+#include "ui/widgets/dropdown_menu.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/popup_menu.h"
 
@@ -175,9 +176,25 @@ Compose::Slot CreateSendSlot(const Compose::SlotContext &context) {
 	) | rpl::map([=](bool enabled, auto&&) {
 		return enabled && hasText();
 	}) | rpl::distinct_until_changed();
+	// specs#94: 「翻译」 in the 「+」 menu (compact bar).
+	auto plus = [=](not_null<Ui::DropdownMenu*> menu) {
+		if (!OutEnabled()) {
+			return;
+		}
+		menu->addAction(Tr("翻译", "Translate"), [=] {
+			if (!hasText()) {
+				show->showToast(Tr(
+					"先输入要翻译的文字",
+					"Type the text to translate first"));
+				return;
+			}
+			translate(QString());
+		}, &st::menuIconTranslate);
+	};
 	return {
 		.widget = std::move(button),
 		.wanted = std::move(wanted),
+		.plus = std::move(plus),
 	};
 }
 

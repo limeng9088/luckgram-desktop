@@ -1378,6 +1378,10 @@ historyLuckgramTranslate: IconButton(historyAttach) {
 	icon: icon {{ "menu/translate", historyComposeIconFg }};
 	iconOver: icon {{ "menu/translate", historyComposeIconFgOver }};
 }
+// Luckgram D6 (specs#94): the attach button's 「+」 in the compact bar.
+historyLuckgramPlusIcon: icon {{ "menu/add", historyComposeIconFg }};
+historyLuckgramPlusIconOver: icon {{ "menu/add", historyComposeIconFgOver }};
+luckgramMenuIconDictation: icon {{ "chat/voice_to_text", menuIconColor }};
 // Luckgram D6 (spec 17.5): voice input button.
 historyLuckgramDictation: IconButton(historyAttach) {
 	icon: icon {{ "chat/voice_to_text", historyComposeIconFg }};
