@@ -457,7 +457,9 @@ constexpr const char *kProtocolVersions[] = {
 	};
 	bf("botfather_list_bots", "List my bots",
 		"Skill \"botfather\". The bots this account owns, asked from "
-		"@BotFather (/mybots): their usernames.",
+		"@BotFather (/mybots): their usernames, six a page. When \"more\" "
+		"is true, press the \"\xBB\" button under reply.id with "
+		"botfather_press for the next page.",
 		QJsonObject(), true);
 	properties = QJsonObject();
 	properties.insert(Q("name"), Property(

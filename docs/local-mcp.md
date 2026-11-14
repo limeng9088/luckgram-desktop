@@ -60,7 +60,7 @@ Skill 工具都有可选参数 `account`（`list_accounts` 里的 `id`），不�
 
 | 工具 | 参数 | 返回 | 每账号上限 |
 |---|---|---|---|
-| `botfather_list_bots` | `account` | `bots`（用户名列表）、`reply` | 60/小时、300/天 |
+| `botfather_list_bots` | `account` | `bots`（用户名列表，每页 6 个）、`more`（为 true 时用 `botfather_press` 点 `reply.id` 下的 `»` 看下一页）、`reply` | 60/小时、300/天 |
 | `botfather_create_bot` | `account`、`name`、`username`（以 `bot` 结尾） | `username`、`link`、`token` | 3/小时、10/天 |
 | `botfather_get_token` | `account`、`bot` | `token` | 30/小时、150/天 |
 | `botfather_revoke_token` | `account`、`bot` | 新的 `token`，旧令牌立即失效 | 同上 |

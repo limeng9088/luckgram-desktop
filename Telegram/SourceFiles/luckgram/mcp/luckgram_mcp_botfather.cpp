@@ -188,14 +188,21 @@ void FinishWithAnswer(
 			run->arguments.value(u"bot"_q).toString());
 		result.value.insert(u"token"_q, token);
 	} else if (run->tool == u"botfather_list_bots"_q) {
+		// BotFather shows six bots a page. The first page is returned; when
+		// there is a next one, `more` says so: press the "»" button under
+		// reply.id with botfather_press to see it.
 		auto bots = QJsonArray();
+		auto more = false;
 		for (const auto &entry : ButtonsJson(answer)) {
 			const auto name = entry.toObject().value(u"text"_q).toString();
 			if (name.startsWith(QChar('@'))) {
 				bots.push_back(name.mid(1));
+			} else if (name.contains(QChar(0xBB))) {
+				more = true;
 			}
 		}
 		result.value.insert(u"bots"_q, bots);
+		result.value.insert(u"more"_q, more);
 	} else if (run->tool != u"botfather_send"_q) {
 		result.value.insert(
 			u"bot"_q,
