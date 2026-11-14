@@ -169,11 +169,13 @@ void LuckgramMcp::setupContent(
 			.text = Tr(
 				"开启后，这台电脑会主动连接 mcp.luckgram.cc。"
 				"拿到云端密钥的 AI 工具可以从任何地方使用这台电脑上"
-				"已开启的功能和 Skill。云端只转发请求，不保存聊天内容。",
+				"已开启的功能和 Skill。云端只转发请求，不保存聊天内容。"
+				"云端会看到这台电脑的设备名（可在下方修改）。",
 				"With this on, this computer connects to mcp.luckgram.cc. "
 				"AI tools that have the cloud key can use, from anywhere, "
 				"what is switched on on this computer. The cloud passes "
-				"requests on and stores no chats."),
+				"requests on and stores no chats. It sees the device name "
+				"of this computer, which you can change below."),
 			.confirmed = [=](Fn<void()> close) {
 				Cloud::SetEnabled(true);
 				*cloudShown = true;
@@ -243,6 +245,32 @@ void LuckgramMcp::setupContent(
 				controller->showToast(Tr(
 					"已使用这把密钥，这台电脑会出现在同一个云端地址下",
 					"Key saved: this computer joins the same cloud address"));
+			});
+			box->addButton(
+				rpl::single(Tr("取消", "Cancel")),
+				[=] { box->closeBox(); });
+		}));
+	});
+	AddButtonWithIcon(
+		container,
+		rpl::single(Tr("修改设备名", "Change the device name")),
+		st::settingsButtonNoIcon
+	)->addClickHandler([=] {
+		controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+			box->setTitle(rpl::single(Tr("设备名", "Device name")));
+			const auto field = box->addRow(object_ptr<Ui::InputField>(
+				box,
+				st::defaultInputField,
+				Ui::InputField::Mode::SingleLine,
+				rpl::single(Tr(
+					"留空则使用电脑名",
+					"Empty: the computer's own name")),
+				Cloud::DeviceName()));
+			field->setMaxLength(64);
+			box->setFocusCallback([=] { field->setFocusFast(); });
+			box->addButton(rpl::single(Tr("保存", "Save")), [=] {
+				Cloud::SetDeviceName(field->getLastText());
+				box->closeBox();
 			});
 			box->addButton(
 				rpl::single(Tr("取消", "Cancel")),

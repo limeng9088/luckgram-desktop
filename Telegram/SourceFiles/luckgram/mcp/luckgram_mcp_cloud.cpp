@@ -23,6 +23,7 @@ namespace {
 constexpr auto kKeyName = "mcp_cloud_key";
 constexpr auto kEnabledSetting = "mcp_cloud";
 constexpr auto kDeviceSetting = "mcp_cloud_device";
+constexpr auto kDeviceNameSetting = "mcp_cloud_device_name";
 
 struct CloudState {
 	std::unique_ptr<CloudClient> client;
@@ -158,8 +159,25 @@ void RegenerateKey() {
 }
 
 QString DeviceName() {
+	const auto custom = Settings::GetString(
+		QString::fromLatin1(kDeviceNameSetting)).trimmed();
+	if (!custom.isEmpty()) {
+		return custom.left(64);
+	}
 	const auto name = QSysInfo::machineHostName().trimmed();
 	return name.isEmpty() ? u"Luckgram Desktop"_q : name.left(64);
+}
+
+void SetDeviceName(const QString &name) {
+	const auto key = QString::fromLatin1(kDeviceNameSetting);
+	const auto trimmed = name.trimmed().left(64);
+	if (trimmed.isEmpty()) {
+		Settings::Remove(key); // Back to the host name.
+	} else {
+		Settings::SetString(key, trimmed);
+	}
+	// Read at the next poll, within half a minute.
+	State().changes.fire({});
 }
 
 bool Connected() {
