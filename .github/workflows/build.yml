@@ -500,7 +500,10 @@ jobs:
           # at /MP4 on the heavy Telegram TUs. Hosted: /MP2 (override with
           # vars.WIN_HOSTED_CL_MP), one project at a time. Self-hosted:
           # vars WIN_CL_MP / WIN_BUILD_PARALLEL.
-          _CL_: ${{ format('-MP{0}', env.SELF_HOSTED == 'true' && (vars.WIN_CL_MP || '4') || (vars.WIN_HOSTED_CL_MP || '2')) }}
+          # -utf-8: the sources are UTF-8; on a Chinese Windows (xs-master,
+          # code page 936) cl read cmark-gfm's html.c as GBK, C4819 became
+          # C2220 and cmark-gfm_static.lib was missing (LNK1181).
+          _CL_: ${{ format('-MP{0} -utf-8', env.SELF_HOSTED == 'true' && (vars.WIN_CL_MP || '4') || (vars.WIN_HOSTED_CL_MP || '2')) }}
           BUILD_PARALLEL: ${{ env.SELF_HOSTED == 'true' && (vars.WIN_BUILD_PARALLEL || '2') || '1' }}
           KEEP_GOING: ${{ inputs.keep_going && '1' || '0' }}
         run: |
@@ -633,7 +636,7 @@ jobs:
         if: env.SELF_HOSTED == 'true'
         continue-on-error: true
         env:
-          _CL_: ${{ format('-MP{0}', vars.WIN_CL_MP || '4') }}
+          _CL_: ${{ format('-MP{0} -utf-8', vars.WIN_CL_MP || '4') }}
         run: |
           if "%SELF_HOSTED%"=="true" powershell -NoProfile -Command "$p = (Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID)).ParentProcessId; (Get-Process -Id $p).PriorityClass = 'BelowNormal'"
           rem configure.bat takes QT as an argument; in the environment it makes
@@ -699,6 +702,8 @@ jobs:
       # test fails this step and so the job, after the packages are made.
       - name: Unit tests.
         if: always() && inputs.tests && steps.configure.outcome == 'success'
+        env:
+          _CL_: ${{ format('-MP{0} -utf-8', vars.WIN_CL_MP || '2') }}
         run: |
           if "%SELF_HOSTED%"=="true" powershell -NoProfile -Command "$p = (Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID)).ParentProcessId; (Get-Process -Id $p).PriorityClass = 'BelowNormal'"
           set OUT=%TBUILD%\luckgram-desktop\out
