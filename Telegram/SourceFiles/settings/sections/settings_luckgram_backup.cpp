@@ -92,7 +92,7 @@ void LuckgramBackup::setupContent(
 	Ui::AddSkip(container);
 	AddButtonWithIcon(
 		container,
-		rpl::single(Backup::RestoreText()),
+		Backup::RestoreTextValue(),
 		st::settingsButtonNoIcon
 	)->addClickHandler([=] {
 		Backup::StartRestore(controller->uiShow());

@@ -130,7 +130,7 @@ Widget::Widget(
 			this,
 			object_ptr<Ui::RoundButton>(
 				this,
-				rpl::single(Luckgram::Backup::RestoreText()),
+				Luckgram::Backup::RestoreTextValue(),
 				st::defaultBoxButton));
 		_luckgramRestore->entity()->setClickedCallback([=] {
 			Luckgram::Backup::StartRestore(getData()->controller->uiShow());
