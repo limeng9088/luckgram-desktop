@@ -1127,21 +1127,16 @@ jobs:
       # 90 minutes (each part goes on where the previous stopped), the
       # compiler cache saved after every part (a later run continues even
       # when the machine dies); vm_stat / df every 10 minutes in the log.
+      # Each part stops xcodebuild itself before the step timeout (SIGINT,
+      # then SIGTERM/SIGKILL for the process group) and first stops any
+      # xcodebuild left over, so build.db is not locked for the next part
+      # (.github/scripts/mac_build_part.sh).
       - name: Build (part 1).
         id: build1
         if: steps.configure.outcome == 'success'
-        timeout-minutes: 90
+        timeout-minutes: 95
         continue-on-error: true
-        run: |
-          ( while true; do
-              echo "::group::resources $(date -u +%H:%M)"; vm_stat; df -h / "$GITHUB_WORKSPACE"; echo "::endgroup::"
-              sleep 600
-            done ) &
-          MON=$!
-          trap 'kill $MON 2>/dev/null || true' EXIT
-          cd luckgram-desktop/out
-          cmake --build . --config Release -- -jobs "${{ vars.MAC_BUILD_JOBS || '2' }}"
-          echo "Build took $(( ($(date +%s) - BUILD_START) / 60 )) min"
+        run: bash luckgram-desktop/.github/scripts/mac_build_part.sh 1 85 "${{ vars.MAC_BUILD_JOBS || '2' }}"
 
       - name: Save compiler cache (part 1).
         if: always() && (steps.build1.outcome == 'success' || steps.build1.outcome == 'failure')
@@ -1171,18 +1166,9 @@ jobs:
       - name: Build (part 2).
         id: build2
         if: ${{ !cancelled() && steps.build1.outcome == 'failure' }}
-        timeout-minutes: 90
+        timeout-minutes: 95
         continue-on-error: true
-        run: |
-          ( while true; do
-              echo "::group::resources $(date -u +%H:%M)"; vm_stat; df -h / "$GITHUB_WORKSPACE"; echo "::endgroup::"
-              sleep 600
-            done ) &
-          MON=$!
-          trap 'kill $MON 2>/dev/null || true' EXIT
-          cd luckgram-desktop/out
-          cmake --build . --config Release -- -jobs "${{ vars.MAC_BUILD_JOBS || '2' }}"
-          echo "Build took $(( ($(date +%s) - BUILD_START) / 60 )) min"
+        run: bash luckgram-desktop/.github/scripts/mac_build_part.sh 2 85 "${{ vars.MAC_BUILD_JOBS || '2' }}"
 
       - name: Save compiler cache (part 2).
         if: always() && (steps.build2.outcome == 'success' || steps.build2.outcome == 'failure')
@@ -1212,18 +1198,9 @@ jobs:
       - name: Build (part 3).
         id: build3
         if: ${{ !cancelled() && steps.build2.outcome == 'failure' }}
-        timeout-minutes: 90
+        timeout-minutes: 95
         continue-on-error: true
-        run: |
-          ( while true; do
-              echo "::group::resources $(date -u +%H:%M)"; vm_stat; df -h / "$GITHUB_WORKSPACE"; echo "::endgroup::"
-              sleep 600
-            done ) &
-          MON=$!
-          trap 'kill $MON 2>/dev/null || true' EXIT
-          cd luckgram-desktop/out
-          cmake --build . --config Release -- -jobs "${{ vars.MAC_BUILD_JOBS || '2' }}"
-          echo "Build took $(( ($(date +%s) - BUILD_START) / 60 )) min"
+        run: bash luckgram-desktop/.github/scripts/mac_build_part.sh 3 85 "${{ vars.MAC_BUILD_JOBS || '2' }}"
 
       - name: Save compiler cache (part 3).
         if: always() && (steps.build3.outcome == 'success' || steps.build3.outcome == 'failure')
@@ -1253,18 +1230,9 @@ jobs:
       - name: Build (part 4).
         id: build4
         if: ${{ !cancelled() && steps.build3.outcome == 'failure' }}
-        timeout-minutes: 45
+        timeout-minutes: 50
         continue-on-error: true
-        run: |
-          ( while true; do
-              echo "::group::resources $(date -u +%H:%M)"; vm_stat; df -h / "$GITHUB_WORKSPACE"; echo "::endgroup::"
-              sleep 600
-            done ) &
-          MON=$!
-          trap 'kill $MON 2>/dev/null || true' EXIT
-          cd luckgram-desktop/out
-          cmake --build . --config Release -- -jobs "${{ vars.MAC_BUILD_JOBS || '2' }}"
-          echo "Build took $(( ($(date +%s) - BUILD_START) / 60 )) min"
+        run: bash luckgram-desktop/.github/scripts/mac_build_part.sh 4 40 "${{ vars.MAC_BUILD_JOBS || '2' }}"
 
       - name: Save compiler cache (part 4).
         if: always() && (steps.build4.outcome == 'success' || steps.build4.outcome == 'failure')
