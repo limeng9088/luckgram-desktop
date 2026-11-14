@@ -404,6 +404,18 @@ struct Parts {
 	return result;
 }
 
+// The link's security; Trojan is TLS when not given (v2rayN / Clash read
+// trojan:// that way, most subscriptions leave it out).
+[[nodiscard]] QString SecurityOf(const Parts &parts) {
+	const auto i = parts.query.find(QStringLiteral("security"));
+	const auto given = (i != end(parts.query)) ? Lower(i->second) : QString();
+	return !given.isEmpty()
+		? given
+		: (parts.protocol == L(kTrojan))
+		? QStringLiteral("tls")
+		: QStringLiteral("none");
+}
+
 // streamSettings from the query; empty object when unusable.
 [[nodiscard]] std::optional<QJsonObject> StreamSettings(const Parts &parts) {
 	const auto &q = parts.query;
@@ -468,7 +480,7 @@ struct Parts {
 	}
 	stream.insert(QStringLiteral("network"), network);
 
-	const auto security = Lower(NonEmpty(value("security"), QStringLiteral("none")));
+	const auto security = SecurityOf(parts);
 	const auto sni = NonEmpty(value("sni"), host);
 	if (security == QStringLiteral("tls")) {
 		auto tls = QJsonObject();
@@ -670,8 +682,7 @@ bool NeedsEncryption(const QString &link) {
 		const auto i = parts->query.find(L(key));
 		return (i != end(parts->query)) ? Lower(i->second) : QString();
 	};
-	const auto security = NonEmpty(value("security"), QStringLiteral("none"));
-	if (security != QStringLiteral("none")) {
+	if (SecurityOf(*parts) != QStringLiteral("none")) {
 		return false; // tls / reality (anything else isn't built anyway).
 	}
 	const auto encryption = value("encryption");
@@ -693,7 +704,15 @@ QString StartFailureReason(const QByteArray &output) {
 	auto line = text.mid(at + marker.size()).section(QChar('\n'), 0, 0);
 	const auto separator = line.lastIndexOf(QStringLiteral(" > "));
 	auto reason = ((separator >= 0) ? line.mid(separator + 3) : line).trimmed();
-	// Host names and addresses: never logged.
+	// Host names, addresses, UUIDs and passwords: never logged.
+	static const auto uuid = QRegularExpression(QStringLiteral(
+		"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"));
+	static const auto secret = QRegularExpression(QStringLiteral(
+		"\\b(password|pass|passwd|uuid|id|user|users|key|publickey|shortid)"
+		"([\"':=\\s]+)[^\\s,;\\]}\"']+"),
+		QRegularExpression::CaseInsensitiveOption);
+	reason.replace(uuid, QStringLiteral("*"));
+	reason.replace(secret, QStringLiteral("\\1\\2*"));
 	static const auto ipv6 = QRegularExpression(
 		QStringLiteral("\\[?[0-9A-Fa-f]{0,4}(:[0-9A-Fa-f]{0,4}){2,7}\\]?"));
 	static const auto names = QRegularExpression(

@@ -314,6 +314,13 @@ LUCKGRAM_TEST(XrayRefusesPlainVlessTrojan) {
 	LG_CHECK(Parse(plain).has_value()); // Still a node (shown, deletable).
 	LG_CHECK(NeedsEncryption(vless("@example.com:443?type=ws")));
 	LG_CHECK(NeedsEncryption(S("trojan://pw@5.6.7.8:443?security=none&type=tcp")));
+	// Trojan without security is TLS (v2rayN / Clash): run, with TLS.
+	const auto trojan = S("trojan://pw@5.6.7.8:443?sni=x#n");
+	LG_CHECK(!NeedsEncryption(trojan));
+	const auto trojanStream = Outbound(trojan).value(S("streamSettings")).toObject();
+	LG_EQUAL(trojanStream.value(S("security")).toString(), S("tls"));
+	LG_EQUAL(trojanStream.value(S("tlsSettings")).toObject()
+		.value(S("serverName")).toString(), S("x"));
 	// Encrypted, or a private address: fine.
 	LG_CHECK(!NeedsEncryption(vless("@5.6.7.8:443?security=tls&type=tcp")));
 	LG_CHECK(!NeedsEncryption(vless("@5.6.7.8:443?security=reality&pbk=k&type=tcp")));
@@ -353,5 +360,12 @@ LUCKGRAM_TEST(XrayStartFailureReason) {
 	LG_CHECK(!hosts.contains(S("example")));
 	LG_CHECK(!hosts.contains(S("5.6.7.8")));
 	LG_CHECK(!hosts.contains(S("2001")));
+	// Nor UUIDs and passwords.
+	const auto secrets = StartFailureReason(QByteArray(
+		"Failed to start: x > invalid user id: 1b0c5e6a-0000-4000-8000-000000000001, "
+		"password=hunter2 pass: \"s3cret\""));
+	LG_CHECK(!secrets.contains(S("1b0c5e6a")));
+	LG_CHECK(!secrets.contains(S("hunter2")));
+	LG_CHECK(!secrets.contains(S("s3cret")));
 	LG_CHECK(StartFailureReason(QByteArray("started")).isEmpty());
 }
