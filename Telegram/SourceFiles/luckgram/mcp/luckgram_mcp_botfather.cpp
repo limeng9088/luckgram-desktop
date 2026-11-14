@@ -215,12 +215,18 @@ void FinishWithAnswer(
 void NextStep(const std::shared_ptr<Run> &run);
 
 void WaitForAnswer(const std::shared_ptr<Run> &run) {
+	if (!run->done) {
+		return; // Finished already (the overall timeout): nothing more is sent.
+	}
 	const auto session = run->session.get();
 	if (!session) {
 		Finish(run, Failed(u"The account is gone."_q));
 		return;
 	}
 	base::call_delayed(kPollInterval, QCoreApplication::instance(), [=] {
+		if (!run->done) {
+			return;
+		}
 		const auto strong = run->session.get();
 		const auto peer = strong
 			? strong->data().peerLoaded(run->peerId)
@@ -256,6 +262,9 @@ void WaitForAnswer(const std::shared_ptr<Run> &run) {
 }
 
 void NextStep(const std::shared_ptr<Run> &run) {
+	if (!run->done) {
+		return; // Finished already (the overall timeout): nothing more is sent.
+	}
 	const auto session = run->session.get();
 	const auto peer = session
 		? session->data().peerLoaded(run->peerId)
@@ -280,12 +289,18 @@ void NextStep(const std::shared_ptr<Run> &run) {
 }
 
 void WaitForPress(const std::shared_ptr<Run> &run) {
+	if (!run->done) {
+		return; // Finished already (the overall timeout): nothing more is sent.
+	}
 	const auto session = run->session.get();
 	if (!session) {
 		Finish(run, Failed(u"The account is gone."_q));
 		return;
 	}
 	base::call_delayed(kPollInterval, QCoreApplication::instance(), [=] {
+		if (!run->done) {
+			return;
+		}
 		const auto strong = run->session.get();
 		const auto peer = strong
 			? strong->data().peerLoaded(run->peerId)
