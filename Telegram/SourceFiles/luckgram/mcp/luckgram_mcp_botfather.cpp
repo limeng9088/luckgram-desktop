@@ -8,6 +8,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "api/api_common.h"
 #include "apiwrap.h"
 #include "base/call_delayed.h"
+#include "base/flat_map.h"
 #include "base/unixtime.h"
 #include "base/weak_ptr.h"
 #include "data/data_peer.h"
@@ -22,6 +23,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QJsonArray>
 
 #include <algorithm>
+#include <deque>
 
 namespace Luckgram::Mcp {
 namespace {
@@ -34,6 +36,7 @@ constexpr auto kReadLimit = 20;
 using Button = HistoryMessageMarkupButton;
 
 struct Run {
+	quint64 account = 0; // Whose conversation: one runs at a time.
 	base::weak_ptr<Main::Session> session;
 	PeerId peerId = 0;
 	QString tool;
@@ -112,10 +115,48 @@ struct Run {
 	return last;
 }
 
-void Finish(const std::shared_ptr<Run> &run, ToolOutcome outcome) {
-	if (const auto done = base::take(run->done)) {
-		done(std::move(outcome));
+// One conversation with BotFather per account at a time: answers are told
+// apart only by coming after the line that was sent, so two tools talking
+// at once would read each other's answers (and one could be handed the
+// token the other asked for). The rest wait in the order they came.
+struct Queue {
+	bool busy = false;
+	std::deque<Fn<void()>> waiting;
+};
+
+[[nodiscard]] base::flat_map<quint64, Queue> &Queues() {
+	static auto result = base::flat_map<quint64, Queue>();
+	return result;
+}
+
+void Enqueue(quint64 account, Fn<void()> start) {
+	auto &queue = Queues()[account];
+	if (queue.busy) {
+		queue.waiting.push_back(std::move(start));
+		return;
 	}
+	queue.busy = true;
+	start();
+}
+
+void Finish(const std::shared_ptr<Run> &run, ToolOutcome outcome) {
+	const auto done = base::take(run->done);
+	if (!done) {
+		return; // Finished before: the queue has moved on already.
+	}
+	done(std::move(outcome));
+	// The next one starts from the event loop, after this answer is out.
+	const auto account = run->account;
+	crl::on_main([=] {
+		auto &queue = Queues()[account];
+		if (queue.waiting.empty()) {
+			queue.busy = false;
+			return;
+		}
+		const auto next = std::move(queue.waiting.front());
+		queue.waiting.pop_front();
+		next();
+	});
 }
 
 // The result of a script: BotFather's last answer, and what the tool was
@@ -166,6 +207,7 @@ void NextStep(const std::shared_ptr<Run> &run);
 void WaitForAnswer(const std::shared_ptr<Run> &run) {
 	const auto session = run->session.get();
 	if (!session) {
+		Finish(run, Failed(u"The account is gone."_q));
 		return;
 	}
 	base::call_delayed(kPollInterval, session, [=] {
@@ -230,6 +272,7 @@ void NextStep(const std::shared_ptr<Run> &run) {
 void WaitForPress(const std::shared_ptr<Run> &run) {
 	const auto session = run->session.get();
 	if (!session) {
+		Finish(run, Failed(u"The account is gone."_q));
 		return;
 	}
 	base::call_delayed(kPollInterval, session, [=] {
@@ -301,6 +344,12 @@ void Press(const std::shared_ptr<Run> &run, not_null<PeerData*> peer) {
 			u"No such button. The buttons are: "_q + names.join(u", "_q)));
 		return;
 	}
+	// Checked on the button itself as well, not only on the name asked for.
+	const auto refusal = BotFatherPressRefusal(found->text);
+	if (!refusal.isEmpty()) {
+		Finish(run, Failed(refusal));
+		return;
+	}
 	const auto history = session->data().history(peer);
 	if (const auto last = history->lastMessage()) {
 		if (IsServerMsgId(last->id)) {
@@ -336,7 +385,13 @@ void Press(const std::shared_ptr<Run> &run, not_null<PeerData*> peer) {
 			}
 		}).send();
 	} else if (found->type == Button::Type::Default) {
-		// A button of the keyboard under the input field: its text is sent.
+		// A button of the keyboard under the input field: its text is sent,
+		// under the same rule as a typed line.
+		const auto refused = BotFatherSendRefusal(found->text);
+		if (!refused.isEmpty()) {
+			Finish(run, Failed(refused));
+			return;
+		}
 		run->steps = QStringList{ found->text };
 		run->index = 0;
 		run->tool = u"botfather_send"_q;
@@ -365,6 +420,7 @@ void Read(const std::shared_ptr<Run> &run, not_null<PeerData*> peer) {
 	)).done([=](const MTPmessages_Messages &result) {
 		const auto strong = run->session.get();
 		if (!strong) {
+			Finish(run, Failed(u"The account is gone."_q));
 			return;
 		}
 		const auto owner = &strong->data();
@@ -425,34 +481,42 @@ void RunBotFather(
 		const QJsonObject &arguments,
 		ToolDone done) {
 	const auto run = std::make_shared<Run>();
+	run->account = quint64(session->userId().bare);
 	run->session = base::make_weak(session);
 	run->tool = tool;
 	run->arguments = arguments;
 	run->done = std::move(done);
-	const auto owner = &session->data();
-	const auto username = QString::fromLatin1(kBotFatherUsername);
-	if (const auto known = owner->peerByUsername(username)) {
-		Start(run, known);
-		return;
-	}
-	session->api().request(MTPcontacts_ResolveUsername(
-		MTP_flags(0),
-		MTP_string(username),
-		MTP_string()
-	)).done([=](const MTPcontacts_ResolvedPeer &result) {
-		const auto &data = result.data();
-		owner->processUsers(data.vusers());
-		owner->processChats(data.vchats());
-		const auto peerId = peerFromMTP(data.vpeer());
-		const auto peer = peerId ? owner->peerLoaded(peerId) : nullptr;
-		if (!peer) {
-			Finish(run, Failed(u"@BotFather could not be found."_q));
-		} else {
-			Start(run, peer);
+	Enqueue(run->account, [=] {
+		const auto strong = run->session.get();
+		if (!strong) {
+			Finish(run, Failed(u"The account is gone."_q));
+			return;
 		}
-	}).fail([=](const MTP::Error &error) {
-		Finish(run, Failed(u"Telegram refused: "_q + error.type()));
-	}).send();
+		const auto owner = &strong->data();
+		const auto username = QString::fromLatin1(kBotFatherUsername);
+		if (const auto known = owner->peerByUsername(username)) {
+			Start(run, known);
+			return;
+		}
+		strong->api().request(MTPcontacts_ResolveUsername(
+			MTP_flags(0),
+			MTP_string(username),
+			MTP_string()
+		)).done([=](const MTPcontacts_ResolvedPeer &result) {
+			const auto &data = result.data();
+			owner->processUsers(data.vusers());
+			owner->processChats(data.vchats());
+			const auto peerId = peerFromMTP(data.vpeer());
+			const auto peer = peerId ? owner->peerLoaded(peerId) : nullptr;
+			if (!peer) {
+				Finish(run, Failed(u"@BotFather could not be found."_q));
+			} else {
+				Start(run, peer);
+			}
+		}).fail([=](const MTP::Error &error) {
+			Finish(run, Failed(u"Telegram refused: "_q + error.type()));
+		}).send();
+	});
 }
 
 } // namespace Luckgram::Mcp

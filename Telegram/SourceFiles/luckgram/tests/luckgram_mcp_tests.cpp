@@ -1223,3 +1223,86 @@ LUCKGRAM_TEST(McpBotFatherArguments) {
 	LG_CHECK(LimitOf(S("botfather_send")).perHour > 3);
 	LG_CHECK(LimitOf(S("botfather_read")).perHour > LimitOf(S("botfather_send")).perHour);
 }
+
+LUCKGRAM_TEST(McpBotFatherGeneralToolsAreNotAWayAround) {
+	// What has its own tool, confirmation and limit cannot be typed in.
+	for (const auto text : {
+		"/deletebot",
+		"/DeleteBot",
+		" /deletebot @my_shop_bot",
+		"/deletebot@BotFather",
+		"/revoke",
+		"/revoke@botfather my_shop_bot",
+		"/newbot",
+		"/newbot\nMy Shop",
+		"Yes, I am totally sure.",
+		"yes i am totally sure",
+		"YES,  I AM TOTALLY SURE!",
+	}) {
+		LG_CHECK(!BotFatherSendRefusal(S(text)).isEmpty());
+	}
+	for (const auto text : {
+		"/mybots",
+		"/setuserpic",
+		"/token",
+		"@my_shop_bot",
+		"My Shop",
+		"Enable",
+		"I am sure this name is fine",
+		"/deletebots_help_text is not a command",
+	}) {
+		LG_CHECK(BotFatherSendRefusal(S(text)).isEmpty());
+	}
+	for (const auto button : {
+		"Delete Bot",
+		"Yes, delete the bot",
+		"Revoke current token",
+		"Transfer Ownership",
+		"DELETE",
+	}) {
+		LG_CHECK(!BotFatherPressRefusal(S(button)).isEmpty());
+	}
+	for (const auto button : {
+		"@my_shop_bot",
+		"Edit Bot",
+		"API Token",
+		"Bot Settings",
+		"« Back to Bot",
+		"Edit Name",
+	}) {
+		LG_CHECK(BotFatherPressRefusal(S(button)).isEmpty());
+	}
+
+	// Through the tools: refused before anything reaches the account, and
+	// without using up the limit.
+	auto fake = Fake();
+	fake.enabled = { S("botfather/111") };
+	LG_CHECK(ErrorText(ToolReply(
+		fake,
+		"botfather_send",
+		R"({"text":"/deletebot"})")).contains(S("botfather_delete_bot")));
+	LG_CHECK(ErrorText(ToolReply(
+		fake,
+		"botfather_send",
+		R"({"text":"/newbot"})")).contains(S("botfather_create_bot")));
+	LG_CHECK(ErrorText(ToolReply(
+		fake,
+		"botfather_send",
+		R"({"text":"Yes, I am totally sure."})")).contains(S("delet")));
+	LG_CHECK(ErrorText(ToolReply(
+		fake,
+		"botfather_press",
+		R"({"message_id":5,"button":"Delete Bot"})")).contains(
+			S("botfather_delete_bot")));
+	LG_CHECK(!ErrorText(ToolReply(
+		fake,
+		"botfather_press",
+		R"({"message_id":5,"button":"Transfer Ownership"})")).isEmpty());
+	LG_EQUAL(fake.calls, 0);
+	LG_CHECK(fake.times.empty());
+	LG_CHECK(!ToolReply(
+		fake,
+		"botfather_send",
+		R"({"text":"/mybots"})").value(S("isError")).toBool());
+	LG_EQUAL(fake.calls, 1);
+}

@@ -223,6 +223,17 @@ inline constexpr auto kBotFatherUserId = quint64(93372553);
 [[nodiscard]] QStringList BotFatherScript(
 	const QString &tool,
 	const QJsonObject &arguments);
+// botfather_send and botfather_press are the general way in, so they must
+// not be a way around the tools that have their own confirmation and their
+// own tighter limit. Empty when the line / the button may go through, else
+// why not and which tool to use instead.
+//  - send: /newbot, /deletebot, /revoke, and the sentence that confirms a
+//    deletion;
+//  - press: any button that deletes a bot, revokes a token or transfers a
+//    bot to another owner.
+[[nodiscard]] QString BotFatherSendRefusal(const QString &text);
+[[nodiscard]] QString BotFatherPressRefusal(const QString &button);
+
 // An answer after which the rest of a script must not be sent: BotFather
 // refused or did not understand, and the next line would be read as
 // something else.

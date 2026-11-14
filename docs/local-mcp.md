@@ -77,6 +77,8 @@ Skill 工具都有可选参数 `account`（`list_accounts` 里的 `id`），不�
 
 - 每个工具都是和 BotFather 的一小段对话：按顺序发送命令和参数，每发一句等它回复再发下一句。BotFather 拒绝或没听懂时立即停下，把它的原话作为错误返回。
 - `botfather_send`、`botfather_press`、`botfather_read` 是通用操作：上面没有覆盖的功能（头像、内联模式、支付、菜单按钮等）都可以用它们一步一步完成。
+- 通用操作不是后门：`botfather_send` 拒绝 `/newbot`、`/deletebot`、`/revoke` 和确认删除的那句话，`botfather_press` 拒绝删除机器人、重置令牌、转让机器人的按钮。这些操作只能走各自的工具（有二次确认和更紧的上限），转让只能由人在应用里做。
+- 同一个账号上的 BotFather 调用排队执行，一次只进行一段对话，不会把一次调用的回复（或令牌）交给另一次调用。
 - 机器人令牌是密钥：`botfather_create_bot`、`botfather_get_token`、`botfather_revoke_token` 会把令牌返回给 AI 工具。只给你愿意让它拿到令牌的账号开启。
 - 开启时桌面版会弹确认框。
 

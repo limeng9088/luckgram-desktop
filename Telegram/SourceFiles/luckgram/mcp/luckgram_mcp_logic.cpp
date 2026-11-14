@@ -574,7 +574,9 @@ constexpr const char *kProtocolVersions[] = {
 		"Skill \"botfather\". Send one message to @BotFather and return "
 		"its answer with the buttons under it. For everything the other "
 		"botfather tools do not cover: read what it asks, then answer "
-		"with this tool or press a button with botfather_press.",
+		"with this tool or press a button with botfather_press. "
+		"/newbot, /deletebot and /revoke are refused here: they have "
+		"their own tools.",
 		properties, false);
 	properties = QJsonObject();
 	properties.insert(Q("message_id"), Property(
@@ -586,7 +588,8 @@ constexpr const char *kProtocolVersions[] = {
 		"The text on the button, exactly as returned."));
 	bf("botfather_press", "Press a BotFather button",
 		"Skill \"botfather\". Press a button under a message of "
-		"@BotFather and return what the message says afterwards.",
+		"@BotFather and return what the message says afterwards. Buttons "
+		"that delete a bot, revoke a token or transfer a bot are refused.",
 		properties, false);
 	properties = QJsonObject();
 	properties.insert(Q("limit"), limit("At most this many, 1-20. Default 5."));
@@ -890,9 +893,19 @@ constexpr const char *kProtocolVersions[] = {
 			result.insert(Q("commands"), list);
 		} else if (tool == Q("botfather_send")) {
 			ok = text("text", 1, 4096, true);
+			if (ok) {
+				*error = BotFatherSendRefusal(
+					result.value(Q("text")).toString());
+				ok = error->isEmpty();
+			}
 		} else if (tool == Q("botfather_press")) {
 			auto id = 0;
 			ok = text("button", 1, 128, true);
+			if (ok) {
+				*error = BotFatherPressRefusal(
+					result.value(Q("button")).toString());
+				ok = error->isEmpty();
+			}
 			if (ok && (arguments.value(Q("message_id")).isUndefined()
 				|| !IntArgument(
 					arguments,
@@ -1994,6 +2007,53 @@ QStringList BotFatherScript(
 		return { value("text") };
 	}
 	return {};
+}
+
+QString BotFatherSendRefusal(const QString &text) {
+	// The command is the first word, without the "@BotFather" that may
+	// follow it, whatever its case.
+	auto word = text.trimmed().section(QChar(' '), 0, 0).section(
+		QChar('\n'),
+		0,
+		0).toLower();
+	const auto at = word.indexOf(QChar('@'));
+	if (at > 0) {
+		word = word.left(at);
+	}
+	if (word == Q("/deletebot")) {
+		return Q("Deleting a bot goes through botfather_delete_bot, which "
+			"asks for the username twice.");
+	} else if (word == Q("/revoke")) {
+		return Q("Revoking a token goes through botfather_revoke_token.");
+	} else if (word == Q("/newbot")) {
+		return Q("Creating a bot goes through botfather_create_bot.");
+	}
+	// "Yes, I am totally sure." with any spacing, case or punctuation.
+	auto letters = QString();
+	for (const auto ch : text) {
+		if (ch.isLetter()) {
+			letters.push_back(ch.toLower());
+		}
+	}
+	if (letters.contains(Q("iamtotallysure"))) {
+		return Q("This sentence confirms deleting a bot. Deleting goes "
+			"through botfather_delete_bot.");
+	}
+	return QString();
+}
+
+QString BotFatherPressRefusal(const QString &button) {
+	const auto text = button.toLower();
+	if (text.contains(Q("delete"))) {
+		return Q("This button deletes a bot. Deleting goes through "
+			"botfather_delete_bot, which asks for the username twice.");
+	} else if (text.contains(Q("revoke"))) {
+		return Q("This button revokes a token. Use botfather_revoke_token.");
+	} else if (text.contains(Q("transfer"))) {
+		return Q("This button gives the bot to another owner. That is done "
+			"by a person in the app, not through this tool.");
+	}
+	return QString();
 }
 
 bool BotFatherRefused(const QString &reply) {
