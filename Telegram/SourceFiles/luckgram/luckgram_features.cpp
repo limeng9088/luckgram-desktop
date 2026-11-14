@@ -23,6 +23,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/d9/luckgram_profile_info.h"
 #include "luckgram/d9/luckgram_shared_activity.h"
 #include "luckgram/luckgram_strings.h"
+#include "luckgram/mcp/luckgram_mcp_logic.h"
+#include "settings/sections/settings_luckgram_mcp.h"
 #include "luckgram/xray/luckgram_xray.h"
 #include "settings/sections/settings_luckgram_discover.h"
 #include "settings/sections/settings_luckgram_privacy.h"
@@ -95,6 +97,18 @@ namespace {
 		.aboutEn = "Export accounts to an encrypted file and import them on a new phone",
 		.defaultValue = true,
 		.subpage = [] { return ::Settings::LuckgramBackup::Id(); },
+	});
+	// Local MCP server: an AI agent on this computer lists the accounts
+	// and switches the active one. Desktop only, off until the user asks.
+	result.push_back({
+		.key = QString::fromLatin1(Mcp::kFeatureKey),
+		.group = Group::AccountPrivacy,
+		.titleZh = "本机 MCP 接口",
+		.titleEn = "Local MCP server",
+		.aboutZh = "让这台电脑上的 AI 工具查看已登录的账号并切换当前账号；点进去复制配置",
+		.aboutEn = "Let AI tools on this computer list the logged-in accounts and switch the active one; click for the config",
+		.defaultValue = false,
+		.subpage = [] { return ::Settings::LuckgramMcp::Id(); },
 	});
 	// ---- 消息与语言 / Messages & Language
 	result.push_back({

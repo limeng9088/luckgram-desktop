@@ -197,6 +197,15 @@ PRIVATE
     settings/sections/settings_luckgram_backup.h
     luckgram/ai/ai_text_logic.cpp
     luckgram/ai/ai_text_logic.h
+    # Local MCP server: list accounts, switch the active one
+    luckgram/mcp/luckgram_mcp.cpp
+    luckgram/mcp/luckgram_mcp.h
+    luckgram/mcp/luckgram_mcp_logic.cpp
+    luckgram/mcp/luckgram_mcp_logic.h
+    luckgram/mcp/luckgram_mcp_server.cpp
+    luckgram/mcp/luckgram_mcp_server.h
+    settings/sections/settings_luckgram_mcp.cpp
+    settings/sections/settings_luckgram_mcp.h
 )
 
 # A generated header rather than a compile definition: switching the option
