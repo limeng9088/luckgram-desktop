@@ -1118,7 +1118,8 @@ jobs:
             -D LUCKGRAM_BUILD_NUMBER=$LUCKGRAM_BUILD \
             -D LUCKGRAM_COMMIT=${{ github.sha }} \
             -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON \
-            -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON
+            -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON \
+            -D LUCKGRAM_MAC_WALLET_CONTENT_OPT="${{ vars.MAC_WALLET_CONTENT_OPT || '-O1' }}"
 
       # The hosted Mac (3 cores, ~7 GB) went down twice after ~2 h 16 min
       # ("runner has received a shutdown signal", no compile error), most
