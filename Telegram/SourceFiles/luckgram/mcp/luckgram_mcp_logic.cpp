@@ -347,6 +347,100 @@ constexpr const char *kProtocolVersions[] = {
 		"chats skill switched on for the account in Luckgram Desktop.",
 		properties,
 		true));
+
+	const auto chat = Property(
+		"string",
+		"The chat: its id from list_chats, or a username (with or without "
+		"@) of a user, group or channel.");
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("chat"), chat);
+	properties.insert(Q("limit"), limit("At most this many, 1-100. Default 20."));
+	properties.insert(Q("before_id"), Property(
+		"integer",
+		"Only messages older than this message id, for the next page. "
+		"Default: from the newest."));
+	result.push_back(Tool(
+		"get_messages",
+		"Get messages",
+		"Skill \"messages\". The latest messages of a chat, newest first: "
+		"id, date, sender, out, text, kind of attachment, the id it "
+		"replies to. Reading them this way does not mark the chat as "
+		"read.",
+		properties,
+		true));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("chat"), chat);
+	properties.insert(Q("text"), Property(
+		"string",
+		"The message text, 1-4096 characters, sent as plain text."));
+	properties.insert(Q("reply_to"), Property(
+		"integer",
+		"Id of the message in this chat to reply to. Optional."));
+	result.push_back(Tool(
+		"send_message",
+		"Send message",
+		"Skill \"messages_send\". Send one text message from the account "
+		"to one chat, through the app's normal sending. At most 30 an hour "
+		"and 200 a day per account; over the limit the call is refused "
+		"and says how long to wait.",
+		properties,
+		false));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("chat"), chat);
+	result.push_back(Tool(
+		"mark_chat_read",
+		"Mark chat read",
+		"Skill \"chats_manage\". Mark every message of one chat as read "
+		"for the account. At most 60 an hour and 500 a day per account.",
+		properties,
+		false));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("chat"), Property(
+		"string",
+		"The public username of the group or channel, with or without @, "
+		"or its id from list_chats."));
+	result.push_back(Tool(
+		"join_chat",
+		"Join group or channel",
+		"Skill \"groups\". Join one public group or channel as the "
+		"account. At most 5 an hour and 20 a day per account.",
+		properties,
+		false));
+	result.push_back(Tool(
+		"leave_chat",
+		"Leave group or channel",
+		"Skill \"groups\". Leave one supergroup or channel the account is "
+		"in. At most 10 an hour and 30 a day per account.",
+		properties,
+		false));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("first_name"), Property(
+		"string",
+		"New first name, 1-64 characters."));
+	properties.insert(Q("last_name"), Property(
+		"string",
+		"New last name, up to 64 characters; empty removes it."));
+	properties.insert(Q("bio"), Property(
+		"string",
+		"New bio, up to 70 characters; empty removes it."));
+	result.push_back(Tool(
+		"update_profile",
+		"Update profile",
+		"Skill \"profile\". Change the name and / or the bio of the "
+		"account; what is left out stays. At most 5 an hour and 10 a day "
+		"per account.",
+		properties,
+		false));
 	return result;
 }
 
@@ -368,6 +462,16 @@ constexpr const char *kProtocolVersions[] = {
 		return kSkillFriendsManage;
 	} else if (tool == Q("list_chats")) {
 		return kSkillChats;
+	} else if (tool == Q("get_messages")) {
+		return kSkillMessages;
+	} else if (tool == Q("send_message")) {
+		return kSkillMessagesSend;
+	} else if (tool == Q("mark_chat_read")) {
+		return kSkillChatsManage;
+	} else if (tool == Q("join_chat") || tool == Q("leave_chat")) {
+		return kSkillGroups;
+	} else if (tool == Q("update_profile")) {
+		return kSkillProfile;
 	}
 	return nullptr;
 }
@@ -495,6 +599,114 @@ constexpr const char *kProtocolVersions[] = {
 			}
 			result.insert(Q(key), value.toString().trimmed().left(64));
 		}
+		return result;
+	}
+	if (tool == Q("update_profile")) {
+		auto given = 0;
+		for (const auto key : { "first_name", "last_name", "bio" }) {
+			const auto value = arguments.value(Q(key));
+			if (value.isUndefined() || value.isNull()) {
+				continue;
+			} else if (!value.isString()) {
+				*error = Q(key) + Q(" must be a string.");
+				return QJsonObject();
+			}
+			const auto text = value.toString().trimmed();
+			const auto max = (Q(key) == Q("bio")) ? 70 : 64;
+			if (text.size() > max
+				|| (Q(key) == Q("first_name") && text.isEmpty())) {
+				*error = Q(key)
+					+ Q(" is too long or empty: at most ")
+					+ QString::number(max)
+					+ Q(" characters, first_name at least 1.");
+				return QJsonObject();
+			}
+			result.insert(Q(key), text);
+			++given;
+		}
+		if (!given) {
+			*error = Q("Give at least one of first_name, last_name or bio.");
+		}
+		return given ? result : QJsonObject();
+	}
+	if (tool == Q("get_messages")
+		|| tool == Q("send_message")
+		|| tool == Q("mark_chat_read")
+		|| tool == Q("join_chat")
+		|| tool == Q("leave_chat")) {
+		const auto send = (tool == Q("send_message"));
+		const auto read = (tool == Q("get_messages"));
+		const auto chat = arguments.value(Q("chat"));
+		if (!chat.isString() && !chat.isDouble()) {
+			*error = Q("chat is required: an id from list_chats or a username.");
+			return QJsonObject();
+		}
+		auto text = chat.isString()
+			? chat.toString().trimmed()
+			: QString::number(quint64(std::max(chat.toDouble(), 0.)));
+		if (text.startsWith(QChar('@'))) {
+			text = text.mid(1);
+		}
+		auto digits = !text.isEmpty();
+		auto name = (text.size() >= 4 && text.size() <= 32);
+		for (const auto ch : text) {
+			const auto code = ch.unicode();
+			const auto digit = (code >= '0' && code <= '9');
+			digits = digits && digit;
+			name = name && (digit
+				|| (code >= 'a' && code <= 'z')
+				|| (code >= 'A' && code <= 'Z')
+				|| (code == '_'));
+		}
+		if (digits && text.toULongLong() > 0) {
+			result.insert(Q("chat_id"), text);
+		} else if (name && !digits) {
+			result.insert(Q("chat_username"), text);
+		} else {
+			*error = Q("chat must be an id from list_chats or a username.");
+			return QJsonObject();
+		}
+		if (!send && !read) {
+			return result;
+		} else if (!send) {
+			auto limit = 0;
+			auto before = 0;
+			if (!IntArgument(arguments, "limit", 20, 1, 100, &limit, error)
+				|| !IntArgument(
+					arguments,
+					"before_id",
+					0,
+					1,
+					2000000000,
+					&before,
+					error)) {
+				return QJsonObject();
+			}
+			result.insert(Q("limit"), limit);
+			result.insert(Q("before_id"), before);
+			return result;
+		}
+		const auto body = arguments.value(Q("text"));
+		// Trimmed like the app's own input field; counted in UTF-16 units
+		// as Telegram counts.
+		const auto message = body.toString().trimmed();
+		if (!body.isString() || message.isEmpty() || message.size() > 4096) {
+			*error = Q("text must be a string of 1 to 4096 characters.");
+			return QJsonObject();
+		}
+		auto reply = 0;
+		if (!IntArgument(
+				arguments,
+				"reply_to",
+				0,
+				1,
+				2000000000,
+				&reply,
+				error)) {
+			return QJsonObject();
+		}
+		result.insert(Q("text"), message);
+		result.insert(Q("reply_to"), reply);
 		return result;
 	}
 	auto limit = 0;
@@ -1068,6 +1280,45 @@ const std::vector<SkillInfo> &Skills() {
 			"查看会话列表和未读数，不含消息内容",
 			"See the chat list and unread counts, no message texts",
 		},
+		{
+			kSkillMessages,
+			"读消息",
+			"Read messages",
+			"读取会话里的消息内容，不会标记已读",
+			"Read the messages of a chat, without marking it read",
+		},
+		{
+			kSkillMessagesSend,
+			"发消息",
+			"Send messages",
+			"以该账号的身份发送文字消息，有频率上限",
+			"Send text messages as this account, rate limited",
+			true,
+		},
+		{
+			kSkillChatsManage,
+			"管理会话",
+			"Manage chats",
+			"把会话标记为已读",
+			"Mark chats as read",
+			true,
+		},
+		{
+			kSkillGroups,
+			"群组和频道",
+			"Groups and channels",
+			"加入公开的群组或频道、退出群组或频道，有频率上限",
+			"Join public groups and channels, leave them; rate limited",
+			true,
+		},
+		{
+			kSkillProfile,
+			"资料",
+			"Profile",
+			"修改昵称和简介，有频率上限",
+			"Change the name and the bio, rate limited",
+			true,
+		},
 	};
 	return result;
 }
@@ -1079,6 +1330,16 @@ RateLimit LimitOf(const QString &tool) {
 		return { 20, 50 };
 	} else if (tool == Q("find_user")) {
 		return { 30, 100 }; // Telegram limits lookups hard.
+	} else if (tool == Q("send_message")) {
+		return { 30, 200 };
+	} else if (tool == Q("mark_chat_read")) {
+		return { 60, 500 };
+	} else if (tool == Q("join_chat")) {
+		return { 5, 20 };
+	} else if (tool == Q("leave_chat")) {
+		return { 10, 30 };
+	} else if (tool == Q("update_profile")) {
+		return { 5, 10 };
 	}
 	return {};
 }
@@ -1283,6 +1544,102 @@ QString ClientConfigJson(const Config &config) {
 	server.insert(Q("headers"), headers);
 	auto servers = QJsonObject();
 	servers.insert(Q("luckgram"), server);
+	auto root = QJsonObject();
+	root.insert(Q("mcpServers"), servers);
+	return QString::fromUtf8(
+		QJsonDocument(root).toJson(QJsonDocument::Indented)).trimmed();
+}
+
+bool IsValidCloudKey(const QString &key) {
+	const auto prefix = Q(kCloudKeyPrefix);
+	return key.startsWith(prefix)
+		&& (key.size() == prefix.size() + 43)
+		&& IsValidToken(key.mid(prefix.size()));
+}
+
+QString CloudKeyFromBytes(const QByteArray &bytes32) {
+	if (bytes32.size() != 32) {
+		return QString();
+	}
+	return Q(kCloudKeyPrefix) + QString::fromLatin1(bytes32.toBase64(
+		QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+}
+
+bool IsValidDeviceId(const QString &id) {
+	if (id.size() < 8 || id.size() > 64) {
+		return false;
+	}
+	for (const auto ch : id) {
+		const auto code = ch.unicode();
+		const auto good = (code >= 'a' && code <= 'z')
+			|| (code >= 'A' && code <= 'Z')
+			|| (code >= '0' && code <= '9')
+			|| (code == '-')
+			|| (code == '_');
+		if (!good) {
+			return false;
+		}
+	}
+	return true;
+}
+
+QByteArray CloudPollBody(
+		const QString &deviceId,
+		const QString &deviceName,
+		const QString &version,
+		const std::vector<CloudResult> &results) {
+	auto list = QJsonArray();
+	for (const auto &result : results) {
+		auto entry = QJsonObject();
+		entry.insert(Q("id"), result.id);
+		entry.insert(Q("response"), result.response);
+		list.push_back(entry);
+	}
+	auto body = QJsonObject();
+	body.insert(Q("device_id"), deviceId);
+	body.insert(Q("device_name"), deviceName);
+	body.insert(Q("version"), version);
+	body.insert(Q("results"), list);
+	return QJsonDocument(body).toJson(QJsonDocument::Compact);
+}
+
+std::vector<CloudRequest> ParseCloudRequests(
+		const QByteArray &json,
+		bool *ok) {
+	auto result = std::vector<CloudRequest>();
+	auto error = QJsonParseError();
+	const auto document = QJsonDocument::fromJson(json, &error);
+	const auto requests = document.object().value(Q("requests"));
+	*ok = (error.error == QJsonParseError::NoError) && requests.isArray();
+	if (!*ok) {
+		return result;
+	}
+	for (const auto &value : requests.toArray()) {
+		const auto entry = value.toObject();
+		const auto id = entry.value(Q("id")).toString();
+		const auto message = entry.value(Q("message"));
+		if (id.isEmpty() || id.size() > 64 || !message.isObject()) {
+			continue;
+		}
+		result.push_back({ id, message.toObject() });
+	}
+	return result;
+}
+
+qint64 CloudRetryDelayMs(int failures) {
+	const auto step = std::clamp(failures, 1, 6);
+	return std::min(qint64(1000) << step, qint64(60) * 1000);
+}
+
+QString CloudClientConfigJson(const QString &key) {
+	auto headers = QJsonObject();
+	headers.insert(Q("Authorization"), Q("Bearer ") + key);
+	auto server = QJsonObject();
+	server.insert(Q("type"), Q("http"));
+	server.insert(Q("url"), Q(kCloudUrl) + Q(kPath));
+	server.insert(Q("headers"), headers);
+	auto servers = QJsonObject();
+	servers.insert(Q("luckgram-cloud"), server);
 	auto root = QJsonObject();
 	root.insert(Q("mcpServers"), servers);
 	return QString::fromUtf8(

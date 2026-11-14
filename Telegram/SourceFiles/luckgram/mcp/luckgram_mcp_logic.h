@@ -48,6 +48,11 @@ struct AccountInfo {
 inline constexpr auto kSkillFriends = "friends";
 inline constexpr auto kSkillFriendsManage = "friends_manage";
 inline constexpr auto kSkillChats = "chats";
+inline constexpr auto kSkillMessages = "messages";
+inline constexpr auto kSkillMessagesSend = "messages_send";
+inline constexpr auto kSkillChatsManage = "chats_manage";
+inline constexpr auto kSkillGroups = "groups";
+inline constexpr auto kSkillProfile = "profile";
 
 struct SkillInfo {
 	const char *key = "";
@@ -195,5 +200,43 @@ void HandleMessageAsync(
 // "mcpServers" entry).
 [[nodiscard]] QString ClientConfigJson(const Config &config);
 [[nodiscard]] QString ServerUrl(int port);
+
+// ---- Cloud MCP (mcp.luckgram.cc, luckgram-server/mcp-relay) ----
+//
+// The app long-polls the relay with the cloud key; the relay hands it the
+// JSON-RPC messages of an AI tool, the app answers them with the same
+// HandleMessageAsync as the local server and sends the answers with its
+// next poll. Skills stay per account and are switched on in the app.
+
+inline constexpr auto kCloudUrl = "https://mcp.luckgram.cc";
+inline constexpr auto kCloudPollPath = "/device/poll";
+inline constexpr auto kCloudKeyPrefix = "lgc_";
+
+// "lgc_" and 43 URL-safe characters: 32 random bytes made on this computer.
+[[nodiscard]] bool IsValidCloudKey(const QString &key);
+[[nodiscard]] QString CloudKeyFromBytes(const QByteArray &bytes32);
+// 8-64 characters of A-Z a-z 0-9 _ -.
+[[nodiscard]] bool IsValidDeviceId(const QString &id);
+
+struct CloudRequest {
+	QString id; // The relay's id of this request.
+	QJsonObject message; // JSON-RPC, as the local server gets it.
+};
+struct CloudResult {
+	QString id;
+	QJsonObject response;
+};
+[[nodiscard]] QByteArray CloudPollBody(
+	const QString &deviceId,
+	const QString &deviceName,
+	const QString &version,
+	const std::vector<CloudResult> &results);
+// Empty with *ok false when the answer is not what the relay sends.
+[[nodiscard]] std::vector<CloudRequest> ParseCloudRequests(
+	const QByteArray &json,
+	bool *ok);
+// 2 s, 4 s, 8 s ... 60 s after that many failed polls in a row.
+[[nodiscard]] qint64 CloudRetryDelayMs(int failures);
+[[nodiscard]] QString CloudClientConfigJson(const QString &key);
 
 } // namespace Luckgram::Mcp

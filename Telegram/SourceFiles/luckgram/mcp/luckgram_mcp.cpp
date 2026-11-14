@@ -5,10 +5,14 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/mcp/luckgram_mcp.h"
 
+#include "api/api_common.h"
 #include "apiwrap.h"
 #include "base/call_delayed.h"
 #include "base/random.h"
 #include "core/application.h"
+#include "data/data_channel.h"
+#include "data/data_chat_participant_status.h"
+#include "data/data_histories.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "data/notify/data_notify_settings.h"
@@ -23,6 +27,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_secure_store.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/luckgram_strings.h"
+#include "luckgram/mcp/luckgram_mcp_cloud.h"
 #include "luckgram/mcp/luckgram_mcp_logic.h"
 #include "luckgram/mcp/luckgram_mcp_server.h"
 #include "main/main_account.h"
@@ -367,6 +372,354 @@ void RemoveFriend(
 	});
 }
 
+// The chat a messages tool names: by the id list_chats gave, or by username.
+void ResolveChat(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		Fn<void(PeerData *peer, ToolOutcome failure)> done) {
+	const auto owner = &session->data();
+	const auto id = arguments.value(u"chat_id"_q).toString();
+	const auto username = arguments.value(u"chat_username"_q).toString();
+	if (!id.isEmpty()) {
+		const auto value = id.toULongLong();
+		// list_chats gives the full peer id; a bare user id works too.
+		auto peer = owner->peerLoaded(PeerId(PeerIdHelper(value)));
+		if (!peer) {
+			peer = owner->userLoaded(UserId(value));
+		}
+		if (!peer) {
+			done(nullptr, Failed(
+				"This account has no chat with this id. Take the id from "
+				"list_chats, or give a username."));
+		} else {
+			done(peer, ToolOutcome());
+		}
+		return;
+	}
+	if (const auto known = owner->peerByUsername(username)) {
+		done(known, ToolOutcome());
+		return;
+	}
+	session->api().request(MTPcontacts_ResolveUsername(
+		MTP_flags(0),
+		MTP_string(username),
+		MTP_string()
+	)).done([=](const MTPcontacts_ResolvedPeer &result) {
+		const auto &data = result.data();
+		owner->processUsers(data.vusers());
+		owner->processChats(data.vchats());
+		const auto peerId = peerFromMTP(data.vpeer());
+		const auto peer = peerId ? owner->peerLoaded(peerId) : nullptr;
+		if (!peer) {
+			done(nullptr, Failed("Nothing has this username."));
+		} else {
+			done(peer, ToolOutcome());
+		}
+	}).fail([=](const MTP::Error &error) {
+		done(nullptr, ServerError(error));
+	}).send();
+}
+
+[[nodiscard]] QString MediaKind(const MTPMessageMedia &media) {
+	switch (media.type()) {
+	case mtpc_messageMediaEmpty: return QString();
+	case mtpc_messageMediaPhoto: return u"photo"_q;
+	case mtpc_messageMediaDocument: return u"file"_q;
+	case mtpc_messageMediaWebPage: return u"link_preview"_q;
+	case mtpc_messageMediaGeo:
+	case mtpc_messageMediaGeoLive:
+	case mtpc_messageMediaVenue: return u"location"_q;
+	case mtpc_messageMediaContact: return u"contact"_q;
+	case mtpc_messageMediaPoll: return u"poll"_q;
+	}
+	return u"other"_q;
+}
+
+// Skill "messages". Asked from the server and read from the answer: the
+// chat in the app is not touched, nothing is marked as read.
+void GetMessages(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	const auto limit = arguments.value(u"limit"_q).toInt();
+	const auto before = arguments.value(u"before_id"_q).toInt();
+	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
+		if (!peer) {
+			done(std::move(failure));
+			return;
+		}
+		const auto owner = &session->data();
+		const auto self = session->userPeerId();
+		const auto chatId = peer->id;
+		const auto parse = [=](const QVector<MTPMessage> &list) {
+			auto messages = QJsonArray();
+			for (const auto &message : list) {
+				auto entry = QJsonObject();
+				auto from = PeerId();
+				message.match([&](const MTPDmessage &data) {
+					entry.insert(u"id"_q, data.vid().v);
+					entry.insert(u"date"_q, data.vdate().v);
+					entry.insert(u"out"_q, data.is_out());
+					entry.insert(u"text"_q, qs(data.vmessage()));
+					if (const auto media = data.vmedia()) {
+						const auto kind = MediaKind(*media);
+						if (!kind.isEmpty()) {
+							entry.insert(u"attachment"_q, kind);
+						}
+					}
+					if (const auto reply = data.vreply_to()) {
+						reply->match([&](const MTPDmessageReplyHeader &d) {
+							if (const auto id = d.vreply_to_msg_id()) {
+								entry.insert(u"reply_to"_q, id->v);
+							}
+						}, [](const auto &) {
+						});
+					}
+					from = data.vfrom_id()
+						? peerFromMTP(*data.vfrom_id())
+						: data.is_out()
+						? self
+						: chatId;
+				}, [&](const MTPDmessageService &data) {
+					entry.insert(u"id"_q, data.vid().v);
+					entry.insert(u"date"_q, data.vdate().v);
+					entry.insert(u"out"_q, data.is_out());
+					entry.insert(u"service"_q, true);
+					from = data.vfrom_id()
+						? peerFromMTP(*data.vfrom_id())
+						: chatId;
+				}, [](const MTPDmessageEmpty &) {
+				});
+				if (entry.isEmpty()) {
+					continue;
+				}
+				if (from) {
+					entry.insert(
+						u"from_id"_q,
+						QString::number(quint64(from.value)));
+					if (const auto sender = owner->peerLoaded(from)) {
+						entry.insert(u"from_name"_q, sender->name());
+					}
+				}
+				messages.push_back(entry);
+			}
+			auto result = ToolOutcome();
+			result.value.insert(
+				u"chat_id"_q,
+				QString::number(quint64(chatId.value)));
+			result.value.insert(u"chat_name"_q, peer->name());
+			result.value.insert(u"messages"_q, messages);
+			done(std::move(result));
+		};
+		session->api().request(MTPmessages_GetHistory(
+			peer->input(),
+			MTP_int(before),
+			MTP_int(0),
+			MTP_int(0),
+			MTP_int(limit),
+			MTP_int(0),
+			MTP_int(0),
+			MTP_long(0)
+		)).done([=](const MTPmessages_Messages &result) {
+			result.match([&](const MTPDmessages_messagesNotModified &) {
+				parse(QVector<MTPMessage>());
+			}, [&](const auto &data) {
+				owner->processUsers(data.vusers());
+				owner->processChats(data.vchats());
+				parse(data.vmessages().v);
+			});
+		}).fail([=](const MTP::Error &error) {
+			done(ServerError(error));
+		}).send();
+	});
+}
+
+// Skill "messages_send": the app's own sending, one plain text message.
+void SendMessage(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	const auto text = arguments.value(u"text"_q).toString();
+	const auto reply = arguments.value(u"reply_to"_q).toInt();
+	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
+		if (!peer) {
+			done(std::move(failure));
+			return;
+		} else if (!Data::CanSendTexts(peer)) {
+			done(Failed("This account can't write in this chat."));
+			return;
+		}
+		const auto history = session->data().history(peer);
+		auto message = Api::MessageToSend(Api::SendAction(history));
+		message.textWithTags = { text, TextWithTags::Tags() };
+		message.action.clearDraft = false; // The user's draft stays.
+		if (reply > 0) {
+			message.action.replyTo.messageId = FullMsgId(
+				peer->id,
+				MsgId(reply));
+		}
+		session->api().sendMessage(std::move(message));
+		auto result = ToolOutcome();
+		// Handed to the app's send queue: it is delivered, or shown as
+		// failed in the chat, like a message typed by hand.
+		result.value.insert(u"queued"_q, true);
+		result.value.insert(
+			u"chat_id"_q,
+			QString::number(quint64(peer->id.value)));
+		result.value.insert(u"chat_name"_q, peer->name());
+		done(std::move(result));
+	});
+}
+
+[[nodiscard]] QJsonObject ChatJson(not_null<PeerData*> peer) {
+	auto result = QJsonObject();
+	result.insert(u"chat_id"_q, QString::number(quint64(peer->id.value)));
+	result.insert(u"chat_name"_q, peer->name());
+	return result;
+}
+
+// Skill "chats_manage".
+void MarkChatRead(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
+		if (!peer) {
+			done(std::move(failure));
+			return;
+		}
+		const auto history = session->data().historyLoaded(peer);
+		if (!history) {
+			done(Failed("This account has no chat with it yet."));
+			return;
+		}
+		const auto was = history->unreadCount();
+		session->data().histories().readInbox(history);
+		auto result = ToolOutcome();
+		result.value = ChatJson(peer);
+		result.value.insert(u"was_unread"_q, was);
+		done(std::move(result));
+	});
+}
+
+// Skill "groups".
+void JoinChat(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
+		const auto channel = peer ? peer->asChannel() : nullptr;
+		if (!peer) {
+			done(std::move(failure));
+			return;
+		} else if (!channel) {
+			done(Failed("This is not a public group or channel."));
+			return;
+		} else if (channel->amIn()) {
+			auto result = ToolOutcome();
+			result.value = ChatJson(peer);
+			result.value.insert(u"joined"_q, false);
+			result.value.insert(u"already_member"_q, true);
+			done(std::move(result));
+			return;
+		}
+		session->api().request(MTPchannels_JoinChannel(
+			channel->inputChannel()
+		)).done([=](const MTPmessages_ChatInviteJoinResult &result) {
+			result.match([&](const MTPDmessages_chatInviteJoinResultOk &data) {
+				session->api().applyUpdates(data.vupdates());
+				auto outcome = ToolOutcome();
+				outcome.value = ChatJson(peer);
+				outcome.value.insert(u"joined"_q, true);
+				outcome.value.insert(u"already_member"_q, false);
+				done(std::move(outcome));
+			}, [&](const auto &) {
+				done(Failed(
+					"This group asks new members a question first. A "
+					"person has to join it in the app."));
+			});
+		}).fail([=](const MTP::Error &error) {
+			done(ServerError(error));
+		}).send();
+	});
+}
+
+void LeaveChat(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
+		const auto channel = peer ? peer->asChannel() : nullptr;
+		if (!peer) {
+			done(std::move(failure));
+			return;
+		} else if (!channel) {
+			done(Failed("Only supergroups and channels can be left here."));
+			return;
+		} else if (channel->amCreator()) {
+			done(Failed(
+				"The account owns this chat. Leaving it is done by hand "
+				"in the app."));
+			return;
+		} else if (!channel->amIn()) {
+			auto result = ToolOutcome();
+			result.value = ChatJson(peer);
+			result.value.insert(u"left"_q, false);
+			result.value.insert(u"was_member"_q, false);
+			done(std::move(result));
+			return;
+		}
+		session->api().request(MTPchannels_LeaveChannel(
+			channel->inputChannel()
+		)).done([=](const MTPUpdates &updates) {
+			session->api().applyUpdates(updates);
+			auto result = ToolOutcome();
+			result.value = ChatJson(peer);
+			result.value.insert(u"left"_q, true);
+			result.value.insert(u"was_member"_q, true);
+			done(std::move(result));
+		}).fail([=](const MTP::Error &error) {
+			done(ServerError(error));
+		}).send();
+	});
+}
+
+// Skill "profile".
+void UpdateProfile(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	using Flag = MTPaccount_UpdateProfile::Flag;
+	const auto first = arguments.contains(u"first_name"_q);
+	const auto last = arguments.contains(u"last_name"_q);
+	const auto bio = arguments.contains(u"bio"_q);
+	const auto flags = (first ? Flag::f_first_name : Flag(0))
+		| (last ? Flag::f_last_name : Flag(0))
+		| (bio ? Flag::f_about : Flag(0));
+	session->api().request(MTPaccount_UpdateProfile(
+		MTP_flags(flags),
+		MTP_string(arguments.value(u"first_name"_q).toString()),
+		MTP_string(arguments.value(u"last_name"_q).toString()),
+		MTP_string(arguments.value(u"bio"_q).toString())
+	)).done([=](const MTPUser &result) {
+		const auto user = session->data().processUser(result);
+		if (bio) {
+			user->setAbout(arguments.value(u"bio"_q).toString());
+		}
+		auto outcome = ToolOutcome();
+		outcome.value.insert(u"updated"_q, true);
+		outcome.value.insert(u"name"_q, user->name());
+		if (bio) {
+			outcome.value.insert(
+				u"bio"_q,
+				arguments.value(u"bio"_q).toString());
+		}
+		done(std::move(outcome));
+	}).fail([=](const MTP::Error &error) {
+		done(ServerError(error));
+	}).send();
+}
+
 // Skill "chats".
 [[nodiscard]] ToolOutcome ChatsOf(
 		not_null<Main::Session*> session,
@@ -460,6 +813,18 @@ void RemoveFriend(
 			ListFriends(session, arguments, std::move(done));
 		} else if (tool == u"list_chats"_q) {
 			done(ChatsOf(session, arguments));
+		} else if (tool == u"get_messages"_q) {
+			GetMessages(session, arguments, std::move(done));
+		} else if (tool == u"send_message"_q) {
+			SendMessage(session, arguments, std::move(done));
+		} else if (tool == u"mark_chat_read"_q) {
+			MarkChatRead(session, arguments, std::move(done));
+		} else if (tool == u"join_chat"_q) {
+			JoinChat(session, arguments, std::move(done));
+		} else if (tool == u"leave_chat"_q) {
+			LeaveChat(session, arguments, std::move(done));
+		} else if (tool == u"update_profile"_q) {
+			UpdateProfile(session, arguments, std::move(done));
 		} else if (tool == u"find_user"_q) {
 			FindUser(session, arguments, std::move(done));
 		} else if (tool == u"add_friend"_q) {
@@ -561,6 +926,10 @@ void Listen() {
 
 } // namespace
 
+Backend AppBackend() {
+	return MakeBackend();
+}
+
 void Start() {
 	auto &state = State();
 	if (state.started) {
@@ -585,6 +954,7 @@ void Start() {
 			state.lifetime.destroy();
 			state.server = nullptr;
 		});
+	Cloud::Start();
 }
 
 bool Running() {

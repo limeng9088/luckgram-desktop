@@ -370,7 +370,13 @@ LUCKGRAM_TEST(McpInitializeAndToolsList) {
 		S("find_user"),
 		S("add_friend"),
 		S("remove_friend"),
-		S("list_chats") }));
+		S("list_chats"),
+		S("get_messages"),
+		S("send_message"),
+		S("mark_chat_read"),
+		S("join_chat"),
+		S("leave_chat"),
+		S("update_profile") }));
 
 	reply = HandleMessage(
 		J(R"({"jsonrpc":"2.0","id":4,"method":"resources/list"})"),
@@ -680,7 +686,7 @@ LUCKGRAM_TEST(McpSkillLockedAndLate) {
 }
 
 LUCKGRAM_TEST(McpSkillRegistry) {
-	LG_EQUAL(int(Skills().size()), 3);
+	LG_EQUAL(int(Skills().size()), 8);
 	LG_CHECK(!Skills()[0].write);
 	LG_CHECK(Skills()[1].write); // friends_manage asks before it goes on.
 	LG_EQUAL(
@@ -814,4 +820,221 @@ LUCKGRAM_TEST(McpRateLimitPerAccount) {
 		S("FLOOD_WAIT_30"));
 	LG_EQUAL(int(fake.backend().loadTimes(
 		RateSettingKey(S("add_friend"), 111)).size()), 7);
+}
+
+LUCKGRAM_TEST(McpMessagesArguments) {
+	auto fake = Fake();
+	fake.enabled = { S("messages/111"), S("messages_send/111") };
+
+	ToolReply(fake, "get_messages", R"({"chat":"7000000000009"})");
+	LG_EQUAL(fake.calledTool, S("get_messages"));
+	LG_EQUAL(fake.calledArguments.value(S("chat_id")).toString(), S("7000000000009"));
+	LG_CHECK(!fake.calledArguments.contains(S("chat_username")));
+	LG_EQUAL(fake.calledArguments.value(S("limit")).toInt(), 20);
+	LG_EQUAL(fake.calledArguments.value(S("before_id")).toInt(), 0);
+	ToolReply(fake, "get_messages", R"({"chat":"@durov","limit":100,"before_id":55})");
+	LG_EQUAL(fake.calledArguments.value(S("chat_username")).toString(), S("durov"));
+	LG_EQUAL(fake.calledArguments.value(S("limit")).toInt(), 100);
+	LG_EQUAL(fake.calledArguments.value(S("before_id")).toInt(), 55);
+
+	ToolReply(fake, "send_message", R"({"chat":"some_group","text":"  hello \n","reply_to":9})");
+	LG_EQUAL(fake.calledTool, S("send_message"));
+	LG_EQUAL(fake.calledArguments.value(S("text")).toString(), S("hello"));
+	LG_EQUAL(fake.calledArguments.value(S("reply_to")).toInt(), 9);
+
+	const auto before = fake.calls;
+	const auto bad = [&](const char *tool, const char *arguments) {
+		LG_CHECK(!ErrorText(ToolReply(fake, tool, arguments)).isEmpty());
+	};
+	bad("get_messages", "{}");
+	bad("get_messages", R"({"chat":""})");
+	bad("get_messages", R"({"chat":"0"})");
+	bad("get_messages", R"({"chat":"a b"})");
+	bad("get_messages", R"({"chat":"https://t.me/x"})");
+	bad("get_messages", R"({"chat":"durov","limit":101})");
+	bad("get_messages", R"({"chat":"durov","before_id":0})");
+	bad("send_message", R"({"chat":"durov"})");
+	bad("send_message", R"({"chat":"durov","text":"   "})");
+	bad("send_message", R"({"chat":"durov","text":5})");
+	bad("send_message", R"({"text":"hi"})");
+	bad("send_message", R"({"chat":"durov","text":"hi","reply_to":-1})");
+	const auto tooLong = QByteArray(R"({"chat":"durov","text":")")
+		+ QByteArray(4097, 'a') + "\"}";
+	bad("send_message", tooLong.constData());
+	LG_EQUAL(fake.calls, before);
+}
+
+LUCKGRAM_TEST(McpSendingIsItsOwnSwitchAndLimited) {
+	auto fake = Fake();
+	fake.enabled = { S("messages/111") };
+	// Reading does not allow sending.
+	LG_CHECK(ErrorText(ToolReply(
+		fake,
+		"send_message",
+		R"({"chat":"durov","text":"hi"})")).contains(S("messages_send")));
+	LG_EQUAL(fake.calls, 0);
+
+	fake.enabled.push_back(S("messages_send/111"));
+	for (auto i = 0; i != 30; ++i) {
+		LG_CHECK(!ToolReply(
+			fake,
+			"send_message",
+			R"({"chat":"durov","text":"hi"})").value(S("isError")).toBool());
+		fake.now += 1000;
+	}
+	LG_CHECK(ErrorText(ToolReply(
+		fake,
+		"send_message",
+		R"({"chat":"durov","text":"hi"})")).contains(S("Rate limit")));
+	LG_EQUAL(fake.calls, 30);
+	// Reading is not limited.
+	LG_EQUAL(LimitOf(S("get_messages")).perHour, 0);
+}
+
+LUCKGRAM_TEST(McpCloudKeysAndIds) {
+	const auto key = CloudKeyFromBytes(QByteArray(32, char(0xAB)));
+	LG_EQUAL(int(key.size()), 47);
+	LG_CHECK(key.startsWith(S("lgc_")));
+	LG_CHECK(IsValidCloudKey(key));
+	LG_CHECK(!IsValidCloudKey(key.mid(4))); // The local token is not one.
+	LG_CHECK(!IsValidCloudKey(key + S("a")));
+	LG_CHECK(!IsValidCloudKey(key.left(46) + S("=")));
+	LG_CHECK(!IsValidCloudKey(QString()));
+	LG_CHECK(CloudKeyFromBytes(QByteArray(31, 'a')).isEmpty());
+
+	LG_CHECK(IsValidDeviceId(S("abcDEF_0-9")));
+	LG_CHECK(!IsValidDeviceId(S("short")));
+	LG_CHECK(!IsValidDeviceId(S("has space in it")));
+	LG_CHECK(!IsValidDeviceId(QString(65, QChar('a'))));
+}
+
+LUCKGRAM_TEST(McpCloudPollRoundTrip) {
+	auto reply = QJsonObject();
+	reply.insert(S("jsonrpc"), S("2.0"));
+	reply.insert(S("id"), 1);
+	const auto body = J(CloudPollBody(
+		S("device-01"),
+		S("办公室电脑"),
+		S("7.4.2"),
+		{ { S("r5"), reply } }));
+	LG_EQUAL(body.value(S("device_id")).toString(), S("device-01"));
+	LG_EQUAL(body.value(S("device_name")).toString(), S("办公室电脑"));
+	const auto results = body.value(S("results")).toArray();
+	LG_EQUAL(int(results.size()), 1);
+	LG_EQUAL(results.at(0).toObject().value(S("id")).toString(), S("r5"));
+	LG_CHECK(results.at(0).toObject().value(S("response")).toObject() == reply);
+	LG_CHECK(J(CloudPollBody(S("d"), S("n"), S("v"), {})).value(
+		S("results")).toArray().isEmpty());
+
+	auto ok = false;
+	const auto requests = ParseCloudRequests(R"({"requests":[
+		{"id":"r1","message":{"jsonrpc":"2.0","id":1,"method":"tools/list"}},
+		{"id":"","message":{}},
+		{"id":"r2","message":"text"},
+		5,
+		{"id":"r3","message":{"jsonrpc":"2.0","id":1,"method":"ping"}}]})", &ok);
+	LG_CHECK(ok);
+	LG_EQUAL(int(requests.size()), 2);
+	LG_EQUAL(requests[0].id, S("r1"));
+	LG_EQUAL(requests[0].message.value(S("method")).toString(), S("tools/list"));
+	LG_EQUAL(requests[1].id, S("r3"));
+	LG_CHECK(ParseCloudRequests(R"({"requests":[]})", &ok).empty());
+	LG_CHECK(ok);
+	// Not the relay: an error page, a login portal.
+	LG_CHECK(ParseCloudRequests("<html>", &ok).empty());
+	LG_CHECK(!ok);
+	LG_CHECK(ParseCloudRequests(R"({"error":"x"})", &ok).empty());
+	LG_CHECK(!ok);
+
+	// What the relay hands over is answered like a local request.
+	auto fake = Fake();
+	const auto answer = HandleMessage(requests[0].message, fake.backend());
+	LG_CHECK(answer.value(S("result")).toObject().contains(S("tools")));
+}
+
+LUCKGRAM_TEST(McpCloudRetryAndConfig) {
+	LG_EQUAL(CloudRetryDelayMs(0), qint64(2000));
+	LG_EQUAL(CloudRetryDelayMs(1), qint64(2000));
+	LG_EQUAL(CloudRetryDelayMs(2), qint64(4000));
+	LG_EQUAL(CloudRetryDelayMs(5), qint64(32000));
+	LG_EQUAL(CloudRetryDelayMs(6), qint64(60000));
+	LG_EQUAL(CloudRetryDelayMs(1000), qint64(60000));
+
+	const auto key = CloudKeyFromBytes(QByteArray(32, 'k'));
+	const auto server = J(CloudClientConfigJson(key).toUtf8()).value(
+		S("mcpServers")).toObject().value(S("luckgram-cloud")).toObject();
+	LG_EQUAL(server.value(S("url")).toString(), S("https://mcp.luckgram.cc/mcp"));
+	LG_EQUAL(
+		server.value(S("headers")).toObject().value(
+			S("Authorization")).toString(),
+		S("Bearer ") + key);
+}
+
+LUCKGRAM_TEST(McpGroupsProfileAndReadArguments) {
+	auto fake = Fake();
+	fake.enabled = {
+		S("chats_manage/111"),
+		S("groups/111"),
+		S("profile/111"),
+	};
+	ToolReply(fake, "mark_chat_read", R"({"chat":"7000000000009"})");
+	LG_EQUAL(fake.calledTool, S("mark_chat_read"));
+	LG_EQUAL(fake.calledArguments.value(S("chat_id")).toString(), S("7000000000009"));
+	LG_EQUAL(int(fake.calledArguments.size()), 1);
+	ToolReply(fake, "join_chat", R"({"chat":"@some_channel"})");
+	LG_EQUAL(fake.calledTool, S("join_chat"));
+	LG_EQUAL(fake.calledArguments.value(S("chat_username")).toString(), S("some_channel"));
+	ToolReply(fake, "leave_chat", R"({"chat":"some_channel"})");
+	LG_EQUAL(fake.calledTool, S("leave_chat"));
+
+	ToolReply(fake, "update_profile", R"({"first_name":" Li ","bio":""})");
+	LG_EQUAL(fake.calledTool, S("update_profile"));
+	LG_EQUAL(fake.calledArguments.value(S("first_name")).toString(), S("Li"));
+	LG_CHECK(fake.calledArguments.contains(S("bio")));
+	LG_EQUAL(fake.calledArguments.value(S("bio")).toString(), QString());
+	LG_CHECK(!fake.calledArguments.contains(S("last_name")));
+
+	const auto before = fake.calls;
+	const auto bad = [&](const char *tool, const char *arguments) {
+		LG_CHECK(!ErrorText(ToolReply(fake, tool, arguments)).isEmpty());
+	};
+	bad("mark_chat_read", "{}");
+	bad("join_chat", R"({"chat":"https://t.me/+abcdef"})");
+	bad("leave_chat", R"({"chat":""})");
+	bad("update_profile", "{}");
+	bad("update_profile", R"({"first_name":""})");
+	bad("update_profile", R"({"first_name":5})");
+	const auto longBio = QByteArray(R"({"bio":")") + QByteArray(71, 'a') + "\"}";
+	bad("update_profile", longBio.constData());
+	LG_EQUAL(fake.calls, before);
+
+	// Each is its own switch, and every one of them is limited.
+	auto other = Fake();
+	other.enabled = { S("chats/111"), S("messages/111") };
+	LG_CHECK(ErrorText(ToolReply(
+		other,
+		"mark_chat_read",
+		R"({"chat":"durov"})")).contains(S("chats_manage")));
+	LG_CHECK(ErrorText(ToolReply(
+		other,
+		"join_chat",
+		R"({"chat":"durov"})")).contains(S("groups")));
+	for (const auto tool : {
+		"mark_chat_read",
+		"join_chat",
+		"leave_chat",
+		"update_profile",
+	}) {
+		LG_CHECK(LimitOf(S(tool)).perHour > 0);
+		LG_CHECK(LimitOf(S(tool)).perDay >= LimitOf(S(tool)).perHour);
+	}
+	// Every skill that changes something is marked so (asks when it goes
+	// on), every read skill is not.
+	for (const auto &skill : Skills()) {
+		const auto key = S(skill.key);
+		const auto read = (key == S("friends"))
+			|| (key == S("chats"))
+			|| (key == S("messages"));
+		LG_EQUAL(skill.write, !read);
+	}
 }
