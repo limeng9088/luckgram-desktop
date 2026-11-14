@@ -10,7 +10,9 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "base/call_delayed.h"
 #include "base/random.h"
 #include "core/application.h"
+#include "data/data_channel.h"
 #include "data/data_chat_participant_status.h"
+#include "data/data_histories.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "data/notify/data_notify_settings.h"
@@ -569,6 +571,155 @@ void SendMessage(
 	});
 }
 
+[[nodiscard]] QJsonObject ChatJson(not_null<PeerData*> peer) {
+	auto result = QJsonObject();
+	result.insert(u"chat_id"_q, QString::number(quint64(peer->id.value)));
+	result.insert(u"chat_name"_q, peer->name());
+	return result;
+}
+
+// Skill "chats_manage".
+void MarkChatRead(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
+		if (!peer) {
+			done(std::move(failure));
+			return;
+		}
+		const auto history = session->data().historyLoaded(peer);
+		if (!history) {
+			done(Failed("This account has no chat with it yet."));
+			return;
+		}
+		const auto was = history->unreadCount();
+		session->data().histories().readInbox(history);
+		auto result = ToolOutcome();
+		result.value = ChatJson(peer);
+		result.value.insert(u"was_unread"_q, was);
+		done(std::move(result));
+	});
+}
+
+// Skill "groups".
+void JoinChat(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
+		const auto channel = peer ? peer->asChannel() : nullptr;
+		if (!peer) {
+			done(std::move(failure));
+			return;
+		} else if (!channel) {
+			done(Failed("This is not a public group or channel."));
+			return;
+		} else if (channel->amIn()) {
+			auto result = ToolOutcome();
+			result.value = ChatJson(peer);
+			result.value.insert(u"joined"_q, false);
+			result.value.insert(u"already_member"_q, true);
+			done(std::move(result));
+			return;
+		}
+		session->api().request(MTPchannels_JoinChannel(
+			channel->inputChannel()
+		)).done([=](const MTPmessages_ChatInviteJoinResult &result) {
+			result.match([&](const MTPDmessages_chatInviteJoinResultOk &data) {
+				session->api().applyUpdates(data.vupdates());
+				auto outcome = ToolOutcome();
+				outcome.value = ChatJson(peer);
+				outcome.value.insert(u"joined"_q, true);
+				outcome.value.insert(u"already_member"_q, false);
+				done(std::move(outcome));
+			}, [&](const auto &) {
+				done(Failed(
+					"This group asks new members a question first. A "
+					"person has to join it in the app."));
+			});
+		}).fail([=](const MTP::Error &error) {
+			done(ServerError(error));
+		}).send();
+	});
+}
+
+void LeaveChat(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
+		const auto channel = peer ? peer->asChannel() : nullptr;
+		if (!peer) {
+			done(std::move(failure));
+			return;
+		} else if (!channel) {
+			done(Failed("Only supergroups and channels can be left here."));
+			return;
+		} else if (channel->amCreator()) {
+			done(Failed(
+				"The account owns this chat. Leaving it is done by hand "
+				"in the app."));
+			return;
+		} else if (!channel->amIn()) {
+			auto result = ToolOutcome();
+			result.value = ChatJson(peer);
+			result.value.insert(u"left"_q, false);
+			result.value.insert(u"was_member"_q, false);
+			done(std::move(result));
+			return;
+		}
+		session->api().request(MTPchannels_LeaveChannel(
+			channel->inputChannel()
+		)).done([=](const MTPUpdates &updates) {
+			session->api().applyUpdates(updates);
+			auto result = ToolOutcome();
+			result.value = ChatJson(peer);
+			result.value.insert(u"left"_q, true);
+			result.value.insert(u"was_member"_q, true);
+			done(std::move(result));
+		}).fail([=](const MTP::Error &error) {
+			done(ServerError(error));
+		}).send();
+	});
+}
+
+// Skill "profile".
+void UpdateProfile(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	using Flag = MTPaccount_UpdateProfile::Flag;
+	const auto first = arguments.contains(u"first_name"_q);
+	const auto last = arguments.contains(u"last_name"_q);
+	const auto bio = arguments.contains(u"bio"_q);
+	const auto flags = (first ? Flag::f_first_name : Flag(0))
+		| (last ? Flag::f_last_name : Flag(0))
+		| (bio ? Flag::f_about : Flag(0));
+	session->api().request(MTPaccount_UpdateProfile(
+		MTP_flags(flags),
+		MTP_string(arguments.value(u"first_name"_q).toString()),
+		MTP_string(arguments.value(u"last_name"_q).toString()),
+		MTP_string(arguments.value(u"bio"_q).toString())
+	)).done([=](const MTPUser &result) {
+		const auto user = session->data().processUser(result);
+		if (bio) {
+			user->setAbout(arguments.value(u"bio"_q).toString());
+		}
+		auto outcome = ToolOutcome();
+		outcome.value.insert(u"updated"_q, true);
+		outcome.value.insert(u"name"_q, user->name());
+		if (bio) {
+			outcome.value.insert(
+				u"bio"_q,
+				arguments.value(u"bio"_q).toString());
+		}
+		done(std::move(outcome));
+	}).fail([=](const MTP::Error &error) {
+		done(ServerError(error));
+	}).send();
+}
+
 // Skill "chats".
 [[nodiscard]] ToolOutcome ChatsOf(
 		not_null<Main::Session*> session,
@@ -666,6 +817,14 @@ void SendMessage(
 			GetMessages(session, arguments, std::move(done));
 		} else if (tool == u"send_message"_q) {
 			SendMessage(session, arguments, std::move(done));
+		} else if (tool == u"mark_chat_read"_q) {
+			MarkChatRead(session, arguments, std::move(done));
+		} else if (tool == u"join_chat"_q) {
+			JoinChat(session, arguments, std::move(done));
+		} else if (tool == u"leave_chat"_q) {
+			LeaveChat(session, arguments, std::move(done));
+		} else if (tool == u"update_profile"_q) {
+			UpdateProfile(session, arguments, std::move(done));
 		} else if (tool == u"find_user"_q) {
 			FindUser(session, arguments, std::move(done));
 		} else if (tool == u"add_friend"_q) {

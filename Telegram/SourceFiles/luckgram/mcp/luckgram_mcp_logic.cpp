@@ -389,6 +389,58 @@ constexpr const char *kProtocolVersions[] = {
 		"and says how long to wait.",
 		properties,
 		false));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("chat"), chat);
+	result.push_back(Tool(
+		"mark_chat_read",
+		"Mark chat read",
+		"Skill \"chats_manage\". Mark every message of one chat as read "
+		"for the account. At most 60 an hour and 500 a day per account.",
+		properties,
+		false));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("chat"), Property(
+		"string",
+		"The public username of the group or channel, with or without @, "
+		"or its id from list_chats."));
+	result.push_back(Tool(
+		"join_chat",
+		"Join group or channel",
+		"Skill \"groups\". Join one public group or channel as the "
+		"account. At most 5 an hour and 20 a day per account.",
+		properties,
+		false));
+	result.push_back(Tool(
+		"leave_chat",
+		"Leave group or channel",
+		"Skill \"groups\". Leave one supergroup or channel the account is "
+		"in. At most 10 an hour and 30 a day per account.",
+		properties,
+		false));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("first_name"), Property(
+		"string",
+		"New first name, 1-64 characters."));
+	properties.insert(Q("last_name"), Property(
+		"string",
+		"New last name, up to 64 characters; empty removes it."));
+	properties.insert(Q("bio"), Property(
+		"string",
+		"New bio, up to 70 characters; empty removes it."));
+	result.push_back(Tool(
+		"update_profile",
+		"Update profile",
+		"Skill \"profile\". Change the name and / or the bio of the "
+		"account; what is left out stays. At most 5 an hour and 10 a day "
+		"per account.",
+		properties,
+		false));
 	return result;
 }
 
@@ -414,6 +466,12 @@ constexpr const char *kProtocolVersions[] = {
 		return kSkillMessages;
 	} else if (tool == Q("send_message")) {
 		return kSkillMessagesSend;
+	} else if (tool == Q("mark_chat_read")) {
+		return kSkillChatsManage;
+	} else if (tool == Q("join_chat") || tool == Q("leave_chat")) {
+		return kSkillGroups;
+	} else if (tool == Q("update_profile")) {
+		return kSkillProfile;
 	}
 	return nullptr;
 }
@@ -543,8 +601,41 @@ constexpr const char *kProtocolVersions[] = {
 		}
 		return result;
 	}
-	if (tool == Q("get_messages") || tool == Q("send_message")) {
+	if (tool == Q("update_profile")) {
+		auto given = 0;
+		for (const auto key : { "first_name", "last_name", "bio" }) {
+			const auto value = arguments.value(Q(key));
+			if (value.isUndefined() || value.isNull()) {
+				continue;
+			} else if (!value.isString()) {
+				*error = Q(key) + Q(" must be a string.");
+				return QJsonObject();
+			}
+			const auto text = value.toString().trimmed();
+			const auto max = (Q(key) == Q("bio")) ? 70 : 64;
+			if (text.size() > max
+				|| (Q(key) == Q("first_name") && text.isEmpty())) {
+				*error = Q(key)
+					+ Q(" is too long or empty: at most ")
+					+ QString::number(max)
+					+ Q(" characters, first_name at least 1.");
+				return QJsonObject();
+			}
+			result.insert(Q(key), text);
+			++given;
+		}
+		if (!given) {
+			*error = Q("Give at least one of first_name, last_name or bio.");
+		}
+		return given ? result : QJsonObject();
+	}
+	if (tool == Q("get_messages")
+		|| tool == Q("send_message")
+		|| tool == Q("mark_chat_read")
+		|| tool == Q("join_chat")
+		|| tool == Q("leave_chat")) {
 		const auto send = (tool == Q("send_message"));
+		const auto read = (tool == Q("get_messages"));
 		const auto chat = arguments.value(Q("chat"));
 		if (!chat.isString() && !chat.isDouble()) {
 			*error = Q("chat is required: an id from list_chats or a username.");
@@ -575,7 +666,9 @@ constexpr const char *kProtocolVersions[] = {
 			*error = Q("chat must be an id from list_chats or a username.");
 			return QJsonObject();
 		}
-		if (!send) {
+		if (!send && !read) {
+			return result;
+		} else if (!send) {
 			auto limit = 0;
 			auto before = 0;
 			if (!IntArgument(arguments, "limit", 20, 1, 100, &limit, error)
@@ -1202,6 +1295,30 @@ const std::vector<SkillInfo> &Skills() {
 			"Send text messages as this account, rate limited",
 			true,
 		},
+		{
+			kSkillChatsManage,
+			"管理会话",
+			"Manage chats",
+			"把会话标记为已读",
+			"Mark chats as read",
+			true,
+		},
+		{
+			kSkillGroups,
+			"群组和频道",
+			"Groups and channels",
+			"加入公开的群组或频道、退出群组或频道，有频率上限",
+			"Join public groups and channels, leave them; rate limited",
+			true,
+		},
+		{
+			kSkillProfile,
+			"资料",
+			"Profile",
+			"修改昵称和简介，有频率上限",
+			"Change the name and the bio, rate limited",
+			true,
+		},
 	};
 	return result;
 }
@@ -1215,6 +1332,14 @@ RateLimit LimitOf(const QString &tool) {
 		return { 30, 100 }; // Telegram limits lookups hard.
 	} else if (tool == Q("send_message")) {
 		return { 30, 200 };
+	} else if (tool == Q("mark_chat_read")) {
+		return { 60, 500 };
+	} else if (tool == Q("join_chat")) {
+		return { 5, 20 };
+	} else if (tool == Q("leave_chat")) {
+		return { 10, 30 };
+	} else if (tool == Q("update_profile")) {
+		return { 5, 10 };
 	}
 	return {};
 }

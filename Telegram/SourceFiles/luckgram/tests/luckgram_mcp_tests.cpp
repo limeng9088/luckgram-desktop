@@ -372,7 +372,11 @@ LUCKGRAM_TEST(McpInitializeAndToolsList) {
 		S("remove_friend"),
 		S("list_chats"),
 		S("get_messages"),
-		S("send_message") }));
+		S("send_message"),
+		S("mark_chat_read"),
+		S("join_chat"),
+		S("leave_chat"),
+		S("update_profile") }));
 
 	reply = HandleMessage(
 		J(R"({"jsonrpc":"2.0","id":4,"method":"resources/list"})"),
@@ -682,7 +686,7 @@ LUCKGRAM_TEST(McpSkillLockedAndLate) {
 }
 
 LUCKGRAM_TEST(McpSkillRegistry) {
-	LG_EQUAL(int(Skills().size()), 5);
+	LG_EQUAL(int(Skills().size()), 8);
 	LG_CHECK(!Skills()[0].write);
 	LG_CHECK(Skills()[1].write); // friends_manage asks before it goes on.
 	LG_EQUAL(
@@ -964,4 +968,73 @@ LUCKGRAM_TEST(McpCloudRetryAndConfig) {
 		server.value(S("headers")).toObject().value(
 			S("Authorization")).toString(),
 		S("Bearer ") + key);
+}
+
+LUCKGRAM_TEST(McpGroupsProfileAndReadArguments) {
+	auto fake = Fake();
+	fake.enabled = {
+		S("chats_manage/111"),
+		S("groups/111"),
+		S("profile/111"),
+	};
+	ToolReply(fake, "mark_chat_read", R"({"chat":"7000000000009"})");
+	LG_EQUAL(fake.calledTool, S("mark_chat_read"));
+	LG_EQUAL(fake.calledArguments.value(S("chat_id")).toString(), S("7000000000009"));
+	LG_EQUAL(int(fake.calledArguments.size()), 1);
+	ToolReply(fake, "join_chat", R"({"chat":"@some_channel"})");
+	LG_EQUAL(fake.calledTool, S("join_chat"));
+	LG_EQUAL(fake.calledArguments.value(S("chat_username")).toString(), S("some_channel"));
+	ToolReply(fake, "leave_chat", R"({"chat":"some_channel"})");
+	LG_EQUAL(fake.calledTool, S("leave_chat"));
+
+	ToolReply(fake, "update_profile", R"({"first_name":" Li ","bio":""})");
+	LG_EQUAL(fake.calledTool, S("update_profile"));
+	LG_EQUAL(fake.calledArguments.value(S("first_name")).toString(), S("Li"));
+	LG_CHECK(fake.calledArguments.contains(S("bio")));
+	LG_EQUAL(fake.calledArguments.value(S("bio")).toString(), QString());
+	LG_CHECK(!fake.calledArguments.contains(S("last_name")));
+
+	const auto before = fake.calls;
+	const auto bad = [&](const char *tool, const char *arguments) {
+		LG_CHECK(!ErrorText(ToolReply(fake, tool, arguments)).isEmpty());
+	};
+	bad("mark_chat_read", "{}");
+	bad("join_chat", R"({"chat":"https://t.me/+abcdef"})");
+	bad("leave_chat", R"({"chat":""})");
+	bad("update_profile", "{}");
+	bad("update_profile", R"({"first_name":""})");
+	bad("update_profile", R"({"first_name":5})");
+	const auto longBio = QByteArray(R"({"bio":")") + QByteArray(71, 'a') + "\"}";
+	bad("update_profile", longBio.constData());
+	LG_EQUAL(fake.calls, before);
+
+	// Each is its own switch, and every one of them is limited.
+	auto other = Fake();
+	other.enabled = { S("chats/111"), S("messages/111") };
+	LG_CHECK(ErrorText(ToolReply(
+		other,
+		"mark_chat_read",
+		R"({"chat":"durov"})")).contains(S("chats_manage")));
+	LG_CHECK(ErrorText(ToolReply(
+		other,
+		"join_chat",
+		R"({"chat":"durov"})")).contains(S("groups")));
+	for (const auto tool : {
+		"mark_chat_read",
+		"join_chat",
+		"leave_chat",
+		"update_profile",
+	}) {
+		LG_CHECK(LimitOf(S(tool)).perHour > 0);
+		LG_CHECK(LimitOf(S(tool)).perDay >= LimitOf(S(tool)).perHour);
+	}
+	// Every skill that changes something is marked so (asks when it goes
+	// on), every read skill is not.
+	for (const auto &skill : Skills()) {
+		const auto key = S(skill.key);
+		const auto read = (key == S("friends"))
+			|| (key == S("chats"))
+			|| (key == S("messages"));
+		LG_EQUAL(skill.write, !read);
+	}
 }

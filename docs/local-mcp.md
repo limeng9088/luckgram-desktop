@@ -49,9 +49,13 @@ Skill 工具都有可选参数 `account`（`list_accounts` 里的 `id`），不�
 | 会话 `chats` | `list_chats` | `account`、`unread_only`、`limit`（1–200，默认 50）、`offset` | `total`、`complete`、`chats`：`id`、`type`（user / bot / group / supergroup / channel）、`name`、`username`、`unread`、`unread_mark`、`muted`、`pinned`、`last_message_date` |
 | 读消息 `messages` | `get_messages` | `account`、`chat`（`list_chats` 的 `id` 或用户名）、`limit`（1–100，默认 20）、`before_id` | `chat_id`、`chat_name`、`messages`（从新到旧）：`id`、`date`、`from_id`、`from_name`、`out`、`text`、`attachment`、`reply_to`、`service`。不会把会话标记为已读 |
 | 发消息 `messages_send` | `send_message` | `account`、`chat`、`text`（1–4096 字，纯文本）、`reply_to`（可选） | `queued`、`chat_id`、`chat_name`。每账号每小时 30 次、每天 200 次 |
+| 管理会话 `chats_manage` | `mark_chat_read` | `account`、`chat` | `chat_id`、`chat_name`、`was_unread`。每账号每小时 60 次、每天 500 次 |
+| 群组和频道 `groups` | `join_chat` | `account`、`chat`（公开用户名或 `list_chats` 的 `id`） | `joined`、`already_member`。每账号每小时 5 次、每天 20 次 |
+| 群组和频道 `groups` | `leave_chat` | `account`、`chat` | `left`、`was_member`。只支持超级群和频道，自己创建的不能用它退出。每账号每小时 10 次、每天 30 次 |
+| 资料 `profile` | `update_profile` | `account`，`first_name` / `last_name` / `bio` 至少一个 | `updated`、`name`、`bio`。每账号每小时 5 次、每天 10 次 |
 
 - `send_message` 交给应用自己的发送队列，和手动输入发送一样：发出去，或者在会话里显示发送失败。一次只发给一个会话，没有群发工具。
-- 「管理好友」和「发消息」是会改动账号的 Skill：开启时桌面版会弹确认框，确认一次后该账号不再逐次询问。
+- 「管理好友」「发消息」「管理会话」「群组和频道」「资料」是会改动账号的 Skill：开启时桌面版会弹确认框，确认一次后该账号不再逐次询问。
 - 频率上限按账号、按工具计数，重启后仍然有效，失败的调用也计数。超限时工具返回错误并给出还要等多少秒。上限是为了避免账号被 Telegram 限制，不能关闭。
 - Telegram 自己返回 `FLOOD_WAIT` 时，工具会把要等的秒数原样告诉调用方。
 - `list_chats` 只返回主列表（不含归档），不返回任何消息内容。`complete` 为 false 表示应用还只加载了长列表的前一部分。
