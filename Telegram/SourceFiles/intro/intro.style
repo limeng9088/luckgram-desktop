@@ -37,6 +37,9 @@ introCoverTitle: FlatLabel(defaultFlatLabel) {
 }
 introCoverTitleTop: 136px;
 introCoverDescription: FlatLabel(defaultFlatLabel) {
+	// Luckgram D5: wraps mobile's full intro (a FlatLabel without minWidth
+	// stays one line and elided it after "…还有隐藏").
+	minWidth: 300px;
 	textFg: introDescriptionFg;
 	align: align(center);
 	style: TextStyle(defaultTextStyle) {

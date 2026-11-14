@@ -118,20 +118,27 @@ void PrivacyBox(
 		not_null<Ui::GenericBox*> box,
 		bool updated,
 		Fn<void()> accepted) {
-	const auto texts = CurrentTexts();
-	box->setTitle(rpl::single(updated
-		? texts.privacyUpdatedTitle()
-		: texts.privacyTitle()));
+	// Texts follow the interface language live: on the first start the box
+	// opens before the Chinese language pack is in (the welcome page then
+	// turned Chinese while this box stayed English, build 81 D5).
+	const auto text = [](auto method) {
+		return TextsValue() | rpl::map([=](const Texts &texts) {
+			return (texts.*method)();
+		});
+	};
+	box->setTitle(text(updated
+		? &Texts::privacyUpdatedTitle
+		: &Texts::privacyTitle));
 	box->addRow(object_ptr<Ui::FlatLabel>(
 		box,
-		rpl::single(updated ? texts.privacyUpdatedText() : texts.privacyText()),
+		text(updated ? &Texts::privacyUpdatedText : &Texts::privacyText),
 		st::boxLabel));
 	box->setCloseByEscape(false);
 	box->setCloseByOutsideClick(false);
-	box->addLeftButton(rpl::single(texts.privacyPolicyButton()), [] {
+	box->addLeftButton(text(&Texts::privacyPolicyButton), [] {
 		File::OpenUrl(CurrentPrivacyUrl()); // The dialog stays open.
 	});
-	box->addButton(rpl::single(texts.continueButton()), [=] {
+	box->addButton(text(&Texts::continueButton), [=] {
 		AcceptPrivacy();
 		const auto done = accepted;
 		box->closeBox();
