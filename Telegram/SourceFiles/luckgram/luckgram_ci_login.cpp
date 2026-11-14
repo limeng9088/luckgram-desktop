@@ -32,6 +32,7 @@ namespace {
 constexpr auto kMarker = "LuckgramCiTestLogin";
 constexpr auto kTestDc = 2; // When the account has no main DC 1..3 yet.
 constexpr auto kCodeLength = 5; // When sentCode gives none.
+constexpr auto kMaxNumbers = 3;
 constexpr auto kStartDelay = 3000;
 
 void Log(const QString &text) {
@@ -44,6 +45,7 @@ struct Flow {
 	int dc = kTestDc; // The X in 99966 X YYYY, the DC the number is on.
 	int codeLength = kCodeLength;
 	bool retried = false;
+	int attempts = 0; // Numbers tried (PHONE_CODE_INVALID: another one).
 	QString phone;
 	QByteArray phoneHash;
 	QByteArray termsId;
@@ -106,9 +108,20 @@ void SignUp(std::shared_ptr<Flow> flow) {
 	}).send();
 }
 
+void Start(std::shared_ptr<Flow> flow);
+
 void SignIn(std::shared_ptr<Flow> flow) {
 	// Test numbers: the code is the DC digit of the number repeated.
-	const auto code = QString(flow->codeLength, QChar('0' + flow->dc));
+	const auto code = QString(flow->codeLength, QChar(char('0' + flow->dc)));
+	// Test numbers and their codes are public, so they may be logged.
+	Log(u"auth.signIn: number %1, code '%2', phone_code_hash %3 bytes (%4), "
+		u"number dc %5, main dc %6"_q
+		.arg(flow->phone)
+		.arg(code)
+		.arg(flow->phoneHash.size())
+		.arg(QString::fromLatin1(flow->phoneHash.left(6)))
+		.arg(flow->dc)
+		.arg(int(flow->account->mtp().mainDcId())));
 	flow->api.request(MTPauth_SignIn(
 		MTP_flags(MTPauth_SignIn::Flag::f_phone_code),
 		MTP_string(flow->phone),
@@ -118,6 +131,13 @@ void SignIn(std::shared_ptr<Flow> flow) {
 	)).done([=](const MTPauth_Authorization &result) {
 		Authorized(flow, result);
 	}).fail([=](const MTP::Error &error) {
+		if (error.type() == u"PHONE_CODE_INVALID"_q
+			&& flow->attempts < kMaxNumbers) {
+			// Maybe a number someone else set up differently: another one.
+			Log(u"auth.signIn: PHONE_CODE_INVALID, trying another number"_q);
+			Start(flow);
+			return;
+		}
 		Fail(flow, u"auth.signIn"_q, error);
 	}).send();
 }
@@ -126,8 +146,6 @@ void SignIn(std::shared_ptr<Flow> flow) {
 	const auto dc = int(account->mtp().mainDcId());
 	return (dc >= 1 && dc <= 3) ? dc : kTestDc;
 }
-
-void Start(std::shared_ptr<Flow> flow);
 
 [[nodiscard]] int CodeLength(const MTPauth_SentCodeType &type) {
 	auto result = 0;
@@ -164,6 +182,9 @@ void SendCode(std::shared_ptr<Flow> flow) {
 	)).done([=](const MTPauth_SentCode &result) {
 		result.match([&](const MTPDauth_sentCode &data) {
 			flow->phoneHash = data.vphone_code_hash().v;
+			Log(u"auth.sendCode: phone_code_hash %1 bytes (%2)"_q
+				.arg(flow->phoneHash.size())
+				.arg(QString::fromLatin1(flow->phoneHash.left(6))));
 			const auto length = CodeLength(data.vtype());
 			flow->codeLength = (length > 0) ? length : kCodeLength;
 			const auto dc = MainDc(flow->account);
@@ -233,14 +254,16 @@ void LogConnection(std::shared_ptr<Flow> flow, Fn<void()> next) {
 void Start(std::shared_ptr<Flow> flow) {
 	// The number on the DC the account talks to (test DC 1..3), so
 	// auth.sendCode is not migrated and the code is that DC's digit.
+	++flow->attempts;
 	flow->dc = MainDc(flow->account);
 	flow->phone = u"99966%1%2"_q
 		.arg(flow->dc)
 		.arg(base::RandomIndex(10000), 4, 10, QChar('0'));
 	flow->phoneHash = QByteArray();
-	Log(u"test number 99966%1XXXX on test dc %2"_q
+	Log(u"test number %1 on test dc %2 (attempt %3)"_q
+		.arg(flow->phone)
 		.arg(flow->dc)
-		.arg(flow->dc));
+		.arg(flow->attempts));
 	LogConnection(flow, [=] {
 		SendCode(flow);
 	});
