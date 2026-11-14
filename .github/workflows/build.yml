@@ -1003,6 +1003,9 @@ jobs:
     needs: [credentials, mac-libs]
     runs-on: macos-15
     timeout-minutes: 355
+    permissions:
+      contents: read
+      actions: write # gh cache delete: older compiler caches
     env:
       MACOSX_DEPLOYMENT_TARGET: '12.0'
       # M1: Apple silicon only for now (the 3 core hosted runner did not
@@ -1110,25 +1113,172 @@ jobs:
             -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON \
             -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON
 
-      - name: Build.
-        # Below the job's 355 minutes, so that a build that runs out of time
-        # still saves the compiler cache (next steps) for the next run.
-        timeout-minutes: 300
+      # The hosted Mac (3 cores, ~7 GB) went down twice after ~2 h 16 min
+      # ("runner has received a shutdown signal", no compile error), most
+      # likely out of memory with xcodebuild's default parallelism. So:
+      # MAC_BUILD_JOBS (default 2) compile jobs; the build in parts of at most
+      # 90 minutes (each part goes on where the previous stopped), the
+      # compiler cache saved after every part (a later run continues even
+      # when the machine dies); vm_stat / df every 10 minutes in the log.
+      - name: Build (part 1).
+        id: build1
+        if: steps.configure.outcome == 'success'
+        timeout-minutes: 90
+        continue-on-error: true
         run: |
+          ( while true; do
+              echo "::group::resources $(date -u +%H:%M)"; vm_stat; df -h / "$GITHUB_WORKSPACE"; echo "::endgroup::"
+              sleep 600
+            done ) &
+          MON=$!
+          trap 'kill $MON 2>/dev/null || true' EXIT
           cd luckgram-desktop/out
-          cmake --build . --config Release --parallel
+          cmake --build . --config Release -- -jobs "${{ vars.MAC_BUILD_JOBS || '2' }}"
           echo "Build took $(( ($(date +%s) - BUILD_START) / 60 )) min"
 
-      - name: Compiler cache statistics.
-        if: always() && steps.configure.outcome == 'success'
-        run: ccache -s
-
-      - name: Save compiler cache.
-        if: always() && steps.configure.outcome == 'success'
+      - name: Save compiler cache (part 1).
+        if: always() && (steps.build1.outcome == 'success' || steps.build1.outcome == 'failure')
         uses: actions/cache/save@v6
         with:
           path: .ccache
-          key: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}
+          key: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}-p1
+
+      - name: Drop older compiler caches (part 1).
+        # Only the newest ccache of this branch is kept (Actions caches are
+        # 10 GB in all; the Mac libraries must not be pushed out).
+        if: always() && (steps.build1.outcome == 'success' || steps.build1.outcome == 'failure')
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}-p1
+          PREFIX: ccache-macos-${{ github.ref_name }}-
+        run: |
+          ccache -s
+          gh cache list -R "$GITHUB_REPOSITORY" --key "$PREFIX" --limit 100 --json key -q '.[].key' | while read -r key; do
+            [ "$key" = "$KEEP" ] || gh cache delete "$key" -R "$GITHUB_REPOSITORY" || true
+          done
+
+      - name: Build (part 2).
+        id: build2
+        if: ${{ !cancelled() && steps.build1.outcome == 'failure' }}
+        timeout-minutes: 90
+        continue-on-error: true
+        run: |
+          ( while true; do
+              echo "::group::resources $(date -u +%H:%M)"; vm_stat; df -h / "$GITHUB_WORKSPACE"; echo "::endgroup::"
+              sleep 600
+            done ) &
+          MON=$!
+          trap 'kill $MON 2>/dev/null || true' EXIT
+          cd luckgram-desktop/out
+          cmake --build . --config Release -- -jobs "${{ vars.MAC_BUILD_JOBS || '2' }}"
+          echo "Build took $(( ($(date +%s) - BUILD_START) / 60 )) min"
+
+      - name: Save compiler cache (part 2).
+        if: always() && (steps.build2.outcome == 'success' || steps.build2.outcome == 'failure')
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}-p2
+
+      - name: Drop older compiler caches (part 2).
+        # Only the newest ccache of this branch is kept (Actions caches are
+        # 10 GB in all; the Mac libraries must not be pushed out).
+        if: always() && (steps.build2.outcome == 'success' || steps.build2.outcome == 'failure')
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}-p2
+          PREFIX: ccache-macos-${{ github.ref_name }}-
+        run: |
+          ccache -s
+          gh cache list -R "$GITHUB_REPOSITORY" --key "$PREFIX" --limit 100 --json key -q '.[].key' | while read -r key; do
+            [ "$key" = "$KEEP" ] || gh cache delete "$key" -R "$GITHUB_REPOSITORY" || true
+          done
+
+      - name: Build (part 3).
+        id: build3
+        if: ${{ !cancelled() && steps.build2.outcome == 'failure' }}
+        timeout-minutes: 90
+        continue-on-error: true
+        run: |
+          ( while true; do
+              echo "::group::resources $(date -u +%H:%M)"; vm_stat; df -h / "$GITHUB_WORKSPACE"; echo "::endgroup::"
+              sleep 600
+            done ) &
+          MON=$!
+          trap 'kill $MON 2>/dev/null || true' EXIT
+          cd luckgram-desktop/out
+          cmake --build . --config Release -- -jobs "${{ vars.MAC_BUILD_JOBS || '2' }}"
+          echo "Build took $(( ($(date +%s) - BUILD_START) / 60 )) min"
+
+      - name: Save compiler cache (part 3).
+        if: always() && (steps.build3.outcome == 'success' || steps.build3.outcome == 'failure')
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}-p3
+
+      - name: Drop older compiler caches (part 3).
+        # Only the newest ccache of this branch is kept (Actions caches are
+        # 10 GB in all; the Mac libraries must not be pushed out).
+        if: always() && (steps.build3.outcome == 'success' || steps.build3.outcome == 'failure')
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}-p3
+          PREFIX: ccache-macos-${{ github.ref_name }}-
+        run: |
+          ccache -s
+          gh cache list -R "$GITHUB_REPOSITORY" --key "$PREFIX" --limit 100 --json key -q '.[].key' | while read -r key; do
+            [ "$key" = "$KEEP" ] || gh cache delete "$key" -R "$GITHUB_REPOSITORY" || true
+          done
+
+      - name: Build (part 4).
+        id: build4
+        if: ${{ !cancelled() && steps.build3.outcome == 'failure' }}
+        timeout-minutes: 45
+        continue-on-error: true
+        run: |
+          ( while true; do
+              echo "::group::resources $(date -u +%H:%M)"; vm_stat; df -h / "$GITHUB_WORKSPACE"; echo "::endgroup::"
+              sleep 600
+            done ) &
+          MON=$!
+          trap 'kill $MON 2>/dev/null || true' EXIT
+          cd luckgram-desktop/out
+          cmake --build . --config Release -- -jobs "${{ vars.MAC_BUILD_JOBS || '2' }}"
+          echo "Build took $(( ($(date +%s) - BUILD_START) / 60 )) min"
+
+      - name: Save compiler cache (part 4).
+        if: always() && (steps.build4.outcome == 'success' || steps.build4.outcome == 'failure')
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}-p4
+
+      - name: Drop older compiler caches (part 4).
+        # Only the newest ccache of this branch is kept (Actions caches are
+        # 10 GB in all; the Mac libraries must not be pushed out).
+        if: always() && (steps.build4.outcome == 'success' || steps.build4.outcome == 'failure')
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ccache-macos-${{ github.ref_name }}-${{ github.run_id }}-p4
+          PREFIX: ccache-macos-${{ github.ref_name }}-
+        run: |
+          ccache -s
+          gh cache list -R "$GITHUB_REPOSITORY" --key "$PREFIX" --limit 100 --json key -q '.[].key' | while read -r key; do
+            [ "$key" = "$KEEP" ] || gh cache delete "$key" -R "$GITHUB_REPOSITORY" || true
+          done
+
+      - name: Build result.
+        if: always() && steps.configure.outcome == 'success'
+        env:
+          RESULTS: ${{ steps.build1.outcome }} ${{ steps.build2.outcome }} ${{ steps.build3.outcome }} ${{ steps.build4.outcome }}
+        run: |
+          echo "Build parts: $RESULTS"
+          case " $RESULTS " in *" success "*) ;; *) echo "::error::the build did not finish in this run; the compiler cache is saved, the next run continues"; exit 1 ;; esac
 
       - name: Stage Luckgram.app.
         run: |
