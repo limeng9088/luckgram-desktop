@@ -107,17 +107,60 @@ void LuckgramMcp::setupContent(
 		rpl::single(Tr(
 			"把「客户端配置」粘贴到 AI 工具的 MCP 设置里（Claude Code、"
 			"Cursor 等），它就能列出这台电脑上已登录的账号并切换当前账号。"
-			"接口只做这两件事：读不到聊天和消息，也不能发消息。\n\n"
+			"下面按账号开启 Skill 后，还能查看该账号的好友和会话列表。"
+			"读不到消息内容，也不能发消息。\n\n"
 			"只接受本机（127.0.0.1）的连接，每次请求都要带访问令牌。"
 			"拿到令牌的本机程序都能切换账号，不要把令牌发给别人。",
 			"Paste the client config into the MCP settings of your AI tool "
 			"(Claude Code, Cursor and others). It can then list the "
 			"accounts logged in on this computer and switch the active "
-			"one. Nothing else: no chats, no messages, no sending.\n\n"
+			"one. With a skill switched on below it also sees that "
+			"account's friends or chat list. It never reads message "
+			"texts and never sends anything.\n\n"
 			"Only connections from this computer (127.0.0.1) are accepted "
 			"and every request needs the access token. Any local program "
 			"that has the token can switch accounts, so keep it private.")));
 	Ui::AddSkip(container);
+
+	// Skills, per account, all off until switched on here.
+	const auto accounts = Mcp::AccountRows();
+	if (!accounts.empty()) {
+		Ui::AddSubsectionTitle(
+			container,
+			rpl::single(Tr("每个账号的 Skill", "Skills of each account")));
+		Ui::AddDividerText(
+			container,
+			rpl::single(Tr(
+				"Skill 是一组功能，按账号单独开启，默认全部关闭。"
+				"关闭的 Skill，AI 工具调用时会被拒绝。",
+				"A skill is a group of tools switched on per account; all "
+				"are off at first. Calls to a skill that is off are "
+				"refused.")));
+		for (const auto &account : accounts) {
+			Ui::AddSkip(container);
+			Ui::AddSubsectionTitle(container, rpl::single(account.name));
+			for (const auto &skill : Mcp::Skills()) {
+				const auto key = QString::fromLatin1(skill.key);
+				const auto id = account.id;
+				const auto button = AddButtonWithIcon(
+					container,
+					rpl::single(Tr(skill.titleZh, skill.titleEn)
+						+ u" · "_q
+						+ Tr(skill.aboutZh, skill.aboutEn)),
+					st::settingsButtonNoIcon);
+				button->toggleOn(rpl::single(Mcp::SkillEnabled(id, key)));
+				button->toggledChanges(
+				) | rpl::filter([=](bool toggled) {
+					return (toggled != Mcp::SkillEnabled(id, key));
+				}) | rpl::on_next([=](bool toggled) {
+					Mcp::SetSkillEnabled(id, key, toggled);
+				}, button->lifetime());
+			}
+		}
+		Ui::AddSkip(container);
+		Ui::AddDivider(container);
+		Ui::AddSkip(container);
+	}
 
 	AddButtonWithIcon(
 		container,

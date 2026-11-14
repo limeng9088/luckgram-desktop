@@ -31,6 +31,16 @@ struct Fake {
 	bool locked = false;
 	bool refuse = false; // The app asks the user first, nothing changes.
 	int activated = 0;
+	// Skills: "<skill>/<account>" switched on, the last call, and answers
+	// held back until flush() (a tool waiting for the network).
+	QStringList enabled;
+	QString calledTool;
+	quint64 calledAccount = 0;
+	QJsonObject calledArguments;
+	int calls = 0;
+	bool hold = false;
+	QString callError;
+	std::vector<ToolDone> held;
 
 	Fake() {
 		auto a = AccountInfo();
@@ -63,7 +73,37 @@ struct Fake {
 			}
 			return QString();
 		};
+		result.skillEnabled = [this](quint64 account, const QString &skill) {
+			return enabled.contains(
+				skill + QChar('/') + QString::number(account));
+		};
+		result.call = [this](
+				const QString &tool,
+				quint64 account,
+				const QJsonObject &arguments,
+				ToolDone done) {
+			++calls;
+			calledTool = tool;
+			calledAccount = account;
+			calledArguments = arguments;
+			if (hold) {
+				held.push_back(std::move(done));
+				return;
+			}
+			auto outcome = ToolOutcome();
+			outcome.error = callError;
+			outcome.value.insert(QStringLiteral("total"), 3);
+			done(std::move(outcome));
+		};
 		return result;
+	}
+
+	void flush() {
+		for (const auto &done : std::exchange(held, {})) {
+			auto outcome = ToolOutcome();
+			outcome.value.insert(QStringLiteral("total"), 3);
+			done(std::move(outcome));
+		}
 	}
 };
 
@@ -303,7 +343,9 @@ LUCKGRAM_TEST(McpInitializeAndToolsList) {
 	LG_EQUAL(names, (QStringList{
 		S("list_accounts"),
 		S("get_active_account"),
-		S("switch_account") }));
+		S("switch_account"),
+		S("list_friends"),
+		S("list_chats") }));
 
 	reply = HandleMessage(
 		J(R"({"jsonrpc":"2.0","id":4,"method":"resources/list"})"),
@@ -481,4 +523,140 @@ LUCKGRAM_TEST(McpSerializeAndClientConfig) {
 		server.value(S("headers")).toObject().value(
 			S("Authorization")).toString(),
 		S("Bearer ") + kToken);
+}
+
+LUCKGRAM_TEST(McpSkillOffByDefault) {
+	auto fake = Fake();
+	for (const auto tool : { "list_friends", "list_chats" }) {
+		const auto text = ErrorText(ToolReply(fake, tool));
+		LG_CHECK(text.contains(S("skill is off")));
+		LG_CHECK(text.contains(S("111"))); // Which account, so it can be told.
+	}
+	LG_EQUAL(fake.calls, 0);
+
+	// One skill of one account says nothing about the others.
+	fake.enabled = { S("friends/111") };
+	LG_CHECK(!ToolReply(fake, "list_friends").value(S("isError")).toBool());
+	LG_CHECK(ToolReply(fake, "list_chats").value(S("isError")).toBool());
+	LG_CHECK(ToolReply(
+		fake,
+		"list_friends",
+		R"({"account":"7000000000001"})").value(S("isError")).toBool());
+	LG_EQUAL(fake.calls, 1);
+}
+
+LUCKGRAM_TEST(McpSkillAccountAndArguments) {
+	auto fake = Fake();
+	fake.enabled = {
+		S("friends/111"),
+		S("friends/7000000000001"),
+		S("chats/111"),
+	};
+	// The active account and the defaults.
+	auto result = ToolReply(fake, "list_friends");
+	LG_EQUAL(fake.calledTool, S("list_friends"));
+	LG_EQUAL(fake.calledAccount, quint64(111));
+	LG_EQUAL(fake.calledArguments.value(S("limit")).toInt(), 200);
+	LG_EQUAL(fake.calledArguments.value(S("offset")).toInt(), 0);
+	LG_EQUAL(fake.calledArguments.value(S("query")).toString(), QString());
+	LG_CHECK(!fake.calledArguments.contains(S("account")));
+	auto value = result.value(S("structuredContent")).toObject();
+	LG_EQUAL(value.value(S("total")).toInt(), 3);
+	LG_EQUAL(value.value(S("account")).toString(), S("111"));
+
+	// Another account, without switching to it.
+	result = ToolReply(
+		fake,
+		"list_friends",
+		R"({"account":"7000000000001","query":"  li  ","limit":5,"offset":10})");
+	LG_EQUAL(fake.calledAccount, quint64(7000000000001ULL));
+	LG_EQUAL(fake.calledArguments.value(S("query")).toString(), S("li"));
+	LG_EQUAL(fake.calledArguments.value(S("limit")).toInt(), 5);
+	LG_EQUAL(fake.calledArguments.value(S("offset")).toInt(), 10);
+	LG_EQUAL(fake.activated, 0);
+	LG_CHECK(fake.list[0].active);
+	LG_EQUAL(
+		result.value(S("structuredContent")).toObject().value(
+			S("account")).toString(),
+		S("7000000000001"));
+
+	result = ToolReply(fake, "list_chats", R"({"unread_only":true})");
+	LG_EQUAL(fake.calledArguments.value(S("limit")).toInt(), 50);
+	LG_CHECK(fake.calledArguments.value(S("unread_only")).toBool());
+
+	const auto before = fake.calls;
+	for (const auto arguments : {
+		R"({"account":"999"})",
+		R"({"account":"abc"})",
+		R"({"limit":0})",
+		R"({"limit":1001})",
+		R"({"limit":"5"})",
+		R"({"limit":1.5})",
+		R"({"offset":-1})",
+		R"({"query":5})",
+	}) {
+		LG_CHECK(!ErrorText(
+			ToolReply(fake, "list_friends", arguments)).isEmpty());
+	}
+	LG_CHECK(!ErrorText(
+		ToolReply(fake, "list_chats", R"({"limit":201})")).isEmpty());
+	LG_CHECK(!ErrorText(
+		ToolReply(fake, "list_chats", R"({"unread_only":"yes"})")).isEmpty());
+	LG_EQUAL(fake.calls, before);
+
+	// What the app could not do comes back as the tool's error.
+	fake.callError = S("Contacts did not load in time.");
+	LG_EQUAL(
+		ErrorText(ToolReply(fake, "list_friends")),
+		S("Contacts did not load in time."));
+
+	// No active account and none named.
+	fake.list[0].active = false;
+	LG_CHECK(!ErrorText(ToolReply(fake, "list_friends")).isEmpty());
+}
+
+LUCKGRAM_TEST(McpSkillLockedAndLate) {
+	auto fake = Fake();
+	fake.enabled = { S("friends/111") };
+	fake.locked = true;
+	LG_CHECK(!ErrorText(ToolReply(fake, "list_friends")).isEmpty());
+	LG_EQUAL(fake.calls, 0);
+	fake.locked = false;
+
+	// A tool that answers later: nothing is sent until it does, and a
+	// batch keeps the order of its requests.
+	fake.hold = true;
+	auto answered = 0;
+	auto response = Response();
+	HandleAsync(
+		Post(QByteArray("[") + Call("list_friends")
+			+ R"(,{"jsonrpc":"2.0","id":8,"method":"ping"}])"),
+		MakeConfig(),
+		fake.backend(),
+		[&](Response got) {
+			++answered;
+			response = std::move(got);
+		});
+	LG_EQUAL(answered, 0);
+	LG_EQUAL(fake.calls, 1);
+	fake.flush();
+	LG_EQUAL(answered, 1);
+	LG_EQUAL(response.status, 200);
+	const auto replies = QJsonDocument::fromJson(response.body).array();
+	LG_EQUAL(int(replies.size()), 2);
+	LG_EQUAL(replies.at(0).toObject().value(S("id")).toInt(), 7);
+	LG_EQUAL(replies.at(1).toObject().value(S("id")).toInt(), 8);
+
+	// The sync wrapper never pretends: 500 while the answer is not there.
+	LG_EQUAL(
+		Handle(Post(Call("list_friends")), MakeConfig(), fake.backend()).status,
+		500);
+	fake.flush();
+}
+
+LUCKGRAM_TEST(McpSkillRegistry) {
+	LG_EQUAL(int(Skills().size()), 2);
+	LG_EQUAL(
+		SkillSettingKey(S("friends"), 7000000000001ULL),
+		S("mcp_skill_friends_7000000000001"));
 }

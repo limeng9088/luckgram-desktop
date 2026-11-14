@@ -1,6 +1,6 @@
 # 本机 MCP 接口（切换账号）
 
-让这台电脑上的 AI 工具（Claude Code、Cursor 等）查看 Luckgram Desktop 里已登录的账号，并切换当前账号。只做这两件事：读不到聊天和消息，也不能发消息。
+让这台电脑上的 AI 工具（Claude Code、Cursor 等）查看 Luckgram Desktop 里已登录的账号、切换当前账号，并在按账号开启 Skill 后查看该账号的好友和会话列表。读不到消息内容，也不能发消息。
 
 ## 开启
 
@@ -33,6 +33,20 @@ claude mcp add --transport http luckgram http://127.0.0.1:28765/mcp \
 | `list_accounts` | 无 | 按账号列表的顺序列出已登录账号：`id`（Telegram 用户 id，字符串）、`index`（从 1 开始）、`name`、`username`、`phone`、`unread`、`active` |
 | `get_active_account` | 无 | 主窗口当前显示的账号 |
 | `switch_account` | `id` / `username` / `phone` / `index` 四选一 | 切换到该账号，和点侧栏里的账号是同一条路径。建议用 `id`：昵称会重复，`index` 会随增删账号变化 |
+
+## Skill（按账号开启）
+
+Skill 是一组工具，在设置页「本机 MCP 接口」里按账号单独开启，默认全部关闭。调用未开启的 Skill 会返回错误并说明是哪个账号、哪个 Skill。
+
+Skill 工具都有可选参数 `account`（`list_accounts` 里的 `id`），不填就是当前账号；指定别的账号时不需要先切换，界面也不会变。
+
+| Skill | 工具 | 参数 | 返回 |
+|---|---|---|---|
+| 好友 `friends` | `list_friends` | `account`、`query`（按昵称或用户名过滤）、`limit`（1–1000，默认 200）、`offset` | `total`、`friends`：`id`、`name`、`username`、`phone`、`bot`、`mutual` |
+| 会话 `chats` | `list_chats` | `account`、`unread_only`、`limit`（1–200，默认 50）、`offset` | `total`、`complete`、`chats`：`id`、`type`（user / bot / group / supergroup / channel）、`name`、`username`、`unread`、`unread_mark`、`muted`、`pinned`、`last_message_date` |
+
+- `list_chats` 只返回主列表（不含归档），不返回任何消息内容。`complete` 为 false 表示应用还只加载了长列表的前一部分。
+- `list_friends` 在本次启动第一次调用时要向服务器取通讯录，最多等 15 秒。
 
 ## 行为
 
