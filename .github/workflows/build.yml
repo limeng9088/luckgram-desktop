@@ -1073,6 +1073,9 @@ jobs:
           restore-keys: |
             ccache-macos-${{ github.ref_name }}-run-
             ccache-macos-master-run-
+            # Temporary: the one cache saved before #128 (old key format,
+            # ~710 MB, master). Remove once a -run- cache of master exists.
+            ccache-macos-master-
 
       - name: Configure.
         id: configure
