@@ -106,8 +106,9 @@ void CloudClient::poll() {
 	}
 	const auto generation = ++_generation;
 	const auto sent = std::exchange(_results, {});
+	const auto host = _host;
 	auto request = QNetworkRequest(QUrl(
-		QString::fromLatin1(kCloudUrl) + QString::fromLatin1(kCloudPollPath)));
+		CloudHostUrl(host) + QString::fromLatin1(kCloudPollPath)));
 	request.setRawHeader("Authorization", "Bearer " + config.key.toLatin1());
 	request.setRawHeader("Content-Type", "application/json");
 	request.setTransferTimeout(kPollTimeoutMs);
@@ -142,6 +143,16 @@ void CloudClient::poll() {
 			}
 			if (latest && _running) {
 				++_failures;
+				// No answer from the relay at all (not a refusal by it):
+				// the name may be blocked here, the other one is tried.
+				if (!status && host == _host) {
+					++_hostFailures;
+					const auto next = NextCloudHost(_host, _hostFailures);
+					if (next != _host) {
+						_host = next;
+						_hostFailures = 0;
+					}
+				}
 				setState(false, status
 					? QStringLiteral("The cloud answered %1.").arg(status)
 					: reply->errorString());
@@ -153,6 +164,9 @@ void CloudClient::poll() {
 			return;
 		}
 		_failures = 0;
+		if (host == _host) {
+			_hostFailures = 0;
+		}
 		setState(true, QString());
 		const auto context = QPointer<QObject>(_context.get());
 		for (const auto &entry : requests) {
