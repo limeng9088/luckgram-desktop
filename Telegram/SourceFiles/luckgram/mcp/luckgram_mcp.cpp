@@ -27,6 +27,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_secure_store.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/luckgram_strings.h"
+#include "luckgram/mcp/luckgram_mcp_botfather.h"
 #include "luckgram/mcp/luckgram_mcp_cloud.h"
 #include "luckgram/mcp/luckgram_mcp_logic.h"
 #include "luckgram/mcp/luckgram_mcp_server.h"
@@ -825,6 +826,8 @@ void UpdateProfile(
 			LeaveChat(session, arguments, std::move(done));
 		} else if (tool == u"update_profile"_q) {
 			UpdateProfile(session, arguments, std::move(done));
+		} else if (tool.startsWith(u"botfather_"_q)) {
+			RunBotFather(session, tool, arguments, std::move(done));
 		} else if (tool == u"find_user"_q) {
 			FindUser(session, arguments, std::move(done));
 		} else if (tool == u"add_friend"_q) {

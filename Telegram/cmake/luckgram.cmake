@@ -200,6 +200,8 @@ PRIVATE
     # Local MCP server: list accounts, switch the active one
     luckgram/mcp/luckgram_mcp.cpp
     luckgram/mcp/luckgram_mcp.h
+    luckgram/mcp/luckgram_mcp_botfather.cpp
+    luckgram/mcp/luckgram_mcp_botfather.h
     luckgram/mcp/luckgram_mcp_cloud.cpp
     luckgram/mcp/luckgram_mcp_cloud.h
     luckgram/mcp/luckgram_mcp_cloud_client.cpp

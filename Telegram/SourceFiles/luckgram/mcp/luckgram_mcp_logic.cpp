@@ -441,6 +441,160 @@ constexpr const char *kProtocolVersions[] = {
 		"per account.",
 		properties,
 		false));
+
+	const auto bot = Property(
+		"string",
+		"Username of one of the account's bots, with or without @.");
+	const auto bf = [&](
+			const char *name,
+			const char *title,
+			const char *description,
+			const QJsonObject &props,
+			bool readOnly) {
+		auto all = props;
+		all.insert(Q("account"), account);
+		result.push_back(Tool(name, title, description, all, readOnly));
+	};
+	bf("botfather_list_bots", "List my bots",
+		"Skill \"botfather\". The bots this account owns, asked from "
+		"@BotFather (/mybots): their usernames.",
+		QJsonObject(), true);
+	properties = QJsonObject();
+	properties.insert(Q("name"), Property(
+		"string",
+		"Display name of the new bot, 1-64 characters."));
+	properties.insert(Q("username"), Property(
+		"string",
+		"Username of the new bot: 5-32 letters, digits and underscores, "
+		"ending in \"bot\"."));
+	bf("botfather_create_bot", "Create a bot",
+		"Skill \"botfather\". Create a new bot with @BotFather (/newbot) "
+		"and return its username and its API token. The token is a "
+		"secret: whoever has it controls the bot. At most 3 an hour and "
+		"10 a day per account.",
+		properties, false);
+	properties = QJsonObject();
+	properties.insert(Q("bot"), bot);
+	bf("botfather_get_token", "Get a bot's token",
+		"Skill \"botfather\". The current API token of one of the "
+		"account's bots (/token). A secret.",
+		properties, false);
+	bf("botfather_revoke_token", "Revoke a bot's token",
+		"Skill \"botfather\". Replace the API token of a bot with a new "
+		"one (/revoke). The old token stops working at once: whatever "
+		"runs the bot must get the new one.",
+		properties, false);
+	properties.insert(Q("name"), Property(
+		"string",
+		"New display name, 1-64 characters."));
+	bf("botfather_set_name", "Set a bot's name",
+		"Skill \"botfather\". Change the display name of a bot (/setname).",
+		properties, false);
+	properties = QJsonObject();
+	properties.insert(Q("bot"), bot);
+	properties.insert(Q("description"), Property(
+		"string",
+		"What people see in the empty chat with the bot, 1-512 characters."));
+	bf("botfather_set_description", "Set a bot's description",
+		"Skill \"botfather\". Change the description of a bot "
+		"(/setdescription): the text shown before a chat with it starts.",
+		properties, false);
+	properties = QJsonObject();
+	properties.insert(Q("bot"), bot);
+	properties.insert(Q("about"), Property(
+		"string",
+		"The short text on the bot's profile page, 1-120 characters."));
+	bf("botfather_set_about", "Set a bot's about text",
+		"Skill \"botfather\". Change the about text of a bot "
+		"(/setabouttext).",
+		properties, false);
+	properties = QJsonObject();
+	properties.insert(Q("bot"), bot);
+	{
+		auto command = QJsonObject();
+		command.insert(Q("command"), Property(
+			"string",
+			"1-32 lowercase letters, digits and underscores, no slash."));
+		command.insert(Q("description"), Property(
+			"string",
+			"What the command does, 1-256 characters."));
+		auto item = QJsonObject();
+		item.insert(Q("type"), Q("object"));
+		item.insert(Q("properties"), command);
+		auto list = QJsonObject();
+		list.insert(Q("type"), Q("array"));
+		list.insert(Q("items"), item);
+		list.insert(Q("description"), Q(
+			"The whole command list, at most 100. An empty list removes "
+			"all commands."));
+		properties.insert(Q("commands"), list);
+	}
+	bf("botfather_set_commands", "Set a bot's commands",
+		"Skill \"botfather\". Replace the command list of a bot "
+		"(/setcommands): what people see when they type / in a chat "
+		"with it.",
+		properties, false);
+	properties = QJsonObject();
+	properties.insert(Q("bot"), bot);
+	properties.insert(Q("enabled"), Property(
+		"boolean",
+		"true: the bot sees only commands and replies to it in groups "
+		"(privacy mode, the default). false: it sees every message."));
+	bf("botfather_set_privacy", "Set a bot's group privacy",
+		"Skill \"botfather\". Switch the privacy mode of a bot in groups "
+		"(/setprivacy).",
+		properties, false);
+	properties = QJsonObject();
+	properties.insert(Q("bot"), bot);
+	properties.insert(Q("enabled"), Property(
+		"boolean",
+		"true: the bot can be added to groups. false: it cannot."));
+	bf("botfather_set_join_groups", "Allow a bot in groups",
+		"Skill \"botfather\". Allow or forbid adding a bot to groups "
+		"(/setjoingroups).",
+		properties, false);
+	properties = QJsonObject();
+	properties.insert(Q("bot"), bot);
+	properties.insert(Q("confirm"), Property(
+		"string",
+		"The bot's username once more, exactly: deleting cannot be "
+		"undone."));
+	bf("botfather_delete_bot", "Delete a bot",
+		"Skill \"botfather\". Delete one of the account's bots for good "
+		"(/deletebot). Its username becomes free and its token stops "
+		"working. Ask the user before calling this. At most 3 an hour "
+		"and 10 a day per account.",
+		properties, false);
+	properties = QJsonObject();
+	properties.insert(Q("text"), Property(
+		"string",
+		"What to send to @BotFather, 1-4096 characters: a command such "
+		"as /mybots or /setuserpic, or the answer to its last question."));
+	bf("botfather_send", "Send to BotFather",
+		"Skill \"botfather\". Send one message to @BotFather and return "
+		"its answer with the buttons under it. For everything the other "
+		"botfather tools do not cover: read what it asks, then answer "
+		"with this tool or press a button with botfather_press.",
+		properties, false);
+	properties = QJsonObject();
+	properties.insert(Q("message_id"), Property(
+		"integer",
+		"Id of the message of @BotFather that has the button, from "
+		"botfather_send, botfather_press or botfather_read."));
+	properties.insert(Q("button"), Property(
+		"string",
+		"The text on the button, exactly as returned."));
+	bf("botfather_press", "Press a BotFather button",
+		"Skill \"botfather\". Press a button under a message of "
+		"@BotFather and return what the message says afterwards.",
+		properties, false);
+	properties = QJsonObject();
+	properties.insert(Q("limit"), limit("At most this many, 1-20. Default 5."));
+	bf("botfather_read", "Read the BotFather chat",
+		"Skill \"botfather\". The latest messages of the account's chat "
+		"with @BotFather, newest first, with their buttons. Only that "
+		"chat: this skill sees no other chat.",
+		properties, true);
 	return result;
 }
 
@@ -472,6 +626,8 @@ constexpr const char *kProtocolVersions[] = {
 		return kSkillGroups;
 	} else if (tool == Q("update_profile")) {
 		return kSkillProfile;
+	} else if (tool.startsWith(Q("botfather_"))) {
+		return kSkillBotFather;
 	}
 	return nullptr;
 }
@@ -600,6 +756,167 @@ constexpr const char *kProtocolVersions[] = {
 			result.insert(Q(key), value.toString().trimmed().left(64));
 		}
 		return result;
+	}
+	if (tool.startsWith(Q("botfather_"))) {
+		const auto text = [&](
+				const char *key,
+				int min,
+				int max,
+				bool required) {
+			const auto value = arguments.value(Q(key));
+			const auto missing = value.isUndefined() || value.isNull();
+			const auto string = value.toString().trimmed();
+			if ((missing && required)
+				|| (!missing && !value.isString())
+				|| (!missing && (string.size() < min || string.size() > max))) {
+				*error = Q(key)
+					+ Q(" must be a string of ")
+					+ QString::number(min)
+					+ Q(" to ")
+					+ QString::number(max)
+					+ Q(" characters.");
+				return false;
+			}
+			if (!missing) {
+				result.insert(Q(key), string);
+			}
+			return true;
+		};
+		const auto bot = [&] {
+			const auto value = arguments.value(Q("bot"));
+			auto name = value.toString().trimmed();
+			if (name.startsWith(QChar('@'))) {
+				name = name.mid(1);
+			}
+			if (!value.isString() || !IsBotUsername(name)) {
+				*error = Q("bot must be the username of a bot: 5-32 "
+					"letters, digits and underscores, ending in \"bot\".");
+				return false;
+			}
+			result.insert(Q("bot"), name);
+			return true;
+		};
+		const auto flag = [&](const char *key) {
+			const auto value = arguments.value(Q(key));
+			if (!value.isBool()) {
+				*error = Q(key) + Q(" must be true or false.");
+				return false;
+			}
+			result.insert(Q(key), value.toBool());
+			return true;
+		};
+		auto ok = true;
+		if (tool == Q("botfather_list_bots")) {
+		} else if (tool == Q("botfather_create_bot")) {
+			ok = text("name", 1, 64, true);
+			if (ok) {
+				const auto value = arguments.value(Q("username"));
+				auto name = value.toString().trimmed();
+				if (name.startsWith(QChar('@'))) {
+					name = name.mid(1);
+				}
+				if (!value.isString() || !IsBotUsername(name)) {
+					*error = Q("username must be 5-32 letters, digits and "
+						"underscores, start with a letter and end in "
+						"\"bot\".");
+					ok = false;
+				} else {
+					result.insert(Q("username"), name);
+				}
+			}
+		} else if (tool == Q("botfather_get_token")
+			|| tool == Q("botfather_revoke_token")) {
+			ok = bot();
+		} else if (tool == Q("botfather_set_name")) {
+			ok = bot() && text("name", 1, 64, true);
+		} else if (tool == Q("botfather_set_description")) {
+			ok = bot() && text("description", 1, 512, true);
+		} else if (tool == Q("botfather_set_about")) {
+			ok = bot() && text("about", 1, 120, true);
+		} else if (tool == Q("botfather_set_privacy")
+			|| tool == Q("botfather_set_join_groups")) {
+			ok = bot() && flag("enabled");
+		} else if (tool == Q("botfather_delete_bot")) {
+			ok = bot();
+			auto confirm = arguments.value(Q("confirm")).toString().trimmed();
+			if (confirm.startsWith(QChar('@'))) {
+				confirm = confirm.mid(1);
+			}
+			if (ok && confirm != result.value(Q("bot")).toString()) {
+				*error = Q("confirm must repeat the bot's username exactly. "
+					"Deleting a bot cannot be undone: ask the user first.");
+				ok = false;
+			}
+		} else if (tool == Q("botfather_set_commands")) {
+			ok = bot();
+			const auto value = arguments.value(Q("commands"));
+			auto list = QJsonArray();
+			if (ok && (!value.isArray() || value.toArray().size() > 100)) {
+				*error = Q("commands must be a list of at most 100 "
+					"{command, description}.");
+				ok = false;
+			}
+			for (const auto &entry : value.toArray()) {
+				if (!ok) {
+					break;
+				}
+				const auto object = entry.toObject();
+				auto command = object.value(Q("command")).toString().trimmed();
+				if (command.startsWith(QChar('/'))) {
+					command = command.mid(1);
+				}
+				const auto about = object.value(
+					Q("description")).toString().simplified();
+				auto good = (command.size() >= 1 && command.size() <= 32)
+					&& (about.size() >= 1 && about.size() <= 256);
+				for (const auto ch : command) {
+					const auto code = ch.unicode();
+					good = good && ((code >= 'a' && code <= 'z')
+						|| (code >= '0' && code <= '9')
+						|| (code == '_'));
+				}
+				if (!good) {
+					*error = Q("Each command needs \"command\" (1-32 "
+						"lowercase letters, digits, underscores) and "
+						"\"description\" (1-256 characters).");
+					ok = false;
+					break;
+				}
+				auto item = QJsonObject();
+				item.insert(Q("command"), command);
+				item.insert(Q("description"), about);
+				list.push_back(item);
+			}
+			result.insert(Q("commands"), list);
+		} else if (tool == Q("botfather_send")) {
+			ok = text("text", 1, 4096, true);
+		} else if (tool == Q("botfather_press")) {
+			auto id = 0;
+			ok = text("button", 1, 128, true);
+			if (ok && (arguments.value(Q("message_id")).isUndefined()
+				|| !IntArgument(
+					arguments,
+					"message_id",
+					0,
+					1,
+					2000000000,
+					&id,
+					error))) {
+				if (error->isEmpty()) {
+					*error = Q("message_id is required.");
+				}
+				ok = false;
+			}
+			result.insert(Q("message_id"), id);
+		} else if (tool == Q("botfather_read")) {
+			auto limit = 0;
+			ok = IntArgument(arguments, "limit", 5, 1, 20, &limit, error);
+			result.insert(Q("limit"), limit);
+		} else {
+			*error = Q("This tool is not available.");
+			ok = false;
+		}
+		return ok ? result : QJsonObject();
 	}
 	if (tool == Q("update_profile")) {
 		auto given = 0;
@@ -1319,6 +1636,15 @@ const std::vector<SkillInfo> &Skills() {
 			"Change the name and the bio, rate limited",
 			true,
 		},
+		{
+			kSkillBotFather,
+			"BotFather 机器人管理",
+			"BotFather: manage bots",
+			"通过 @BotFather 创建和管理该账号的机器人，可取得机器人令牌",
+			"Create and manage this account's bots through @BotFather, "
+			"including their API tokens",
+			true,
+		},
 	};
 	return result;
 }
@@ -1340,6 +1666,14 @@ RateLimit LimitOf(const QString &tool) {
 		return { 10, 30 };
 	} else if (tool == Q("update_profile")) {
 		return { 5, 10 };
+	} else if (tool == Q("botfather_create_bot")
+		|| tool == Q("botfather_delete_bot")) {
+		return { 3, 10 };
+	} else if (tool == Q("botfather_read")
+		|| tool == Q("botfather_list_bots")) {
+		return { 60, 300 };
+	} else if (tool.startsWith(Q("botfather_"))) {
+		return { 30, 150 };
 	}
 	return {};
 }
@@ -1548,6 +1882,147 @@ QString ClientConfigJson(const Config &config) {
 	root.insert(Q("mcpServers"), servers);
 	return QString::fromUtf8(
 		QJsonDocument(root).toJson(QJsonDocument::Indented)).trimmed();
+}
+
+QString ExtractBotToken(const QString &text) {
+	// <bot id>:<35 characters>. Scanned by hand: no regular expressions in
+	// the logic files.
+	const auto digit = [](QChar ch) {
+		return ch >= QChar('0') && ch <= QChar('9');
+	};
+	const auto secret = [&](QChar ch) {
+		const auto code = ch.unicode();
+		return digit(ch)
+			|| (code >= 'a' && code <= 'z')
+			|| (code >= 'A' && code <= 'Z')
+			|| (code == '_')
+			|| (code == '-');
+	};
+	for (auto colon = text.indexOf(QChar(':'));
+		colon >= 0;
+		colon = text.indexOf(QChar(':'), colon + 1)) {
+		auto from = colon;
+		while (from > 0 && digit(text[from - 1])) {
+			--from;
+		}
+		auto till = colon + 1;
+		while (till < text.size() && secret(text[till])) {
+			++till;
+		}
+		const auto idLength = colon - from;
+		const auto secretLength = till - colon - 1;
+		if (idLength >= 6
+			&& idLength <= 12
+			&& secretLength >= 30
+			&& secretLength <= 64
+			&& (from == 0 || !secret(text[from - 1]))) {
+			return text.mid(from, till - from);
+		}
+	}
+	return QString();
+}
+
+bool IsBotUsername(const QString &username) {
+	if (username.size() < 5
+		|| username.size() > 32
+		|| !username.endsWith(Q("bot"), Qt::CaseInsensitive)) {
+		return false;
+	}
+	const auto first = username[0].unicode();
+	if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z'))) {
+		return false;
+	}
+	for (const auto ch : username) {
+		const auto code = ch.unicode();
+		const auto good = (code >= 'a' && code <= 'z')
+			|| (code >= 'A' && code <= 'Z')
+			|| (code >= '0' && code <= '9')
+			|| (code == '_');
+		if (!good) {
+			return false;
+		}
+	}
+	return true;
+}
+
+QStringList BotFatherScript(
+		const QString &tool,
+		const QJsonObject &arguments) {
+	const auto bot = Q("@") + arguments.value(Q("bot")).toString();
+	const auto value = [&](const char *key) {
+		return arguments.value(Q(key)).toString();
+	};
+	const auto enabled = arguments.value(Q("enabled")).toBool();
+	if (tool == Q("botfather_list_bots")) {
+		return { Q("/mybots") };
+	} else if (tool == Q("botfather_create_bot")) {
+		return { Q("/newbot"), value("name"), value("username") };
+	} else if (tool == Q("botfather_get_token")) {
+		return { Q("/token"), bot };
+	} else if (tool == Q("botfather_revoke_token")) {
+		return { Q("/revoke"), bot };
+	} else if (tool == Q("botfather_set_name")) {
+		return { Q("/setname"), bot, value("name") };
+	} else if (tool == Q("botfather_set_description")) {
+		return { Q("/setdescription"), bot, value("description") };
+	} else if (tool == Q("botfather_set_about")) {
+		return { Q("/setabouttext"), bot, value("about") };
+	} else if (tool == Q("botfather_set_privacy")) {
+		return { Q("/setprivacy"), bot, enabled ? Q("Enable") : Q("Disable") };
+	} else if (tool == Q("botfather_set_join_groups")) {
+		return {
+			Q("/setjoingroups"),
+			bot,
+			enabled ? Q("Enable") : Q("Disable"),
+		};
+	} else if (tool == Q("botfather_delete_bot")) {
+		return { Q("/deletebot"), bot, Q("Yes, I am totally sure.") };
+	} else if (tool == Q("botfather_set_commands")) {
+		auto lines = QStringList();
+		for (const auto &entry : arguments.value(Q("commands")).toArray()) {
+			const auto object = entry.toObject();
+			lines.push_back(object.value(Q("command")).toString()
+				+ Q(" - ")
+				+ object.value(Q("description")).toString());
+		}
+		return {
+			Q("/setcommands"),
+			bot,
+			lines.isEmpty() ? Q("/empty") : lines.join(QChar('\n')),
+		};
+	} else if (tool == Q("botfather_send")) {
+		return { value("text") };
+	}
+	return {};
+}
+
+bool BotFatherRefused(const QString &reply) {
+	const auto text = reply.trimmed();
+	return text.startsWith(Q("Sorry"), Qt::CaseInsensitive)
+		|| text.startsWith(Q("Invalid"), Qt::CaseInsensitive)
+		|| text.startsWith(Q("Unrecognized"), Qt::CaseInsensitive)
+		|| text.startsWith(Q("Oops"), Qt::CaseInsensitive)
+		|| text.contains(Q("too many attempts"), Qt::CaseInsensitive)
+		|| text.contains(Q("I don't have a bot"), Qt::CaseInsensitive)
+		|| text.contains(Q("You have no bots"), Qt::CaseInsensitive)
+		|| text.contains(Q("try again"), Qt::CaseInsensitive);
+}
+
+bool BotFatherSucceeded(const QString &tool, const QString &reply) {
+	if (tool == Q("botfather_send") || tool == Q("botfather_list_bots")) {
+		return !reply.trimmed().isEmpty();
+	} else if (tool == Q("botfather_create_bot")
+		|| tool == Q("botfather_get_token")
+		|| tool == Q("botfather_revoke_token")) {
+		return !ExtractBotToken(reply).isEmpty();
+	} else if (BotFatherRefused(reply)) {
+		return false;
+	} else if (tool == Q("botfather_delete_bot")) {
+		return reply.contains(Q("Done"), Qt::CaseInsensitive)
+			|| reply.contains(Q("is gone"), Qt::CaseInsensitive);
+	}
+	return reply.contains(Q("Success"), Qt::CaseInsensitive)
+		|| reply.contains(Q("Done"), Qt::CaseInsensitive);
 }
 
 bool IsValidCloudKey(const QString &key) {

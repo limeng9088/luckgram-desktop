@@ -376,7 +376,21 @@ LUCKGRAM_TEST(McpInitializeAndToolsList) {
 		S("mark_chat_read"),
 		S("join_chat"),
 		S("leave_chat"),
-		S("update_profile") }));
+		S("update_profile"),
+		S("botfather_list_bots"),
+		S("botfather_create_bot"),
+		S("botfather_get_token"),
+		S("botfather_revoke_token"),
+		S("botfather_set_name"),
+		S("botfather_set_description"),
+		S("botfather_set_about"),
+		S("botfather_set_commands"),
+		S("botfather_set_privacy"),
+		S("botfather_set_join_groups"),
+		S("botfather_delete_bot"),
+		S("botfather_send"),
+		S("botfather_press"),
+		S("botfather_read") }));
 
 	reply = HandleMessage(
 		J(R"({"jsonrpc":"2.0","id":4,"method":"resources/list"})"),
@@ -686,7 +700,7 @@ LUCKGRAM_TEST(McpSkillLockedAndLate) {
 }
 
 LUCKGRAM_TEST(McpSkillRegistry) {
-	LG_EQUAL(int(Skills().size()), 8);
+	LG_EQUAL(int(Skills().size()), 9);
 	LG_CHECK(!Skills()[0].write);
 	LG_CHECK(Skills()[1].write); // friends_manage asks before it goes on.
 	LG_EQUAL(
@@ -1035,6 +1049,7 @@ LUCKGRAM_TEST(McpGroupsProfileAndReadArguments) {
 		const auto read = (key == S("friends"))
 			|| (key == S("chats"))
 			|| (key == S("messages"));
+		// "botfather" changes things too: bots are made and deleted.
 		LG_EQUAL(skill.write, !read);
 	}
 }
@@ -1061,4 +1076,150 @@ LUCKGRAM_TEST(McpCloudBackupHost) {
 		backup.value(S("headers")).toObject().value(
 			S("Authorization")).toString(),
 		S("Bearer ") + key);
+}
+
+LUCKGRAM_TEST(McpBotFatherTokensAndNames) {
+	const auto token = S("7214567890:AAHk3mN9xQ2vB7cL5tR8wY1zP4sD6fG0jKe");
+	LG_EQUAL(ExtractBotToken(S("Done! Use this token to access the HTTP API:\n")
+		+ token + S("\nKeep your token secure")), token);
+	LG_EQUAL(ExtractBotToken(S("t.me/some_bot. Token: ") + token + S(".")), token);
+	LG_CHECK(ExtractBotToken(S("Sorry, this username is already taken.")).isEmpty());
+	LG_CHECK(ExtractBotToken(S("at 12:30 see https://core.telegram.org/bots")).isEmpty());
+	LG_CHECK(ExtractBotToken(S("123:short")).isEmpty());
+	LG_CHECK(ExtractBotToken(QString()).isEmpty());
+
+	LG_CHECK(IsBotUsername(S("my_shop_bot")));
+	LG_CHECK(IsBotUsername(S("ShopBot")));
+	LG_CHECK(!IsBotUsername(S("shop")));
+	LG_CHECK(!IsBotUsername(S("1shop_bot")));
+	LG_CHECK(!IsBotUsername(S("shop bot")));
+	LG_CHECK(!IsBotUsername(S("abot")));
+	LG_CHECK(!IsBotUsername(QString(40, QChar('a')) + S("bot")));
+}
+
+LUCKGRAM_TEST(McpBotFatherScripts) {
+	const auto script = [](const char *tool, const char *arguments) {
+		return BotFatherScript(S(tool), J(arguments));
+	};
+	LG_EQUAL(script("botfather_list_bots", "{}"), (QStringList{ S("/mybots") }));
+	LG_EQUAL(
+		script("botfather_create_bot", R"({"name":"My Shop","username":"my_shop_bot"})"),
+		(QStringList{ S("/newbot"), S("My Shop"), S("my_shop_bot") }));
+	LG_EQUAL(
+		script("botfather_get_token", R"({"bot":"my_shop_bot"})"),
+		(QStringList{ S("/token"), S("@my_shop_bot") }));
+	LG_EQUAL(
+		script("botfather_revoke_token", R"({"bot":"my_shop_bot"})"),
+		(QStringList{ S("/revoke"), S("@my_shop_bot") }));
+	LG_EQUAL(
+		script("botfather_set_about", R"({"bot":"my_shop_bot","about":"Hi"})"),
+		(QStringList{ S("/setabouttext"), S("@my_shop_bot"), S("Hi") }));
+	LG_EQUAL(
+		script("botfather_set_privacy", R"({"bot":"my_shop_bot","enabled":false})"),
+		(QStringList{ S("/setprivacy"), S("@my_shop_bot"), S("Disable") }));
+	LG_EQUAL(
+		script("botfather_set_join_groups", R"({"bot":"my_shop_bot","enabled":true})"),
+		(QStringList{ S("/setjoingroups"), S("@my_shop_bot"), S("Enable") }));
+	LG_EQUAL(
+		script("botfather_delete_bot", R"({"bot":"my_shop_bot"})"),
+		(QStringList{
+			S("/deletebot"),
+			S("@my_shop_bot"),
+			S("Yes, I am totally sure.") }));
+	LG_EQUAL(
+		script("botfather_set_commands", R"({"bot":"my_shop_bot","commands":[
+			{"command":"start","description":"Start"},
+			{"command":"help","description":"How it works"}]})"),
+		(QStringList{
+			S("/setcommands"),
+			S("@my_shop_bot"),
+			S("start - Start\nhelp - How it works") }));
+	LG_EQUAL(
+		script("botfather_set_commands", R"({"bot":"my_shop_bot","commands":[]})"),
+		(QStringList{ S("/setcommands"), S("@my_shop_bot"), S("/empty") }));
+	LG_EQUAL(
+		script("botfather_send", R"({"text":"/setuserpic"})"),
+		(QStringList{ S("/setuserpic") }));
+	LG_CHECK(script("botfather_read", "{}").isEmpty());
+	LG_CHECK(script("botfather_press", "{}").isEmpty());
+}
+
+LUCKGRAM_TEST(McpBotFatherVerdicts) {
+	const auto token = S("7214567890:AAHk3mN9xQ2vB7cL5tR8wY1zP4sD6fG0jKe");
+	LG_CHECK(BotFatherRefused(S("Sorry, this username is already taken. Please try something different.")));
+	LG_CHECK(BotFatherRefused(S("Sorry, too many attempts. Please try again in 8 seconds.")));
+	LG_CHECK(BotFatherRefused(S("Invalid bot selected.")));
+	LG_CHECK(BotFatherRefused(S("Unrecognized command. Say what?")));
+	LG_CHECK(!BotFatherRefused(S("Alright, a new bot. How are we going to call it?")));
+	LG_CHECK(!BotFatherRefused(S("Choose a bot to change name.")));
+
+	LG_CHECK(BotFatherSucceeded(S("botfather_create_bot"), S("Done! ") + token));
+	LG_CHECK(!BotFatherSucceeded(S("botfather_create_bot"), S("Good. Now let's choose a username for your bot.")));
+	LG_CHECK(BotFatherSucceeded(S("botfather_get_token"), S("You can use this token: ") + token));
+	LG_CHECK(BotFatherSucceeded(S("botfather_set_name"), S("Success! Name updated. /help")));
+	LG_CHECK(BotFatherSucceeded(S("botfather_set_privacy"), S("Success! The new status is: DISABLED. /help")));
+	LG_CHECK(!BotFatherSucceeded(S("botfather_set_name"), S("OK. Send me the new name for your bot.")));
+	LG_CHECK(!BotFatherSucceeded(S("botfather_set_name"), S("Sorry, the name is too long.")));
+	LG_CHECK(BotFatherSucceeded(S("botfather_delete_bot"), S("Done! The bot is gone. /help")));
+	LG_CHECK(!BotFatherSucceeded(S("botfather_delete_bot"), S("OK, you selected @x_bot. Are you sure?")));
+	LG_CHECK(BotFatherSucceeded(S("botfather_send"), S("anything")));
+	LG_CHECK(!BotFatherSucceeded(S("botfather_send"), S("  ")));
+}
+
+LUCKGRAM_TEST(McpBotFatherArguments) {
+	auto fake = Fake();
+	// Its own switch: messages on does not open BotFather, and the reverse.
+	fake.enabled = { S("messages/111"), S("messages_send/111") };
+	LG_CHECK(ErrorText(ToolReply(fake, "botfather_list_bots")).contains(S("botfather")));
+	fake.enabled = { S("botfather/111") };
+	LG_CHECK(ErrorText(ToolReply(
+		fake,
+		"get_messages",
+		R"({"chat":"BotFather"})")).contains(S("messages")));
+
+	ToolReply(fake, "botfather_create_bot", R"({"name":" My Shop ","username":"@My_Shop_Bot"})");
+	LG_EQUAL(fake.calledTool, S("botfather_create_bot"));
+	LG_EQUAL(fake.calledArguments.value(S("name")).toString(), S("My Shop"));
+	LG_EQUAL(fake.calledArguments.value(S("username")).toString(), S("My_Shop_Bot"));
+	ToolReply(fake, "botfather_set_commands", R"({"bot":"@my_shop_bot","commands":[{"command":"/start","description":" Start  the bot "}]})");
+	const auto commands = fake.calledArguments.value(S("commands")).toArray();
+	LG_EQUAL(int(commands.size()), 1);
+	LG_EQUAL(commands.at(0).toObject().value(S("command")).toString(), S("start"));
+	LG_EQUAL(commands.at(0).toObject().value(S("description")).toString(), S("Start the bot"));
+	ToolReply(fake, "botfather_press", R"({"message_id":120,"button":"Edit Bot"})");
+	LG_EQUAL(fake.calledArguments.value(S("message_id")).toInt(), 120);
+	ToolReply(fake, "botfather_read", "{}");
+	LG_EQUAL(fake.calledArguments.value(S("limit")).toInt(), 5);
+	ToolReply(fake, "botfather_delete_bot", R"({"bot":"my_shop_bot","confirm":"@my_shop_bot"})");
+	LG_EQUAL(fake.calledTool, S("botfather_delete_bot"));
+
+	const auto before = fake.calls;
+	const auto bad = [&](const char *tool, const char *arguments) {
+		LG_CHECK(!ErrorText(ToolReply(fake, tool, arguments)).isEmpty());
+	};
+	bad("botfather_create_bot", R"({"name":"Shop"})");
+	bad("botfather_create_bot", R"({"name":"Shop","username":"shop"})");
+	bad("botfather_create_bot", R"({"name":"","username":"shop_bot"})");
+	bad("botfather_get_token", "{}");
+	bad("botfather_get_token", R"({"bot":"not a bot"})");
+	bad("botfather_set_name", R"({"bot":"shop_bot"})");
+	bad("botfather_set_privacy", R"({"bot":"shop_bot","enabled":"yes"})");
+	bad("botfather_set_commands", R"({"bot":"shop_bot","commands":"start"})");
+	bad("botfather_set_commands", R"({"bot":"shop_bot","commands":[{"command":"Start Now","description":"x"}]})");
+	bad("botfather_set_commands", R"({"bot":"shop_bot","commands":[{"command":"start"}]})");
+	// Deleting needs the name twice.
+	bad("botfather_delete_bot", R"({"bot":"shop_bot"})");
+	bad("botfather_delete_bot", R"({"bot":"shop_bot","confirm":"other_bot"})");
+	bad("botfather_send", R"({"text":""})");
+	bad("botfather_press", R"({"button":"Edit Bot"})");
+	bad("botfather_press", R"({"message_id":5})");
+	bad("botfather_read", R"({"limit":21})");
+	bad("botfather_unknown", "{}");
+	LG_EQUAL(fake.calls, before);
+
+	// Creating and deleting are the tightest; reading is the loosest.
+	LG_EQUAL(LimitOf(S("botfather_create_bot")).perHour, 3);
+	LG_EQUAL(LimitOf(S("botfather_delete_bot")).perDay, 10);
+	LG_CHECK(LimitOf(S("botfather_send")).perHour > 3);
+	LG_CHECK(LimitOf(S("botfather_read")).perHour > LimitOf(S("botfather_send")).perHour);
 }

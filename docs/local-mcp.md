@@ -54,8 +54,34 @@ Skill 工具都有可选参数 `account`（`list_accounts` 里的 `id`），不�
 | 群组和频道 `groups` | `leave_chat` | `account`、`chat` | `left`、`was_member`。只支持超级群和频道，自己创建的不能用它退出。每账号每小时 10 次、每天 30 次 |
 | 资料 `profile` | `update_profile` | `account`，`first_name` / `last_name` / `bio` 至少一个 | `updated`、`name`、`bio`。每账号每小时 5 次、每天 10 次 |
 
+### BotFather `botfather`
+
+通过账号自己和 @BotFather 的会话创建和管理机器人。这个 Skill 只碰这一个会话（按用户 id 校验是真正的 BotFather），看不到账号的其他会话；它和「读消息」「发消息」是各自独立的开关。
+
+| 工具 | 参数 | 返回 | 每账号上限 |
+|---|---|---|---|
+| `botfather_list_bots` | `account` | `bots`（用户名列表）、`reply` | 60/小时、300/天 |
+| `botfather_create_bot` | `account`、`name`、`username`（以 `bot` 结尾） | `username`、`link`、`token` | 3/小时、10/天 |
+| `botfather_get_token` | `account`、`bot` | `token` | 30/小时、150/天 |
+| `botfather_revoke_token` | `account`、`bot` | 新的 `token`，旧令牌立即失效 | 同上 |
+| `botfather_set_name` | `account`、`bot`、`name` | `done` | 同上 |
+| `botfather_set_description` | `account`、`bot`、`description`（≤512） | `done` | 同上 |
+| `botfather_set_about` | `account`、`bot`、`about`（≤120） | `done` | 同上 |
+| `botfather_set_commands` | `account`、`bot`、`commands`：`[{command, description}]`，空列表表示清空 | `done` | 同上 |
+| `botfather_set_privacy` | `account`、`bot`、`enabled` | `done` | 同上 |
+| `botfather_set_join_groups` | `account`、`bot`、`enabled` | `done` | 同上 |
+| `botfather_delete_bot` | `account`、`bot`、`confirm`（把用户名再写一遍） | `done` | 3/小时、10/天 |
+| `botfather_send` | `account`、`text` | `reply`：`id`、`text`、`buttons` | 30/小时、150/天 |
+| `botfather_press` | `account`、`message_id`、`button` | `reply`、`changed`、`url` | 同上 |
+| `botfather_read` | `account`、`limit`（1–20，默认 5） | `messages`（从新到旧，含按钮） | 60/小时、300/天 |
+
+- 每个工具都是和 BotFather 的一小段对话：按顺序发送命令和参数，每发一句等它回复再发下一句。BotFather 拒绝或没听懂时立即停下，把它的原话作为错误返回。
+- `botfather_send`、`botfather_press`、`botfather_read` 是通用操作：上面没有覆盖的功能（头像、内联模式、支付、菜单按钮等）都可以用它们一步一步完成。
+- 机器人令牌是密钥：`botfather_create_bot`、`botfather_get_token`、`botfather_revoke_token` 会把令牌返回给 AI 工具。只给你愿意让它拿到令牌的账号开启。
+- 开启时桌面版会弹确认框。
+
 - `send_message` 交给应用自己的发送队列，和手动输入发送一样：发出去，或者在会话里显示发送失败。一次只发给一个会话，没有群发工具。
-- 「管理好友」「发消息」「管理会话」「群组和频道」「资料」是会改动账号的 Skill：开启时桌面版会弹确认框，确认一次后该账号不再逐次询问。
+- 「管理好友」「发消息」「管理会话」「群组和频道」「资料」「BotFather」是会改动账号的 Skill：开启时桌面版会弹确认框，确认一次后该账号不再逐次询问。
 - 频率上限按账号、按工具计数，重启后仍然有效，失败的调用也计数。超限时工具返回错误并给出还要等多少秒。上限是为了避免账号被 Telegram 限制，不能关闭。
 - Telegram 自己返回 `FLOOD_WAIT` 时，工具会把要等的秒数原样告诉调用方。
 - `list_chats` 只返回主列表（不含归档），不返回任何消息内容。`complete` 为 false 表示应用还只加载了长列表的前一部分。
