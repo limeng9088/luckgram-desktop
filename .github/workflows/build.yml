@@ -1267,6 +1267,17 @@ jobs:
           echo "Build parts: $RESULTS"
           case " $RESULTS " in *" success "*) ;; *) echo "::error::the build did not finish in this run; the compiler cache is saved, the next run continues"; exit 1 ;; esac
 
+      - name: Free disk space after the build.
+        # The hosted Mac's data volume was at 91% (28 GB left) after the
+        # build. The compiler cache is saved and only out/Release/Luckgram.app
+        # is used below, so the Xcode intermediates (out/build: objects,
+        # dependency files) and DerivedData (module and index caches) go.
+        continue-on-error: true
+        run: |
+          df -h "$GITHUB_WORKSPACE" | tail -1
+          rm -rf luckgram-desktop/out/build "$HOME/Library/Developer/Xcode/DerivedData"
+          df -h "$GITHUB_WORKSPACE" | tail -1
+
       - name: Stage Luckgram.app.
         run: |
           set -euo pipefail
