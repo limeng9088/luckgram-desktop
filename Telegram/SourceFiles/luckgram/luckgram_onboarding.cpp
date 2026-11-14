@@ -368,7 +368,7 @@ void OnMainShown(not_null<Window::SessionController*> controller) {
 		return;
 	}
 	started = true;
-	Update::Start(controller); // D4: at start, then every 6 hours.
+	Update::Start(controller); // D4: at start, then every 30 minutes.
 	base::call_delayed(kAfterLoginDelay, controller, [=] {
 		NearbyState::RestoreReminder(controller); // D10: 25 reminder.
 		if (!CheckPrivacyUpdate(controller)) {

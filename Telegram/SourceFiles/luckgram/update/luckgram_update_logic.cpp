@@ -275,6 +275,18 @@ bool ShouldAutoDownload(
 		|| nowMs - lastAutoFailureMs >= kAutoRetryAfterMs;
 }
 
+bool ShouldAutoInstall(
+		bool ready,
+		bool switchOn,
+		bool inCall,
+		bool appInFront,
+		qint64 idleMs) {
+	if (!ready || !switchOn || inCall) {
+		return false;
+	}
+	return !appInFront || (idleMs >= kAutoInstallIdleMs);
+}
+
 QStringList ToDelete(const QStringList &names, const QString &keep) {
 	auto result = QStringList();
 	const auto prefix = QString::fromLatin1(kFilePrefix);
@@ -383,6 +395,10 @@ QString Texts::cancel() const { return t("取消", "Cancel"); }
 QString Texts::retry() const { return t("重试", "Retry"); }
 QString Texts::ok() const { return t("好", "OK"); }
 QString Texts::autoSwitch() const { return t("Wi-Fi 下自动下载更新", "Auto-download updates on Wi-Fi"); }
+
+QString Texts::autoInstallSwitch() const {
+	return t("空闲时自动重启并更新", "Restart and update automatically when idle");
+}
 
 QString Texts::autoSwitchInfo() const {
 	return t(

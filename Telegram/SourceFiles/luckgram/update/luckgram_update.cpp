@@ -8,6 +8,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "base/call_delayed.h"
 #include "base/timer.h"
 #include "base/weak_qptr.h"
+#include "calls/calls_instance.h"
 #include "core/application.h"
 #include "core/file_utilities.h"
 #include "core/version.h"
@@ -41,6 +42,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QStorageInfo>
+#include <QtGui/QGuiApplication>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
 #include <QtNetwork/QNetworkInformation>
 #endif // Qt >= 6.3
@@ -48,6 +50,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 namespace Luckgram::Update {
 
 void InstallNow();
+[[nodiscard]] bool AutoInstall();
 
 namespace {
 
@@ -56,8 +59,9 @@ constexpr auto kLastCheckKey = "update_last_check";
 constexpr auto kLastFailureKey = "update_last_failure";
 constexpr auto kLastCheckAppKey = "update_last_check_app";
 constexpr auto kAutoFailureKey = "update_auto_failure";
-// How often "is a check due" is asked; the check itself is every 6 hours.
-constexpr auto kTimerInterval = crl::time(30 * 60 * 1000);
+// How often "is a check due" and "may the ready package be installed now"
+// are asked; the check itself is every 30 minutes.
+constexpr auto kTimerInterval = crl::time(60 * 1000);
 
 enum class Phase {
 	None,
@@ -234,6 +238,7 @@ void Cleanup() {
 }
 
 void MaybeShowForce();
+void MaybeAutoInstall();
 void StartDownload(bool manual);
 void ShowProgressBox();
 
@@ -267,6 +272,10 @@ void Verified(const State &state, bool manual) {
 		box->closeBox();
 	}
 	Changed();
+	if (!manual && !state.forceUpdate) {
+		MaybeAutoInstall();
+		return;
+	}
 	if (manual || state.forceUpdate) {
 		// Asked for it: "重启并更新" right away.
 		if (const auto controller = ActiveController()) {
@@ -281,6 +290,25 @@ void Verified(const State &state, bool manual) {
 				.title = Tx().notesTitle(state.latest, state.build),
 			}));
 		}
+	}
+}
+
+void MaybeAutoInstall() {
+	if (CurrentPhase() != Phase::Ready
+		|| !Platform::CanInstall()
+		|| !Installable(Current())) {
+		return; // Never a box nobody asked for.
+	}
+	const auto idle = crl::now() - Core::App().lastNonIdleTime();
+	if (ShouldAutoInstall(
+			true,
+			AutoInstall(),
+			Core::App().calls().inCall(),
+			(QGuiApplication::applicationState() == Qt::ApplicationActive),
+			qint64(idle))) {
+		LOG(("Luckgram Update: installing %1 on its own (idle).").arg(
+			PackageName(Current())));
+		InstallNow();
 	}
 }
 
@@ -648,6 +676,7 @@ void Start(not_null<Window::SessionController*>) {
 	data.timer.setCallback([] {
 		MaybeShowForce();
 		CheckIfDue();
+		MaybeAutoInstall();
 	});
 	data.timer.callEach(kTimerInterval);
 	Cleanup();
@@ -689,6 +718,23 @@ rpl::producer<QString> AutoDownloadTitle() {
 
 bool AutoDownload() {
 	return Settings::GetBool(K(kAutoDownloadKey), true);
+}
+
+rpl::producer<QString> AutoInstallTitle() {
+	return rpl::single(Tx().autoInstallSwitch());
+}
+
+bool AutoInstall() {
+	return Settings::GetBool(K(kAutoInstallKey), false);
+}
+
+void BindAutoInstallCheckbox(not_null<Ui::Checkbox*> checkbox) {
+	checkbox->checkedChanges(
+	) | rpl::filter([](bool checked) {
+		return (checked != AutoInstall());
+	}) | rpl::on_next([](bool checked) {
+		Settings::SetBool(K(kAutoInstallKey), checked);
+	}, checkbox->lifetime());
 }
 
 void BindAutoDownloadCheckbox(not_null<Ui::Checkbox*> checkbox) {

@@ -60,7 +60,9 @@ constexpr const char *kProtocolVersions[] = {
 [[nodiscard]] Response Json(int status, const QJsonDocument &document) {
 	auto result = Response();
 	result.status = status;
-	result.contentType = "application/json";
+	// The charset is said although JSON is always UTF-8: some clients
+	// (Windows PowerShell) read names as Latin-1 without it.
+	result.contentType = "application/json; charset=utf-8";
 	result.body = document.toJson(QJsonDocument::Compact);
 	return result;
 }

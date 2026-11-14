@@ -58,13 +58,13 @@ LUCKGRAM_TEST(UpdateNewerByBuildOnlyWhenBothKnown) {
 	LG_CHECK(!IsNewer(U("7.4.1"), 99, U("7.4.2"), 1));
 }
 
-LUCKGRAM_TEST(UpdateCheckEverySixHours) {
+LUCKGRAM_TEST(UpdateCheckEveryInterval) {
 	LG_CHECK(ShouldCheck(kNow, 0, 0));
-	LG_CHECK(!ShouldCheck(kNow, kNow - 6 * H + 60'000, 0));
-	LG_CHECK(ShouldCheck(kNow, kNow - 6 * H, 0));
+	LG_CHECK(!ShouldCheck(kNow, kNow - kCheckIntervalMs + 60'000, 0));
+	LG_CHECK(ShouldCheck(kNow, kNow - kCheckIntervalMs, 0));
 	LG_CHECK(ShouldCheck(kNow, kNow + H, 0)); // Clock went back.
-	LG_CHECK(!ShouldCheck(kNow, 0, kNow - H / 2)); // Recent failure.
-	LG_CHECK(ShouldCheck(kNow, 0, kNow - H));
+	LG_CHECK(!ShouldCheck(kNow, 0, kNow - kRetryAfterFailureMs / 2)); // Recent failure.
+	LG_CHECK(ShouldCheck(kNow, 0, kNow - kRetryAfterFailureMs));
 }
 
 LUCKGRAM_TEST(UpdateCheckAgainAfterTheInstalledBuildChanged) {
@@ -267,4 +267,21 @@ LUCKGRAM_TEST(UpdateInstallerArguments) {
 	const auto args = InstallerArguments();
 	LG_CHECK(args.contains(U("/VERYSILENT")));
 	LG_CHECK(args.contains(U("/luckgramupdate=1")));
+}
+
+LUCKGRAM_TEST(UpdateAutoInstallOnlyWhenNobodyIsDisturbed) {
+	const auto idle = kAutoInstallIdleMs;
+	// Off by default: never on its own.
+	LG_CHECK(!ShouldAutoInstall(true, false, false, false, idle));
+	// Nothing verified yet.
+	LG_CHECK(!ShouldAutoInstall(false, true, false, false, idle));
+	// Never during a call, whatever else.
+	LG_CHECK(!ShouldAutoInstall(true, true, true, false, idle * 10));
+	// The app is in front and the user was just here.
+	LG_CHECK(!ShouldAutoInstall(true, true, false, true, 0));
+	LG_CHECK(!ShouldAutoInstall(true, true, false, true, idle - 1));
+	// In front, but nobody touched the computer for a while.
+	LG_CHECK(ShouldAutoInstall(true, true, false, true, idle));
+	// Another app is in front: at once.
+	LG_CHECK(ShouldAutoInstall(true, true, false, false, 0));
 }
