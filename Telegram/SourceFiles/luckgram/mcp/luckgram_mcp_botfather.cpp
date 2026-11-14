@@ -20,6 +20,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "history/history_item_reply_markup.h"
 #include "main/main_session.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QJsonArray>
 
 #include <algorithm>
@@ -32,6 +33,8 @@ constexpr auto kPollInterval = crl::time(600);
 constexpr auto kAnswerPolls = 34; // About 20 s for an answer to one line.
 constexpr auto kPressPolls = 12; // About 7 s for a pressed button to show.
 constexpr auto kReadLimit = 20;
+// Longer than the longest script: three lines, about 20 s each.
+constexpr auto kRunTimeout = crl::time(90 * 1000);
 
 using Button = HistoryMessageMarkupButton;
 
@@ -210,7 +213,7 @@ void WaitForAnswer(const std::shared_ptr<Run> &run) {
 		Finish(run, Failed(u"The account is gone."_q));
 		return;
 	}
-	base::call_delayed(kPollInterval, session, [=] {
+	base::call_delayed(kPollInterval, QCoreApplication::instance(), [=] {
 		const auto strong = run->session.get();
 		const auto peer = strong
 			? strong->data().peerLoaded(run->peerId)
@@ -275,7 +278,7 @@ void WaitForPress(const std::shared_ptr<Run> &run) {
 		Finish(run, Failed(u"The account is gone."_q));
 		return;
 	}
-	base::call_delayed(kPollInterval, session, [=] {
+	base::call_delayed(kPollInterval, QCoreApplication::instance(), [=] {
 		const auto strong = run->session.get();
 		const auto peer = strong
 			? strong->data().peerLoaded(run->peerId)
@@ -487,6 +490,12 @@ void RunBotFather(
 	run->arguments = arguments;
 	run->done = std::move(done);
 	Enqueue(run->account, [=] {
+		// Whatever happens to the account meanwhile (logged out: its
+		// requests and timers are dropped without a word), this run ends
+		// and lets the next one of the queue start.
+		base::call_delayed(kRunTimeout, QCoreApplication::instance(), [=] {
+			Finish(run, Failed(u"BotFather did not answer in time."_q));
+		});
 		const auto strong = run->session.get();
 		if (!strong) {
 			Finish(run, Failed(u"The account is gone."_q));
