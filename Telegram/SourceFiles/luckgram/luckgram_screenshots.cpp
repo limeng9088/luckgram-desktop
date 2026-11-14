@@ -33,6 +33,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "settings/sections/settings_luckgram_backup.h"
 #include "settings/sections/settings_luckgram_call_recording.h"
 #include "settings/sections/settings_luckgram_discover.h"
+#include "settings/sections/settings_luckgram_mcp.h"
 #include "settings/sections/settings_luckgram_privacy.h"
 #include "settings/sections/settings_luckgram_pro.h"
 #include "settings/sections/settings_luckgram_translate.h"
@@ -291,6 +292,7 @@ struct Shot {
 		{ u"D9-storage"_q, settings(::Settings::LocalStorageId()), 2000, true },
 		{ u"D11-call-recording"_q, settings(::Settings::LuckgramCallRecordingId()), 0, true },
 		{ u"D4-advanced-update"_q, settings(::Settings::AdvancedId()), 0, true },
+		{ u"MCP-local-server"_q, settings(::Settings::LuckgramMcp::Id()), 0, true },
 	};
 }
 
