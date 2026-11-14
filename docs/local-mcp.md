@@ -1,6 +1,6 @@
 # 本机 MCP 接口（切换账号）
 
-让这台电脑上的 AI 工具（Claude Code、Cursor 等）查看 Luckgram Desktop 里已登录的账号、切换当前账号，并在按账号开启 Skill 后查看该账号的好友和会话列表。读不到消息内容，也不能发消息。
+让这台电脑上的 AI 工具（Claude Code、Cursor 等）查看 Luckgram Desktop 里已登录的账号、切换当前账号，并在按账号开启 Skill 后查看该账号的好友和会话列表。读消息和发消息是两个单独的 Skill，不开启就读不到消息内容，也不能发消息。
 
 ## 开启
 
@@ -47,8 +47,11 @@ Skill 工具都有可选参数 `account`（`list_accounts` 里的 `id`），不�
 | 管理好友 `friends_manage` | `add_friend` | `account`，`user_id` / `username` / `phone` 三选一，`first_name`、`last_name`（保存的备注名，可选） | `added`、`already_friend`、`user`。不发任何消息。每账号每小时 5 次、每天 20 次 |
 | 管理好友 `friends_manage` | `remove_friend` | `account`，`user_id` / `username` 二选一 | `removed`、`was_friend`、`user`。聊天记录保留。每账号每小时 20 次、每天 50 次 |
 | 会话 `chats` | `list_chats` | `account`、`unread_only`、`limit`（1–200，默认 50）、`offset` | `total`、`complete`、`chats`：`id`、`type`（user / bot / group / supergroup / channel）、`name`、`username`、`unread`、`unread_mark`、`muted`、`pinned`、`last_message_date` |
+| 读消息 `messages` | `get_messages` | `account`、`chat`（`list_chats` 的 `id` 或用户名）、`limit`（1–100，默认 20）、`before_id` | `chat_id`、`chat_name`、`messages`（从新到旧）：`id`、`date`、`from_id`、`from_name`、`out`、`text`、`attachment`、`reply_to`、`service`。不会把会话标记为已读 |
+| 发消息 `messages_send` | `send_message` | `account`、`chat`、`text`（1–4096 字，纯文本）、`reply_to`（可选） | `queued`、`chat_id`、`chat_name`。每账号每小时 30 次、每天 200 次 |
 
-- 「管理好友」是会改动账号的 Skill：开启时桌面版会弹确认框，确认一次后该账号不再逐次询问。
+- `send_message` 交给应用自己的发送队列，和手动输入发送一样：发出去，或者在会话里显示发送失败。一次只发给一个会话，没有群发工具。
+- 「管理好友」和「发消息」是会改动账号的 Skill：开启时桌面版会弹确认框，确认一次后该账号不再逐次询问。
 - 频率上限按账号、按工具计数，重启后仍然有效，失败的调用也计数。超限时工具返回错误并给出还要等多少秒。上限是为了避免账号被 Telegram 限制，不能关闭。
 - Telegram 自己返回 `FLOOD_WAIT` 时，工具会把要等的秒数原样告诉调用方。
 - `list_chats` 只返回主列表（不含归档），不返回任何消息内容。`complete` 为 false 表示应用还只加载了长列表的前一部分。

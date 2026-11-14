@@ -48,6 +48,8 @@ struct AccountInfo {
 inline constexpr auto kSkillFriends = "friends";
 inline constexpr auto kSkillFriendsManage = "friends_manage";
 inline constexpr auto kSkillChats = "chats";
+inline constexpr auto kSkillMessages = "messages";
+inline constexpr auto kSkillMessagesSend = "messages_send";
 
 struct SkillInfo {
 	const char *key = "";

@@ -5,10 +5,12 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/mcp/luckgram_mcp.h"
 
+#include "api/api_common.h"
 #include "apiwrap.h"
 #include "base/call_delayed.h"
 #include "base/random.h"
 #include "core/application.h"
+#include "data/data_chat_participant_status.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "data/notify/data_notify_settings.h"
@@ -367,6 +369,205 @@ void RemoveFriend(
 	});
 }
 
+// The chat a messages tool names: by the id list_chats gave, or by username.
+void ResolveChat(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		Fn<void(PeerData *peer, ToolOutcome failure)> done) {
+	const auto owner = &session->data();
+	const auto id = arguments.value(u"chat_id"_q).toString();
+	const auto username = arguments.value(u"chat_username"_q).toString();
+	if (!id.isEmpty()) {
+		const auto value = id.toULongLong();
+		// list_chats gives the full peer id; a bare user id works too.
+		auto peer = owner->peerLoaded(PeerId(PeerIdHelper(value)));
+		if (!peer) {
+			peer = owner->userLoaded(UserId(value));
+		}
+		if (!peer) {
+			done(nullptr, Failed(
+				"This account has no chat with this id. Take the id from "
+				"list_chats, or give a username."));
+		} else {
+			done(peer, ToolOutcome());
+		}
+		return;
+	}
+	if (const auto known = owner->peerByUsername(username)) {
+		done(known, ToolOutcome());
+		return;
+	}
+	session->api().request(MTPcontacts_ResolveUsername(
+		MTP_flags(0),
+		MTP_string(username),
+		MTP_string()
+	)).done([=](const MTPcontacts_ResolvedPeer &result) {
+		const auto &data = result.data();
+		owner->processUsers(data.vusers());
+		owner->processChats(data.vchats());
+		const auto peerId = peerFromMTP(data.vpeer());
+		const auto peer = peerId ? owner->peerLoaded(peerId) : nullptr;
+		if (!peer) {
+			done(nullptr, Failed("Nothing has this username."));
+		} else {
+			done(peer, ToolOutcome());
+		}
+	}).fail([=](const MTP::Error &error) {
+		done(nullptr, ServerError(error));
+	}).send();
+}
+
+[[nodiscard]] QString MediaKind(const MTPMessageMedia &media) {
+	switch (media.type()) {
+	case mtpc_messageMediaEmpty: return QString();
+	case mtpc_messageMediaPhoto: return u"photo"_q;
+	case mtpc_messageMediaDocument: return u"file"_q;
+	case mtpc_messageMediaWebPage: return u"link_preview"_q;
+	case mtpc_messageMediaGeo:
+	case mtpc_messageMediaGeoLive:
+	case mtpc_messageMediaVenue: return u"location"_q;
+	case mtpc_messageMediaContact: return u"contact"_q;
+	case mtpc_messageMediaPoll: return u"poll"_q;
+	}
+	return u"other"_q;
+}
+
+// Skill "messages". Asked from the server and read from the answer: the
+// chat in the app is not touched, nothing is marked as read.
+void GetMessages(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	const auto limit = arguments.value(u"limit"_q).toInt();
+	const auto before = arguments.value(u"before_id"_q).toInt();
+	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
+		if (!peer) {
+			done(std::move(failure));
+			return;
+		}
+		const auto owner = &session->data();
+		const auto self = session->userPeerId();
+		const auto chatId = peer->id;
+		const auto parse = [=](const QVector<MTPMessage> &list) {
+			auto messages = QJsonArray();
+			for (const auto &message : list) {
+				auto entry = QJsonObject();
+				auto from = PeerId();
+				message.match([&](const MTPDmessage &data) {
+					entry.insert(u"id"_q, data.vid().v);
+					entry.insert(u"date"_q, data.vdate().v);
+					entry.insert(u"out"_q, data.is_out());
+					entry.insert(u"text"_q, qs(data.vmessage()));
+					if (const auto media = data.vmedia()) {
+						const auto kind = MediaKind(*media);
+						if (!kind.isEmpty()) {
+							entry.insert(u"attachment"_q, kind);
+						}
+					}
+					if (const auto reply = data.vreply_to()) {
+						reply->match([&](const MTPDmessageReplyHeader &d) {
+							if (const auto id = d.vreply_to_msg_id()) {
+								entry.insert(u"reply_to"_q, id->v);
+							}
+						}, [](const auto &) {
+						});
+					}
+					from = data.vfrom_id()
+						? peerFromMTP(*data.vfrom_id())
+						: data.is_out()
+						? self
+						: chatId;
+				}, [&](const MTPDmessageService &data) {
+					entry.insert(u"id"_q, data.vid().v);
+					entry.insert(u"date"_q, data.vdate().v);
+					entry.insert(u"out"_q, data.is_out());
+					entry.insert(u"service"_q, true);
+					from = data.vfrom_id()
+						? peerFromMTP(*data.vfrom_id())
+						: chatId;
+				}, [](const MTPDmessageEmpty &) {
+				});
+				if (entry.isEmpty()) {
+					continue;
+				}
+				if (from) {
+					entry.insert(
+						u"from_id"_q,
+						QString::number(quint64(from.value)));
+					if (const auto sender = owner->peerLoaded(from)) {
+						entry.insert(u"from_name"_q, sender->name());
+					}
+				}
+				messages.push_back(entry);
+			}
+			auto result = ToolOutcome();
+			result.value.insert(
+				u"chat_id"_q,
+				QString::number(quint64(chatId.value)));
+			result.value.insert(u"chat_name"_q, peer->name());
+			result.value.insert(u"messages"_q, messages);
+			done(std::move(result));
+		};
+		session->api().request(MTPmessages_GetHistory(
+			peer->input(),
+			MTP_int(before),
+			MTP_int(0),
+			MTP_int(0),
+			MTP_int(limit),
+			MTP_int(0),
+			MTP_int(0),
+			MTP_long(0)
+		)).done([=](const MTPmessages_Messages &result) {
+			result.match([&](const MTPDmessages_messagesNotModified &) {
+				parse(QVector<MTPMessage>());
+			}, [&](const auto &data) {
+				owner->processUsers(data.vusers());
+				owner->processChats(data.vchats());
+				parse(data.vmessages().v);
+			});
+		}).fail([=](const MTP::Error &error) {
+			done(ServerError(error));
+		}).send();
+	});
+}
+
+// Skill "messages_send": the app's own sending, one plain text message.
+void SendMessage(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	const auto text = arguments.value(u"text"_q).toString();
+	const auto reply = arguments.value(u"reply_to"_q).toInt();
+	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
+		if (!peer) {
+			done(std::move(failure));
+			return;
+		} else if (!Data::CanSendTexts(peer)) {
+			done(Failed("This account can't write in this chat."));
+			return;
+		}
+		const auto history = session->data().history(peer);
+		auto message = Api::MessageToSend(Api::SendAction(history));
+		message.textWithTags = { text, TextWithTags::Tags() };
+		message.action.clearDraft = false; // The user's draft stays.
+		if (reply > 0) {
+			message.action.replyTo.messageId = FullMsgId(
+				peer->id,
+				MsgId(reply));
+		}
+		session->api().sendMessage(std::move(message));
+		auto result = ToolOutcome();
+		// Handed to the app's send queue: it is delivered, or shown as
+		// failed in the chat, like a message typed by hand.
+		result.value.insert(u"queued"_q, true);
+		result.value.insert(
+			u"chat_id"_q,
+			QString::number(quint64(peer->id.value)));
+		result.value.insert(u"chat_name"_q, peer->name());
+		done(std::move(result));
+	});
+}
+
 // Skill "chats".
 [[nodiscard]] ToolOutcome ChatsOf(
 		not_null<Main::Session*> session,
@@ -460,6 +661,10 @@ void RemoveFriend(
 			ListFriends(session, arguments, std::move(done));
 		} else if (tool == u"list_chats"_q) {
 			done(ChatsOf(session, arguments));
+		} else if (tool == u"get_messages"_q) {
+			GetMessages(session, arguments, std::move(done));
+		} else if (tool == u"send_message"_q) {
+			SendMessage(session, arguments, std::move(done));
 		} else if (tool == u"find_user"_q) {
 			FindUser(session, arguments, std::move(done));
 		} else if (tool == u"add_friend"_q) {

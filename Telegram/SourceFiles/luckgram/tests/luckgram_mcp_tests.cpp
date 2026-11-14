@@ -370,7 +370,9 @@ LUCKGRAM_TEST(McpInitializeAndToolsList) {
 		S("find_user"),
 		S("add_friend"),
 		S("remove_friend"),
-		S("list_chats") }));
+		S("list_chats"),
+		S("get_messages"),
+		S("send_message") }));
 
 	reply = HandleMessage(
 		J(R"({"jsonrpc":"2.0","id":4,"method":"resources/list"})"),
@@ -680,7 +682,7 @@ LUCKGRAM_TEST(McpSkillLockedAndLate) {
 }
 
 LUCKGRAM_TEST(McpSkillRegistry) {
-	LG_EQUAL(int(Skills().size()), 3);
+	LG_EQUAL(int(Skills().size()), 5);
 	LG_CHECK(!Skills()[0].write);
 	LG_CHECK(Skills()[1].write); // friends_manage asks before it goes on.
 	LG_EQUAL(
@@ -814,4 +816,73 @@ LUCKGRAM_TEST(McpRateLimitPerAccount) {
 		S("FLOOD_WAIT_30"));
 	LG_EQUAL(int(fake.backend().loadTimes(
 		RateSettingKey(S("add_friend"), 111)).size()), 7);
+}
+
+LUCKGRAM_TEST(McpMessagesArguments) {
+	auto fake = Fake();
+	fake.enabled = { S("messages/111"), S("messages_send/111") };
+
+	ToolReply(fake, "get_messages", R"({"chat":"7000000000009"})");
+	LG_EQUAL(fake.calledTool, S("get_messages"));
+	LG_EQUAL(fake.calledArguments.value(S("chat_id")).toString(), S("7000000000009"));
+	LG_CHECK(!fake.calledArguments.contains(S("chat_username")));
+	LG_EQUAL(fake.calledArguments.value(S("limit")).toInt(), 20);
+	LG_EQUAL(fake.calledArguments.value(S("before_id")).toInt(), 0);
+	ToolReply(fake, "get_messages", R"({"chat":"@durov","limit":100,"before_id":55})");
+	LG_EQUAL(fake.calledArguments.value(S("chat_username")).toString(), S("durov"));
+	LG_EQUAL(fake.calledArguments.value(S("limit")).toInt(), 100);
+	LG_EQUAL(fake.calledArguments.value(S("before_id")).toInt(), 55);
+
+	ToolReply(fake, "send_message", R"({"chat":"some_group","text":"  hello \n","reply_to":9})");
+	LG_EQUAL(fake.calledTool, S("send_message"));
+	LG_EQUAL(fake.calledArguments.value(S("text")).toString(), S("hello"));
+	LG_EQUAL(fake.calledArguments.value(S("reply_to")).toInt(), 9);
+
+	const auto before = fake.calls;
+	const auto bad = [&](const char *tool, const char *arguments) {
+		LG_CHECK(!ErrorText(ToolReply(fake, tool, arguments)).isEmpty());
+	};
+	bad("get_messages", "{}");
+	bad("get_messages", R"({"chat":""})");
+	bad("get_messages", R"({"chat":"0"})");
+	bad("get_messages", R"({"chat":"a b"})");
+	bad("get_messages", R"({"chat":"https://t.me/x"})");
+	bad("get_messages", R"({"chat":"durov","limit":101})");
+	bad("get_messages", R"({"chat":"durov","before_id":0})");
+	bad("send_message", R"({"chat":"durov"})");
+	bad("send_message", R"({"chat":"durov","text":"   "})");
+	bad("send_message", R"({"chat":"durov","text":5})");
+	bad("send_message", R"({"text":"hi"})");
+	bad("send_message", R"({"chat":"durov","text":"hi","reply_to":-1})");
+	const auto tooLong = QByteArray(R"({"chat":"durov","text":")")
+		+ QByteArray(4097, 'a') + "\"}";
+	bad("send_message", tooLong.constData());
+	LG_EQUAL(fake.calls, before);
+}
+
+LUCKGRAM_TEST(McpSendingIsItsOwnSwitchAndLimited) {
+	auto fake = Fake();
+	fake.enabled = { S("messages/111") };
+	// Reading does not allow sending.
+	LG_CHECK(ErrorText(ToolReply(
+		fake,
+		"send_message",
+		R"({"chat":"durov","text":"hi"})")).contains(S("messages_send")));
+	LG_EQUAL(fake.calls, 0);
+
+	fake.enabled.push_back(S("messages_send/111"));
+	for (auto i = 0; i != 30; ++i) {
+		LG_CHECK(!ToolReply(
+			fake,
+			"send_message",
+			R"({"chat":"durov","text":"hi"})").value(S("isError")).toBool());
+		fake.now += 1000;
+	}
+	LG_CHECK(ErrorText(ToolReply(
+		fake,
+		"send_message",
+		R"({"chat":"durov","text":"hi"})")).contains(S("Rate limit")));
+	LG_EQUAL(fake.calls, 30);
+	// Reading is not limited.
+	LG_EQUAL(LimitOf(S("get_messages")).perHour, 0);
 }

@@ -107,16 +107,16 @@ void LuckgramMcp::setupContent(
 		rpl::single(Tr(
 			"把「客户端配置」粘贴到 AI 工具的 MCP 设置里（Claude Code、"
 			"Cursor 等），它就能列出这台电脑上已登录的账号并切换当前账号。"
-			"下面按账号开启 Skill 后，还能查看该账号的好友和会话列表。"
-			"读不到消息内容，也不能发消息。\n\n"
+			"下面按账号开启 Skill 后，还能使用该账号的好友、会话、"
+			"消息等功能。没开启的 Skill 一律不可用。\n\n"
 			"只接受本机（127.0.0.1）的连接，每次请求都要带访问令牌。"
 			"拿到令牌的本机程序都能切换账号，不要把令牌发给别人。",
 			"Paste the client config into the MCP settings of your AI tool "
 			"(Claude Code, Cursor and others). It can then list the "
 			"accounts logged in on this computer and switch the active "
-			"one. With a skill switched on below it also sees that "
-			"account's friends or chat list. It never reads message "
-			"texts and never sends anything.\n\n"
+			"one. With skills switched on below it also uses that "
+			"account's friends, chats and messages. A skill that is "
+			"off is never available.\n\n"
 			"Only connections from this computer (127.0.0.1) are accepted "
 			"and every request needs the access token. Any local program "
 			"that has the token can switch accounts, so keep it private.")));
@@ -169,14 +169,14 @@ void LuckgramMcp::setupContent(
 						.text = Tr(
 							"开启后，拿到访问令牌的 AI 工具可以用账号「",
 							"With this on, AI tools that have the access "
-							"token can add and remove friends as \"")
+							"token can act as \"")
 							+ name
+							+ Tr("」执行：", "\": ")
+							+ Tr(skill.aboutZh, skill.aboutEn)
 							+ Tr(
-								"」加好友和删好友，不会再逐次询问。"
-								"有频率上限，超过会被拒绝。",
-								"\" without asking each time. Calls are "
-								"rate limited; over the limit they are "
-								"refused."),
+								"。不会再逐次询问，超过频率上限会被拒绝。",
+								". They are not asked each time; calls "
+								"over the rate limit are refused."),
 						.confirmed = [=](Fn<void()> close) {
 							Mcp::SetSkillEnabled(id, key, true);
 							*shown = true;
