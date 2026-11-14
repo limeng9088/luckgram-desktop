@@ -1069,12 +1069,14 @@ jobs:
           path: .ccache
           # "-run-" after the branch: the prefix of feat/x never matches the
           # caches of feat/x-y (also when older caches are deleted).
+          # The last restore key, plain 'ccache-macos-master-', is temporary:
+          # the one cache saved before #128 (old key format, ~710 MB, master).
+          # Remove it once a -run- cache of master exists. (No comments inside
+          # the restore-keys block: '|' keeps '#' lines as keys.)
           key: ccache-macos-${{ github.ref_name }}-run-${{ github.run_id }}
           restore-keys: |
             ccache-macos-${{ github.ref_name }}-run-
             ccache-macos-master-run-
-            # Temporary: the one cache saved before #128 (old key format,
-            # ~710 MB, master). Remove once a -run- cache of master exists.
             ccache-macos-master-
 
       - name: Configure.
