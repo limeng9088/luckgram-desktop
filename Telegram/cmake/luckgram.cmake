@@ -383,14 +383,16 @@ endif()
 # macOS (Apple clang, -O3): wallet/wallet_content.cpp (~490 KB, one function
 # of ~1800 lines with many lambdas) did not finish in 3.5 hours on the
 # hosted Mac (run 43576736393: 3 cores / 7 GB, swapping hard), so the build
-# never got past it. Until the file is split, it is compiled with less
-# optimization on macOS only; it is UI code (boxes), not a hot path.
-# Override with -D LUCKGRAM_MAC_WALLET_CONTENT_OPT=-O2 (or "" for the
-# normal flags).
+# never got past it. It is an upstream file, so it is not split (that would
+# conflict with every upstream merge); instead it is compiled with less
+# optimization on macOS only, for good. It is UI code (boxes), not a hot
+# path. -D LUCKGRAM_MAC_WALLET_CONTENT_OPT=<flag> picks another flag (CI:
+# the repo variable MAC_WALLET_CONTENT_OPT), "none" keeps the normal flags.
 if (APPLE)
     set(LUCKGRAM_MAC_WALLET_CONTENT_OPT "-O1" CACHE STRING
-        "Optimization flag for wallet/wallet_content.cpp on macOS")
-    if (LUCKGRAM_MAC_WALLET_CONTENT_OPT)
+        "Optimization flag for wallet/wallet_content.cpp on macOS, none for the normal flags")
+    if (NOT LUCKGRAM_MAC_WALLET_CONTENT_OPT STREQUAL ""
+        AND NOT LUCKGRAM_MAC_WALLET_CONTENT_OPT STREQUAL "none")
         set_source_files_properties(${src_loc}/wallet/wallet_content.cpp
         PROPERTIES
             COMPILE_OPTIONS "${LUCKGRAM_MAC_WALLET_CONTENT_OPT}"
