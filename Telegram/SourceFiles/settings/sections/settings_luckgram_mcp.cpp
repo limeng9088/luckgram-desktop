@@ -8,14 +8,18 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/luckgram_strings.h"
 #include "luckgram/mcp/luckgram_mcp.h"
+#include "luckgram/mcp/luckgram_mcp_cloud.h"
 #include "luckgram/mcp/luckgram_mcp_logic.h"
 #include "settings/settings_common.h"
 #include "ui/boxes/confirm_box.h"
+#include "ui/layers/generic_box.h"
 #include "ui/ui_utility.h"
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
+#include "ui/widgets/fields/input_field.h"
 #include "ui/wrap/vertical_layout.h"
 #include "window/window_session_controller.h"
+#include "styles/style_layers.h"
 #include "styles/style_settings.h"
 
 #include <QtGui/QClipboard>
@@ -25,6 +29,7 @@ namespace Settings {
 namespace {
 
 namespace Mcp = Luckgram::Mcp;
+namespace Cloud = Luckgram::Mcp::Cloud;
 using Luckgram::Tr;
 
 [[nodiscard]] QString StatusText() {
@@ -39,6 +44,23 @@ using Luckgram::Tr;
 	}
 	const auto error = Mcp::LastError();
 	return error.isEmpty() ? Tr("未运行", "Not running") : error;
+}
+
+[[nodiscard]] QString CloudStatusText() {
+	if (!Cloud::Enabled()) {
+		return Tr("未开启。", "Off.");
+	}
+	const auto name = Tr("设备名：", "Device name: ") + Cloud::DeviceName();
+	if (Cloud::Connected()) {
+		return Tr("已连接云端。", "Connected to the cloud. ") + name;
+	}
+	const auto error = Cloud::LastError();
+	return (error.isEmpty()
+		? Tr("正在连接云端…", "Connecting to the cloud... ")
+		: (Tr("连接不上云端，会自动重试：", "Can't reach the cloud, retrying: ")
+			+ error
+			+ u" "_q))
+		+ name;
 }
 
 [[nodiscard]] Mcp::Config CurrentConfig() {
@@ -120,6 +142,143 @@ void LuckgramMcp::setupContent(
 			"Only connections from this computer (127.0.0.1) are accepted "
 			"and every request needs the access token. Any local program "
 			"that has the token can switch accounts, so keep it private.")));
+	Ui::AddSkip(container);
+
+	// Cloud MCP: the same tools through mcp.luckgram.cc.
+	Ui::AddSubsectionTitle(
+		container,
+		rpl::single(Tr("云端 MCP", "Cloud MCP")));
+	const auto cloudShown = container->lifetime().make_state<
+		rpl::variable<bool>>(Cloud::Enabled());
+	const auto cloud = AddButtonWithIcon(
+		container,
+		rpl::single(Tr("通过云端连接", "Connect through the cloud")),
+		st::settingsButtonNoIcon);
+	cloud->toggleOn(cloudShown->value());
+	cloud->toggledChanges(
+	) | rpl::filter([=](bool toggled) {
+		return (toggled != Cloud::Enabled());
+	}) | rpl::on_next([=](bool toggled) {
+		if (!toggled) {
+			Cloud::SetEnabled(false);
+			*cloudShown = false;
+			return;
+		}
+		cloudShown->force_assign(false); // Back until confirmed.
+		controller->show(Ui::MakeConfirmBox({
+			.text = Tr(
+				"开启后，这台电脑会主动连接 mcp.luckgram.cc。"
+				"拿到云端密钥的 AI 工具可以从任何地方使用这台电脑上"
+				"已开启的功能和 Skill。云端只转发请求，不保存聊天内容。",
+				"With this on, this computer connects to mcp.luckgram.cc. "
+				"AI tools that have the cloud key can use, from anywhere, "
+				"what is switched on on this computer. The cloud passes "
+				"requests on and stores no chats."),
+			.confirmed = [=](Fn<void()> close) {
+				Cloud::SetEnabled(true);
+				*cloudShown = true;
+				close();
+			},
+			.confirmText = Tr("开启", "Turn on"),
+		}));
+	}, cloud->lifetime());
+	Ui::AddDividerText(
+		container,
+		rpl::single(CloudStatusText()) | rpl::then(rpl::merge(
+			Cloud::StateChanges(),
+			Luckgram::Settings::Changes() | rpl::to_empty
+		) | rpl::map([] {
+			return CloudStatusText();
+		})));
+	Ui::AddSkip(container);
+	AddButtonWithIcon(
+		container,
+		rpl::single(Tr("复制云端客户端配置", "Copy cloud client config")),
+		st::settingsButtonNoIcon
+	)->addClickHandler([=] {
+		const auto key = Cloud::Key();
+		if (key.isEmpty()) {
+			controller->showToast(
+				Tr("请先开启云端 MCP", "Turn Cloud MCP on first"));
+		} else {
+			copy(Mcp::CloudClientConfigJson(key));
+		}
+	});
+	AddButtonWithIcon(
+		container,
+		rpl::single(Tr("复制云端密钥", "Copy cloud key")),
+		st::settingsButtonNoIcon
+	)->addClickHandler([=] {
+		const auto key = Cloud::Key();
+		if (key.isEmpty()) {
+			controller->showToast(
+				Tr("请先开启云端 MCP", "Turn Cloud MCP on first"));
+		} else {
+			copy(key);
+		}
+	});
+	AddButtonWithIcon(
+		container,
+		rpl::single(Tr(
+			"使用另一台电脑的云端密钥",
+			"Use the cloud key of another computer")),
+		st::settingsButtonNoIcon
+	)->addClickHandler([=] {
+		controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+			box->setTitle(rpl::single(Tr("云端密钥", "Cloud key")));
+			const auto field = box->addRow(object_ptr<Ui::InputField>(
+				box,
+				st::defaultInputField,
+				Ui::InputField::Mode::SingleLine,
+				rpl::single(u"lgc_..."_q),
+				QString()));
+			field->setMaxLength(64);
+			box->setFocusCallback([=] { field->setFocusFast(); });
+			box->addButton(rpl::single(Tr("使用", "Use")), [=] {
+				if (!Cloud::UseKey(field->getLastText())) {
+					field->showError();
+					return;
+				}
+				box->closeBox();
+				controller->showToast(Tr(
+					"已使用这把密钥，这台电脑会出现在同一个云端地址下",
+					"Key saved: this computer joins the same cloud address"));
+			});
+			box->addButton(
+				rpl::single(Tr("取消", "Cancel")),
+				[=] { box->closeBox(); });
+		}));
+	});
+	AddButtonWithIcon(
+		container,
+		rpl::single(Tr("重新生成云端密钥", "Regenerate cloud key")),
+		st::settingsAttentionButton
+	)->addClickHandler([=] {
+		controller->show(Ui::MakeConfirmBox({
+			.text = Tr(
+				"旧密钥立即失效。其他电脑和已配置的 AI 工具都要换成新密钥。",
+				"The old key stops working at once. The other computers "
+				"and the tools set up with it need the new one."),
+			.confirmed = [=](Fn<void()> close) {
+				Cloud::RegenerateKey();
+				close();
+				controller->showToast(
+					Tr("已生成新密钥", "New key generated"));
+			},
+			.confirmText = Tr("重新生成", "Regenerate"),
+		}));
+	});
+	Ui::AddSkip(container);
+	Ui::AddDividerText(
+		container,
+		rpl::single(Tr(
+			"多台电脑用同一把云端密钥，AI 工具只连一个地址就能操作所有"
+			"电脑：先调用 list_devices，再用 device 参数指定电脑。"
+			"每台电脑上的 Skill 仍然在各自的应用里按账号开启。",
+			"Computers that use the same cloud key are reached at one "
+			"address: the tool calls list_devices, then names the "
+			"computer with \"device\". Skills are still switched on per "
+			"account in the app on each computer.")));
 	Ui::AddSkip(container);
 
 	// Skills, per account, all off until switched on here.

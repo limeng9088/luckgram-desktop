@@ -886,3 +886,82 @@ LUCKGRAM_TEST(McpSendingIsItsOwnSwitchAndLimited) {
 	// Reading is not limited.
 	LG_EQUAL(LimitOf(S("get_messages")).perHour, 0);
 }
+
+LUCKGRAM_TEST(McpCloudKeysAndIds) {
+	const auto key = CloudKeyFromBytes(QByteArray(32, char(0xAB)));
+	LG_EQUAL(int(key.size()), 47);
+	LG_CHECK(key.startsWith(S("lgc_")));
+	LG_CHECK(IsValidCloudKey(key));
+	LG_CHECK(!IsValidCloudKey(key.mid(4))); // The local token is not one.
+	LG_CHECK(!IsValidCloudKey(key + S("a")));
+	LG_CHECK(!IsValidCloudKey(key.left(46) + S("=")));
+	LG_CHECK(!IsValidCloudKey(QString()));
+	LG_CHECK(CloudKeyFromBytes(QByteArray(31, 'a')).isEmpty());
+
+	LG_CHECK(IsValidDeviceId(S("abcDEF_0-9")));
+	LG_CHECK(!IsValidDeviceId(S("short")));
+	LG_CHECK(!IsValidDeviceId(S("has space in it")));
+	LG_CHECK(!IsValidDeviceId(QString(65, QChar('a'))));
+}
+
+LUCKGRAM_TEST(McpCloudPollRoundTrip) {
+	auto reply = QJsonObject();
+	reply.insert(S("jsonrpc"), S("2.0"));
+	reply.insert(S("id"), 1);
+	const auto body = J(CloudPollBody(
+		S("device-01"),
+		S("办公室电脑"),
+		S("7.4.2"),
+		{ { S("r5"), reply } }));
+	LG_EQUAL(body.value(S("device_id")).toString(), S("device-01"));
+	LG_EQUAL(body.value(S("device_name")).toString(), S("办公室电脑"));
+	const auto results = body.value(S("results")).toArray();
+	LG_EQUAL(int(results.size()), 1);
+	LG_EQUAL(results.at(0).toObject().value(S("id")).toString(), S("r5"));
+	LG_CHECK(results.at(0).toObject().value(S("response")).toObject() == reply);
+	LG_CHECK(J(CloudPollBody(S("d"), S("n"), S("v"), {})).value(
+		S("results")).toArray().isEmpty());
+
+	auto ok = false;
+	const auto requests = ParseCloudRequests(R"({"requests":[
+		{"id":"r1","message":{"jsonrpc":"2.0","id":1,"method":"tools/list"}},
+		{"id":"","message":{}},
+		{"id":"r2","message":"text"},
+		5,
+		{"id":"r3","message":{"jsonrpc":"2.0","id":1,"method":"ping"}}]})", &ok);
+	LG_CHECK(ok);
+	LG_EQUAL(int(requests.size()), 2);
+	LG_EQUAL(requests[0].id, S("r1"));
+	LG_EQUAL(requests[0].message.value(S("method")).toString(), S("tools/list"));
+	LG_EQUAL(requests[1].id, S("r3"));
+	LG_CHECK(ParseCloudRequests(R"({"requests":[]})", &ok).empty());
+	LG_CHECK(ok);
+	// Not the relay: an error page, a login portal.
+	LG_CHECK(ParseCloudRequests("<html>", &ok).empty());
+	LG_CHECK(!ok);
+	LG_CHECK(ParseCloudRequests(R"({"error":"x"})", &ok).empty());
+	LG_CHECK(!ok);
+
+	// What the relay hands over is answered like a local request.
+	auto fake = Fake();
+	const auto answer = HandleMessage(requests[0].message, fake.backend());
+	LG_CHECK(answer.value(S("result")).toObject().contains(S("tools")));
+}
+
+LUCKGRAM_TEST(McpCloudRetryAndConfig) {
+	LG_EQUAL(CloudRetryDelayMs(0), qint64(2000));
+	LG_EQUAL(CloudRetryDelayMs(1), qint64(2000));
+	LG_EQUAL(CloudRetryDelayMs(2), qint64(4000));
+	LG_EQUAL(CloudRetryDelayMs(5), qint64(32000));
+	LG_EQUAL(CloudRetryDelayMs(6), qint64(60000));
+	LG_EQUAL(CloudRetryDelayMs(1000), qint64(60000));
+
+	const auto key = CloudKeyFromBytes(QByteArray(32, 'k'));
+	const auto server = J(CloudClientConfigJson(key).toUtf8()).value(
+		S("mcpServers")).toObject().value(S("luckgram-cloud")).toObject();
+	LG_EQUAL(server.value(S("url")).toString(), S("https://mcp.luckgram.cc/mcp"));
+	LG_EQUAL(
+		server.value(S("headers")).toObject().value(
+			S("Authorization")).toString(),
+		S("Bearer ") + key);
+}

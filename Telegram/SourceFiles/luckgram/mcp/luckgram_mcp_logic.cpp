@@ -1425,4 +1425,100 @@ QString ClientConfigJson(const Config &config) {
 		QJsonDocument(root).toJson(QJsonDocument::Indented)).trimmed();
 }
 
+bool IsValidCloudKey(const QString &key) {
+	const auto prefix = Q(kCloudKeyPrefix);
+	return key.startsWith(prefix)
+		&& (key.size() == prefix.size() + 43)
+		&& IsValidToken(key.mid(prefix.size()));
+}
+
+QString CloudKeyFromBytes(const QByteArray &bytes32) {
+	if (bytes32.size() != 32) {
+		return QString();
+	}
+	return Q(kCloudKeyPrefix) + QString::fromLatin1(bytes32.toBase64(
+		QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+}
+
+bool IsValidDeviceId(const QString &id) {
+	if (id.size() < 8 || id.size() > 64) {
+		return false;
+	}
+	for (const auto ch : id) {
+		const auto code = ch.unicode();
+		const auto good = (code >= 'a' && code <= 'z')
+			|| (code >= 'A' && code <= 'Z')
+			|| (code >= '0' && code <= '9')
+			|| (code == '-')
+			|| (code == '_');
+		if (!good) {
+			return false;
+		}
+	}
+	return true;
+}
+
+QByteArray CloudPollBody(
+		const QString &deviceId,
+		const QString &deviceName,
+		const QString &version,
+		const std::vector<CloudResult> &results) {
+	auto list = QJsonArray();
+	for (const auto &result : results) {
+		auto entry = QJsonObject();
+		entry.insert(Q("id"), result.id);
+		entry.insert(Q("response"), result.response);
+		list.push_back(entry);
+	}
+	auto body = QJsonObject();
+	body.insert(Q("device_id"), deviceId);
+	body.insert(Q("device_name"), deviceName);
+	body.insert(Q("version"), version);
+	body.insert(Q("results"), list);
+	return QJsonDocument(body).toJson(QJsonDocument::Compact);
+}
+
+std::vector<CloudRequest> ParseCloudRequests(
+		const QByteArray &json,
+		bool *ok) {
+	auto result = std::vector<CloudRequest>();
+	auto error = QJsonParseError();
+	const auto document = QJsonDocument::fromJson(json, &error);
+	const auto requests = document.object().value(Q("requests"));
+	*ok = (error.error == QJsonParseError::NoError) && requests.isArray();
+	if (!*ok) {
+		return result;
+	}
+	for (const auto &value : requests.toArray()) {
+		const auto entry = value.toObject();
+		const auto id = entry.value(Q("id")).toString();
+		const auto message = entry.value(Q("message"));
+		if (id.isEmpty() || id.size() > 64 || !message.isObject()) {
+			continue;
+		}
+		result.push_back({ id, message.toObject() });
+	}
+	return result;
+}
+
+qint64 CloudRetryDelayMs(int failures) {
+	const auto step = std::clamp(failures, 1, 6);
+	return std::min(qint64(1000) << step, qint64(60) * 1000);
+}
+
+QString CloudClientConfigJson(const QString &key) {
+	auto headers = QJsonObject();
+	headers.insert(Q("Authorization"), Q("Bearer ") + key);
+	auto server = QJsonObject();
+	server.insert(Q("type"), Q("http"));
+	server.insert(Q("url"), Q(kCloudUrl) + Q(kPath));
+	server.insert(Q("headers"), headers);
+	auto servers = QJsonObject();
+	servers.insert(Q("luckgram-cloud"), server);
+	auto root = QJsonObject();
+	root.insert(Q("mcpServers"), servers);
+	return QString::fromUtf8(
+		QJsonDocument(root).toJson(QJsonDocument::Indented)).trimmed();
+}
+
 } // namespace Luckgram::Mcp

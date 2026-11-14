@@ -79,9 +79,36 @@ Skill 工具都有可选参数 `account`（`list_accounts` 里的 `id`），不�
 ssh -N -L 28765:127.0.0.1:28765 <用户>@<装有 Luckgram 的电脑>
 ```
 
+## 云端 MCP
+
+本机接口只能在这台电脑上用。打开云端 MCP 后，这台电脑会主动连到 `mcp.luckgram.cc`，AI 工具从任何地方都能用，多台电脑共用一个地址。
+
+1. 在第一台电脑上：设置页「本机 MCP 接口」→ 打开「通过云端连接」（会生成一把云端密钥）→「复制云端客户端配置」，粘贴到 AI 工具里。
+2. 在其他电脑上：同一页 →「使用另一台电脑的云端密钥」，粘贴第一台的密钥，再打开「通过云端连接」。
+
+```json
+{
+  "mcpServers": {
+    "luckgram-cloud": {
+      "type": "http",
+      "url": "https://mcp.luckgram.cc/mcp",
+      "headers": { "Authorization": "Bearer lgc_..." }
+    }
+  }
+}
+```
+
+- 工具和本机接口相同，每个工具多一个 `device` 参数（电脑的 id 或名称）；只有一台电脑在线时可以不填。
+- 多出两个工具：`list_devices`（接入的电脑及是否在线）、`list_recent_calls`（最近 200 次调用的时间、工具、电脑、账号、是否失败）。
+- Skill 仍然按账号开启，在每台电脑各自的应用里设置；频率上限也在每台电脑上各自计数。
+- 云端只转发请求：不保存参数和结果，不保存聊天内容，也不保存云端密钥本身。
+- 云端密钥在你的电脑上生成，存在系统凭据库。拿到它的人可以使用所有接入电脑上已开启的功能，泄露后请立即「重新生成云端密钥」。
+- 不需要公网地址和端口转发；电脑关机或 Luckgram 退出后显示为离线。
+
 ## 代码
 
 - `Telegram/SourceFiles/luckgram/mcp/luckgram_mcp_logic.*`：HTTP 解析、访问校验、JSON-RPC 方法（纯逻辑，`luckgram_tests` 里有测试）。
 - `Telegram/SourceFiles/luckgram/mcp/luckgram_mcp_server.*`：本机套接字。
 - `Telegram/SourceFiles/luckgram/mcp/luckgram_mcp.*`：接到应用的账号、开关和令牌。
+- `Telegram/SourceFiles/luckgram/mcp/luckgram_mcp_cloud_client.*`：连接云端的长轮询；`luckgram_mcp_cloud.*`：云端开关和密钥。服务端在 `luckgram-server/mcp-relay`。
 - `Telegram/SourceFiles/settings/sections/settings_luckgram_mcp.*`：设置页。

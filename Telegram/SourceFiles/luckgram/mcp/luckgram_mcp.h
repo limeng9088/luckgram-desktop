@@ -16,8 +16,14 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 // in plain text). The protocol and the checks are in luckgram_mcp_logic.h.
 namespace Luckgram::Mcp {
 
+struct Backend;
+
 // Once at launch (Luckgram::Start). Follows the switch from then on.
 void Start();
+
+// The accounts of this app behind the tools: the local server and the
+// cloud connection (luckgram_mcp_cloud.h) answer with the same one.
+[[nodiscard]] Backend AppBackend();
 
 [[nodiscard]] bool Running();
 [[nodiscard]] int Port(); // The port in use, 0 when not running.

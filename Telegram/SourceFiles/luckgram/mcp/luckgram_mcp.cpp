@@ -25,6 +25,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_secure_store.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/luckgram_strings.h"
+#include "luckgram/mcp/luckgram_mcp_cloud.h"
 #include "luckgram/mcp/luckgram_mcp_logic.h"
 #include "luckgram/mcp/luckgram_mcp_server.h"
 #include "main/main_account.h"
@@ -766,6 +767,10 @@ void Listen() {
 
 } // namespace
 
+Backend AppBackend() {
+	return MakeBackend();
+}
+
 void Start() {
 	auto &state = State();
 	if (state.started) {
@@ -790,6 +795,7 @@ void Start() {
 			state.lifetime.destroy();
 			state.server = nullptr;
 		});
+	Cloud::Start();
 }
 
 bool Running() {
