@@ -15,15 +15,21 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 // the Android unit tests. GET /v1/version?platform=windows|macos.
 namespace Luckgram::Update {
 
-// Desktop spec D4 §4: at start and every 6 hours (mobile: 1 hour).
-inline constexpr auto kCheckIntervalMs = qint64(6) * 60 * 60 * 1000;
-inline constexpr auto kRetryAfterFailureMs = qint64(60) * 60 * 1000;
+// At start and every 30 minutes (was 6 hours: a merged fix should reach the
+// computers within the hour; the request is one small GET).
+inline constexpr auto kCheckIntervalMs = qint64(30) * 60 * 1000;
+inline constexpr auto kRetryAfterFailureMs = qint64(10) * 60 * 1000;
 inline constexpr auto kAutoRetryAfterMs = qint64(6) * 60 * 60 * 1000;
 inline constexpr auto kSpaceMargin = qint64(20) * 1024 * 1024;
 inline constexpr auto kMaxSize = qint64(500) * 1024 * 1024;
 inline constexpr auto kFilePrefix = "luckgram-update-";
 inline constexpr auto kPartSuffix = ".part";
 inline constexpr auto kAutoDownloadKey = "update_auto_download";
+// "空闲时自动重启并更新", off by default: unattended computers update with
+// nobody clicking.
+inline constexpr auto kAutoInstallKey = "update_auto_install";
+// Nobody touched the computer for this long: restarting disturbs no one.
+inline constexpr auto kAutoInstallIdleMs = qint64(5) * 60 * 1000;
 inline constexpr auto kDownloadPage = "https://luckgram.cc/download/";
 // The only host a package is downloaded from for installing (review P1).
 inline constexpr auto kTrustedPrefix = "https://dl.luckgram.cc/";
@@ -135,6 +141,15 @@ enum class Verdict {
 	bool downloading,
 	qint64 nowMs,
 	qint64 lastAutoFailureMs);
+// The verified package is installed without asking: the switch is on, no
+// call is running, and the user is away - the app is not the one in front,
+// or the computer was not touched for kAutoInstallIdleMs.
+[[nodiscard]] bool ShouldAutoInstall(
+	bool ready,
+	bool switchOn,
+	bool inCall,
+	bool appInFront,
+	qint64 idleMs);
 // Packages and partial downloads to delete, except `keep` (and its .part).
 [[nodiscard]] QStringList ToDelete(
 	const QStringList &names,
@@ -181,6 +196,7 @@ public:
 	[[nodiscard]] QString ok() const;
 	[[nodiscard]] QString autoSwitch() const;
 	[[nodiscard]] QString autoSwitchInfo() const;
+	[[nodiscard]] QString autoInstallSwitch() const;
 
 	// Desktop (spec D4 §6-8, M2 §6), not on mobile.
 	[[nodiscard]] QString readyRow(const QString &version, qint64 build) const;

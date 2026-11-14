@@ -817,6 +817,15 @@ void BuildSystemIntegrationSection(SectionBuilder &builder) {
 		if (autoUpdate) {
 			Luckgram::Update::BindAutoDownloadCheckbox(autoUpdate);
 		}
+		const auto autoInstall = builder.addCheckbox({
+			.id = u"advanced/luckgram_auto_install"_q,
+			.title = Luckgram::Update::AutoInstallTitle(),
+			.checked = Luckgram::Update::AutoInstall(),
+			.keywords = { u"update"_q, u"更新"_q, u"restart"_q, u"重启"_q },
+		});
+		if (autoInstall) {
+			Luckgram::Update::BindAutoInstallCheckbox(autoInstall);
+		}
 	}
 
 	builder.addSkip();
@@ -1930,6 +1939,9 @@ void SetupSystemIntegrationContent(
 		Luckgram::Update::BindAutoDownloadCheckbox(addCheckbox(
 			Luckgram::Update::AutoDownloadTitle(),
 			Luckgram::Update::AutoDownload()));
+		Luckgram::Update::BindAutoInstallCheckbox(addCheckbox(
+			Luckgram::Update::AutoInstallTitle(),
+			Luckgram::Update::AutoInstall()));
 	}
 }
 
