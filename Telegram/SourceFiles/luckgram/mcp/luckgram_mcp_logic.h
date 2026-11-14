@@ -8,6 +8,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 
 #include <functional>
 #include <memory>
@@ -53,6 +54,7 @@ inline constexpr auto kSkillMessagesSend = "messages_send";
 inline constexpr auto kSkillChatsManage = "chats_manage";
 inline constexpr auto kSkillGroups = "groups";
 inline constexpr auto kSkillProfile = "profile";
+inline constexpr auto kSkillBotFather = "botfather";
 
 struct SkillInfo {
 	const char *key = "";
@@ -200,6 +202,44 @@ void HandleMessageAsync(
 // "mcpServers" entry).
 [[nodiscard]] QString ClientConfigJson(const Config &config);
 [[nodiscard]] QString ServerUrl(int port);
+
+// ---- Skill "botfather": the account's own bots, through @BotFather ----
+//
+// Every tool is a short conversation with @BotFather in the account's own
+// chat with it, and with nobody else: the texts to send in order come from
+// BotFatherScript, what the last answer means from BotFatherVerdict. The
+// tool sees that one chat only, not the account's other chats.
+
+inline constexpr auto kBotFatherUsername = "BotFather";
+inline constexpr auto kBotFatherUserId = quint64(93372553);
+
+// "123456789:AA…": the token in an answer of BotFather, or empty.
+[[nodiscard]] QString ExtractBotToken(const QString &text);
+// 5-32 characters of A-Z a-z 0-9 _, starting with a letter, ending in "bot".
+[[nodiscard]] bool IsBotUsername(const QString &username);
+// The messages a botfather_* tool sends, in order. `arguments` are the
+// checked ones the tool was called with. Empty for the tools that are not a
+// script (botfather_read, botfather_press).
+[[nodiscard]] QStringList BotFatherScript(
+	const QString &tool,
+	const QJsonObject &arguments);
+// botfather_send and botfather_press are the general way in, so they must
+// not be a way around the tools that have their own confirmation and their
+// own tighter limit. Empty when the line / the button may go through, else
+// why not and which tool to use instead.
+//  - send: /newbot, /deletebot, /revoke, and the sentence that confirms a
+//    deletion;
+//  - press: any button that deletes a bot, revokes a token or transfers a
+//    bot to another owner.
+[[nodiscard]] QString BotFatherSendRefusal(const QString &text);
+[[nodiscard]] QString BotFatherPressRefusal(const QString &button);
+
+// An answer after which the rest of a script must not be sent: BotFather
+// refused or did not understand, and the next line would be read as
+// something else.
+[[nodiscard]] bool BotFatherRefused(const QString &reply);
+// Did the tool do what it was asked, judged by BotFather's last answer.
+[[nodiscard]] bool BotFatherSucceeded(const QString &tool, const QString &reply);
 
 // ---- Cloud MCP (mcp.luckgram.cc, luckgram-server/mcp-relay) ----
 //
