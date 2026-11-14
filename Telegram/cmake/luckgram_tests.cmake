@@ -141,6 +141,11 @@ PRIVATE
     luckgram/backup/luckgram_backup_format.h
     luckgram/tests/luckgram_backup_format_tests.cpp
     luckgram/ai/ai_text_logic_tests.cpp
+
+    # Local MCP server: HTTP parsing, access checks, JSON-RPC methods
+    luckgram/mcp/luckgram_mcp_logic.cpp
+    luckgram/mcp/luckgram_mcp_logic.h
+    luckgram/tests/luckgram_mcp_tests.cpp
 )
 
 target_link_libraries(luckgram_tests
