@@ -128,7 +128,7 @@ void ShowCandidates(
 			const auto label = Ui::CreateChild<Ui::FlatLabel>(
 				row,
 				QString(),
-				st::defaultFlatLabel);
+				st::luckgramAiTextLabel);
 			label->setAttribute(Qt::WA_TransparentForMouseEvents);
 			row->widthValue() | rpl::on_next([=](int width) {
 				label->resizeToWidth(std::max(0, width - 4 * padding));
@@ -260,7 +260,7 @@ void ShowPanel(not_null<WritingHost*> host) {
 	}, header->lifetime());
 
 	state->status = raw->add(
-		object_ptr<Ui::FlatLabel>(raw, QString(), st::defaultFlatLabel),
+		object_ptr<Ui::FlatLabel>(raw, QString(), st::luckgramAiTextLabel),
 		QMargins(2 * padding, 0, 2 * padding, padding));
 	state->list = raw->add(object_ptr<Ui::VerticalLayout>(raw));
 
