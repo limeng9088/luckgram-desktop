@@ -730,7 +730,10 @@ jobs:
   release-windows:
     name: Release Windows
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.build.result == 'success'
+    # !cancelled(): without a status function a job is skipped as soon as
+    # any job before it in the chain was skipped (libs on the self-hosted
+    # runner), although the build itself succeeded.
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -1272,7 +1275,10 @@ jobs:
   release-macos:
     name: Release macOS
     needs: macos
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.macos.result == 'success'
+    # !cancelled(): without a status function a job is skipped as soon as
+    # any job before it in the chain was skipped (libs on the self-hosted
+    # runner), although the build itself succeeded.
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.macos.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
