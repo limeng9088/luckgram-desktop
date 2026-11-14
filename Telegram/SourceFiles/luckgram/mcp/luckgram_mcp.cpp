@@ -30,6 +30,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "main/main_session.h"
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QDateTime>
 #include <QtCore/QJsonArray>
 
 namespace Luckgram::Mcp {
@@ -176,6 +177,196 @@ void ListFriends(
 	});
 }
 
+[[nodiscard]] QJsonObject UserJson(not_null<UserData*> user) {
+	auto result = QJsonObject();
+	result.insert(
+		u"id"_q,
+		QString::number(quint64(peerToUser(user->id).bare)));
+	result.insert(u"name"_q, user->name());
+	if (!user->username().isEmpty()) {
+		result.insert(u"username"_q, user->username());
+	}
+	if (!user->phone().isEmpty()) {
+		result.insert(u"phone"_q, user->phone());
+	}
+	result.insert(u"bot"_q, user->isBot());
+	result.insert(u"friend"_q, user->isContact());
+	return result;
+}
+
+// What Telegram said, in words an agent can act on.
+[[nodiscard]] ToolOutcome ServerError(const MTP::Error &error) {
+	const auto type = error.type();
+	auto result = ToolOutcome();
+	result.error = type.startsWith(u"FLOOD_WAIT_"_q)
+		? (u"Telegram asks this account to wait "_q
+			+ type.mid(11)
+			+ u" seconds (FLOOD_WAIT). Do not retry sooner."_q)
+		: (type == u"USERNAME_NOT_OCCUPIED"_q
+			|| type == u"USERNAME_INVALID"_q)
+		? u"No user has this username."_q
+		: (type == u"PHONE_NOT_OCCUPIED"_q)
+		? u"No user can be found by this phone number from this account."_q
+		: (u"Telegram refused: "_q + type);
+	return result;
+}
+
+// The user a friends tool names: by id among those the account has seen,
+// by username or phone from the server.
+void ResolveUser(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		Fn<void(UserData *user, ToolOutcome failure)> done) {
+	const auto owner = &session->data();
+	const auto resolved = [=](const MTPcontacts_ResolvedPeer &result) {
+		const auto &data = result.data();
+		owner->processUsers(data.vusers());
+		owner->processChats(data.vchats());
+		const auto peerId = peerFromMTP(data.vpeer());
+		const auto peer = peerId ? owner->peerLoaded(peerId) : nullptr;
+		const auto user = peer ? peer->asUser() : nullptr;
+		if (!user) {
+			done(nullptr, Failed("This is not a user."));
+		} else {
+			done(user, ToolOutcome());
+		}
+	};
+	const auto failed = [=](const MTP::Error &error) {
+		done(nullptr, ServerError(error));
+	};
+	const auto id = arguments.value(u"user_id"_q).toString();
+	const auto username = arguments.value(u"username"_q).toString();
+	const auto phone = arguments.value(u"phone"_q).toString();
+	if (!id.isEmpty()) {
+		const auto user = owner->userLoaded(UserId(id.toULongLong()));
+		if (!user) {
+			done(nullptr, Failed(
+				"This account has not seen a user with this id. Use the "
+				"username or the phone instead."));
+		} else {
+			done(user, ToolOutcome());
+		}
+	} else if (!username.isEmpty()) {
+		const auto known = owner->peerByUsername(username);
+		if (const auto user = known ? known->asUser() : nullptr) {
+			done(user, ToolOutcome());
+			return;
+		}
+		session->api().request(MTPcontacts_ResolveUsername(
+			MTP_flags(0),
+			MTP_string(username),
+			MTP_string()
+		)).done([=](const MTPcontacts_ResolvedPeer &result) {
+			resolved(result);
+		}).fail([=](const MTP::Error &error) {
+			failed(error);
+		}).send();
+	} else {
+		session->api().request(MTPcontacts_ResolvePhone(
+			MTP_string(phone)
+		)).done([=](const MTPcontacts_ResolvedPeer &result) {
+			resolved(result);
+		}).fail([=](const MTP::Error &error) {
+			failed(error);
+		}).send();
+	}
+}
+
+void FindUser(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	ResolveUser(session, arguments, [=](UserData *user, ToolOutcome failure) {
+		if (!user) {
+			done(std::move(failure));
+			return;
+		}
+		auto result = ToolOutcome();
+		result.value.insert(u"user"_q, UserJson(user));
+		done(std::move(result));
+	});
+}
+
+// Skill "friends_manage".
+void AddFriend(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	ResolveUser(session, arguments, [=](UserData *user, ToolOutcome failure) {
+		if (!user) {
+			done(std::move(failure));
+			return;
+		} else if (user->isSelf()) {
+			done(Failed("This is the account itself."));
+			return;
+		} else if (user->isContact()) {
+			auto result = ToolOutcome();
+			result.value.insert(u"added"_q, false);
+			result.value.insert(u"already_friend"_q, true);
+			result.value.insert(u"user"_q, UserJson(user));
+			done(std::move(result));
+			return;
+		}
+		const auto given = arguments.value(u"first_name"_q).toString();
+		const auto first = !given.isEmpty()
+			? given
+			: !user->firstName.isEmpty()
+			? user->firstName
+			: user->name();
+		const auto last = arguments.contains(u"last_name"_q)
+			? arguments.value(u"last_name"_q).toString()
+			: user->lastName;
+		session->api().request(MTPcontacts_AddContact(
+			MTP_flags(0),
+			user->inputUser(),
+			MTP_string(first),
+			MTP_string(last),
+			MTP_string(user->phone()),
+			MTPTextWithEntities()
+		)).done([=](const MTPUpdates &updates) {
+			session->api().applyUpdates(updates);
+			auto result = ToolOutcome();
+			result.value.insert(u"added"_q, true);
+			result.value.insert(u"already_friend"_q, false);
+			result.value.insert(u"user"_q, UserJson(user));
+			done(std::move(result));
+		}).fail([=](const MTP::Error &error) {
+			done(ServerError(error));
+		}).send();
+	});
+}
+
+void RemoveFriend(
+		not_null<Main::Session*> session,
+		const QJsonObject &arguments,
+		ToolDone done) {
+	ResolveUser(session, arguments, [=](UserData *user, ToolOutcome failure) {
+		if (!user) {
+			done(std::move(failure));
+			return;
+		} else if (!user->isContact()) {
+			auto result = ToolOutcome();
+			result.value.insert(u"removed"_q, false);
+			result.value.insert(u"was_friend"_q, false);
+			result.value.insert(u"user"_q, UserJson(user));
+			done(std::move(result));
+			return;
+		}
+		session->api().request(MTPcontacts_DeleteContacts(
+			MTP_vector<MTPInputUser>(1, user->inputUser())
+		)).done([=](const MTPUpdates &updates) {
+			session->api().applyUpdates(updates);
+			auto result = ToolOutcome();
+			result.value.insert(u"removed"_q, true);
+			result.value.insert(u"was_friend"_q, true);
+			result.value.insert(u"user"_q, UserJson(user));
+			done(std::move(result));
+		}).fail([=](const MTP::Error &error) {
+			done(ServerError(error));
+		}).send();
+	});
+}
+
 // Skill "chats".
 [[nodiscard]] ToolOutcome ChatsOf(
 		not_null<Main::Session*> session,
@@ -240,6 +431,21 @@ void ListFriends(
 	result.skillEnabled = [](quint64 account, const QString &skill) {
 		return SkillEnabled(account, skill);
 	};
+	result.nowMs = [] {
+		return QDateTime::currentMSecsSinceEpoch();
+	};
+	result.loadTimes = [](const QString &key) {
+		return ParseTimes(Settings::GetString(key));
+	};
+	result.saveTimes = [](
+			const QString &key,
+			const std::vector<qint64> &times) {
+		if (times.empty()) {
+			Settings::Remove(key);
+		} else {
+			Settings::SetString(key, SerializeTimes(times));
+		}
+	};
 	result.call = [](
 			const QString &tool,
 			quint64 account,
@@ -254,6 +460,12 @@ void ListFriends(
 			ListFriends(session, arguments, std::move(done));
 		} else if (tool == u"list_chats"_q) {
 			done(ChatsOf(session, arguments));
+		} else if (tool == u"find_user"_q) {
+			FindUser(session, arguments, std::move(done));
+		} else if (tool == u"add_friend"_q) {
+			AddFriend(session, arguments, std::move(done));
+		} else if (tool == u"remove_friend"_q) {
+			RemoveFriend(session, arguments, std::move(done));
 		} else {
 			done(Failed("This tool is not available."));
 		}

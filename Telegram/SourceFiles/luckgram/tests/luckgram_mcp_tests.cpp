@@ -41,6 +41,8 @@ struct Fake {
 	bool hold = false;
 	QString callError;
 	std::vector<ToolDone> held;
+	std::vector<std::pair<QString, std::vector<qint64>>> times;
+	qint64 now = 1'800'000'000'000LL;
 
 	Fake() {
 		auto a = AccountInfo();
@@ -76,6 +78,26 @@ struct Fake {
 		result.skillEnabled = [this](quint64 account, const QString &skill) {
 			return enabled.contains(
 				skill + QChar('/') + QString::number(account));
+		};
+		result.nowMs = [this] { return now; };
+		result.loadTimes = [this](const QString &key) {
+			for (const auto &[was, list] : times) {
+				if (was == key) {
+					return list;
+				}
+			}
+			return std::vector<qint64>();
+		};
+		result.saveTimes = [this](
+				const QString &key,
+				const std::vector<qint64> &list) {
+			for (auto &[was, old] : times) {
+				if (was == key) {
+					old = list;
+					return;
+				}
+			}
+			times.emplace_back(key, list);
 		};
 		result.call = [this](
 				const QString &tool,
@@ -345,6 +367,9 @@ LUCKGRAM_TEST(McpInitializeAndToolsList) {
 		S("get_active_account"),
 		S("switch_account"),
 		S("list_friends"),
+		S("find_user"),
+		S("add_friend"),
+		S("remove_friend"),
 		S("list_chats") }));
 
 	reply = HandleMessage(
@@ -655,8 +680,138 @@ LUCKGRAM_TEST(McpSkillLockedAndLate) {
 }
 
 LUCKGRAM_TEST(McpSkillRegistry) {
-	LG_EQUAL(int(Skills().size()), 2);
+	LG_EQUAL(int(Skills().size()), 3);
+	LG_CHECK(!Skills()[0].write);
+	LG_CHECK(Skills()[1].write); // friends_manage asks before it goes on.
 	LG_EQUAL(
 		SkillSettingKey(S("friends"), 7000000000001ULL),
 		S("mcp_skill_friends_7000000000001"));
+}
+
+LUCKGRAM_TEST(McpFriendTargets) {
+	auto fake = Fake();
+	fake.enabled = { S("friends/111"), S("friends_manage/111") };
+
+	ToolReply(fake, "find_user", R"({"username":"@Some_User"})");
+	LG_EQUAL(fake.calledTool, S("find_user"));
+	LG_EQUAL(fake.calledArguments.value(S("username")).toString(), S("Some_User"));
+	ToolReply(fake, "find_user", R"({"phone":"+57 310 000 0000"})");
+	LG_EQUAL(fake.calledArguments.value(S("phone")).toString(), S("573100000000"));
+
+	ToolReply(fake, "add_friend", R"({"user_id":"7000000000009","first_name":" Li ","last_name":"Wei"})");
+	LG_EQUAL(fake.calledTool, S("add_friend"));
+	LG_EQUAL(fake.calledArguments.value(S("user_id")).toString(), S("7000000000009"));
+	LG_EQUAL(fake.calledArguments.value(S("first_name")).toString(), S("Li"));
+	LG_EQUAL(fake.calledArguments.value(S("last_name")).toString(), S("Wei"));
+	ToolReply(fake, "remove_friend", R"({"user_id":5})");
+	LG_EQUAL(fake.calledArguments.value(S("user_id")).toString(), S("5"));
+
+	const auto before = fake.calls;
+	const auto bad = [&](const char *tool, const char *arguments) {
+		LG_CHECK(!ErrorText(ToolReply(fake, tool, arguments)).isEmpty());
+	};
+	bad("find_user", "{}");
+	bad("find_user", R"({"username":"abcd","phone":"12345678"})");
+	bad("find_user", R"({"user_id":"5"})");
+	bad("find_user", R"({"username":"ab"})");
+	bad("find_user", R"({"username":"has space"})");
+	bad("find_user", R"({"username":"t.me/x"})");
+	bad("find_user", R"({"phone":"123"})");
+	bad("find_user", R"({"username":5})");
+	bad("add_friend", "{}");
+	bad("add_friend", R"({"user_id":"0"})");
+	bad("add_friend", R"({"user_id":"abc"})");
+	bad("add_friend", R"({"user_id":"5","first_name":7})");
+	bad("remove_friend", R"({"phone":"12345678"})");
+	bad("remove_friend", R"({"user_id":"5","first_name":"x"})");
+	LG_EQUAL(fake.calls, before);
+}
+
+LUCKGRAM_TEST(McpWriteSkillIsItsOwnSwitch) {
+	auto fake = Fake();
+	// Seeing friends does not allow changing them.
+	fake.enabled = { S("friends/111") };
+	LG_CHECK(ErrorText(
+		ToolReply(fake, "add_friend", R"({"user_id":"5"})")).contains(
+			S("friends_manage")));
+	LG_CHECK(!ErrorText(
+		ToolReply(fake, "remove_friend", R"({"user_id":"5"})")).isEmpty());
+	LG_EQUAL(fake.calls, 0);
+	// Refused calls don't use up the limit.
+	LG_CHECK(fake.times.empty());
+}
+
+LUCKGRAM_TEST(McpRateLimitMath) {
+	constexpr auto kMinute = qint64(60) * 1000;
+	constexpr auto kHour = 60 * kMinute;
+	const auto now = qint64(1'800'000'000'000LL);
+	const auto limit = RateLimit{ 2, 3 };
+
+	auto times = std::vector<qint64>();
+	LG_EQUAL(RateWaitSeconds(times, now, limit), qint64(0));
+	times = { now - 10 * kMinute };
+	LG_EQUAL(RateWaitSeconds(times, now, limit), qint64(0));
+	// Two in the hour: free when the older one is an hour old.
+	times = { now - 10 * kMinute, now - 50 * kMinute };
+	LG_EQUAL(RateWaitSeconds(times, now, limit), qint64(10 * 60));
+	// The day limit, with the hour free.
+	times = { now - 2 * kHour, now - 3 * kHour, now - 23 * kHour };
+	LG_EQUAL(RateWaitSeconds(times, now, limit), qint64(60 * 60));
+	// Older than a day and from the future (clock set back): dropped.
+	times = { now - 25 * kHour, now + kHour, now - 30 * kHour };
+	LG_EQUAL(RateWaitSeconds(times, now, limit), qint64(0));
+	LG_CHECK(times.empty());
+	// No limit.
+	times = { now - 1, now - 2, now - 3 };
+	LG_EQUAL(RateWaitSeconds(times, now, RateLimit()), qint64(0));
+
+	LG_EQUAL(SerializeTimes({ 5, 70 }), S("5,70"));
+	LG_CHECK(ParseTimes(S("5,x,,70,-3")) == (std::vector<qint64>{ 5, 70 }));
+	LG_EQUAL(LimitOf(S("add_friend")).perHour, 5);
+	LG_EQUAL(LimitOf(S("add_friend")).perDay, 20);
+	LG_EQUAL(LimitOf(S("list_friends")).perHour, 0);
+	LG_EQUAL(
+		RateSettingKey(S("add_friend"), 111),
+		S("mcp_rate_add_friend_111"));
+}
+
+LUCKGRAM_TEST(McpRateLimitPerAccount) {
+	auto fake = Fake();
+	fake.enabled = {
+		S("friends_manage/111"),
+		S("friends_manage/7000000000001"),
+	};
+	for (auto i = 0; i != 5; ++i) {
+		LG_CHECK(!ToolReply(
+			fake,
+			"add_friend",
+			R"({"user_id":"5"})").value(S("isError")).toBool());
+		fake.now += 1000;
+	}
+	LG_EQUAL(fake.calls, 5);
+	const auto text = ErrorText(
+		ToolReply(fake, "add_friend", R"({"user_id":"5"})"));
+	LG_CHECK(text.contains(S("Rate limit")));
+	LG_CHECK(text.contains(S("seconds")));
+	LG_EQUAL(fake.calls, 5);
+	// Another account has its own count.
+	LG_CHECK(!ToolReply(
+		fake,
+		"add_friend",
+		R"({"account":"7000000000001","user_id":"5"})").value(
+			S("isError")).toBool());
+	LG_EQUAL(fake.calls, 6);
+	// An hour later the first account may again, until the day limit.
+	fake.now += qint64(61) * 60 * 1000;
+	LG_CHECK(!ToolReply(
+		fake,
+		"add_friend",
+		R"({"user_id":"5"})").value(S("isError")).toBool());
+	// A failed call counts too.
+	fake.callError = S("FLOOD_WAIT_30");
+	LG_EQUAL(
+		ErrorText(ToolReply(fake, "add_friend", R"({"user_id":"5"})")),
+		S("FLOOD_WAIT_30"));
+	LG_EQUAL(int(fake.backend().loadTimes(
+		RateSettingKey(S("add_friend"), 111)).size()), 7);
 }

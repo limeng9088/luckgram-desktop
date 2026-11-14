@@ -10,6 +10,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QList>
 #include <QtCore/QStringList>
 
+#include <algorithm>
 #include <cmath>
 
 namespace Luckgram::Mcp {
@@ -270,6 +271,65 @@ constexpr const char *kProtocolVersions[] = {
 		properties,
 		true));
 
+	const auto username = Property(
+		"string",
+		"Username, with or without @.");
+	const auto phone = Property(
+		"string",
+		"Phone number with the country code; only the digits are used.");
+	const auto userId = Property(
+		"string",
+		"Telegram user id, from list_friends, list_chats or find_user.");
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("username"), username);
+	properties.insert(Q("phone"), phone);
+	result.push_back(Tool(
+		"find_user",
+		"Find user",
+		"Skill \"friends\". Look a user up by exactly one of username or "
+		"phone, as seen from the account: id, name, username, whether it "
+		"is already a friend. A phone is found only when that user lets "
+		"the account find them by number. At most 30 lookups an hour per "
+		"account.",
+		properties,
+		true));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("user_id"), userId);
+	properties.insert(Q("username"), username);
+	properties.insert(Q("phone"), phone);
+	properties.insert(Q("first_name"), Property(
+		"string",
+		"Name to save the contact under. Default: the user's own name."));
+	properties.insert(Q("last_name"), Property(
+		"string",
+		"Last name to save the contact under. Default: the user's own."));
+	result.push_back(Tool(
+		"add_friend",
+		"Add friend",
+		"Skill \"friends_manage\". Add a user to the contacts of the "
+		"account, by exactly one of user_id, username or phone. Sends no "
+		"message. At most 5 an hour and 20 a day per account; over the "
+		"limit the call is refused and says how long to wait.",
+		properties,
+		false));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("user_id"), userId);
+	properties.insert(Q("username"), username);
+	result.push_back(Tool(
+		"remove_friend",
+		"Remove friend",
+		"Skill \"friends_manage\". Remove a user from the contacts of the "
+		"account, by exactly one of user_id or username. The chat with "
+		"them stays. At most 20 an hour and 50 a day per account.",
+		properties,
+		false));
+
 	properties = QJsonObject();
 	properties.insert(Q("account"), account);
 	properties.insert(Q("unread_only"), Property(
@@ -290,10 +350,22 @@ constexpr const char *kProtocolVersions[] = {
 	return result;
 }
 
+[[nodiscard]] QString Digits(const QString &text) {
+	auto result = QString();
+	for (const auto ch : text) {
+		if (ch >= QChar('0') && ch <= QChar('9')) {
+			result.push_back(ch);
+		}
+	}
+	return result;
+}
+
 // Which skill a tool belongs to, or nullptr for the account tools.
 [[nodiscard]] const char *SkillOf(const QString &tool) {
-	if (tool == Q("list_friends")) {
+	if (tool == Q("list_friends") || tool == Q("find_user")) {
 		return kSkillFriends;
+	} else if (tool == Q("add_friend") || tool == Q("remove_friend")) {
+		return kSkillFriendsManage;
 	} else if (tool == Q("list_chats")) {
 		return kSkillChats;
 	}
@@ -338,6 +410,93 @@ constexpr const char *kProtocolVersions[] = {
 		const QJsonObject &arguments,
 		QString *error) {
 	auto result = QJsonObject();
+	if (tool == Q("find_user")
+		|| tool == Q("add_friend")
+		|| tool == Q("remove_friend")) {
+		// Who: exactly one way of naming the user.
+		const auto find = (tool == Q("find_user"));
+		const auto remove = (tool == Q("remove_friend"));
+		auto given = 0;
+		for (const auto key : { "user_id", "username", "phone" }) {
+			const auto value = arguments.value(Q(key));
+			if (value.isUndefined() || value.isNull()) {
+				continue;
+			} else if ((find && Q(key) == Q("user_id"))
+				|| (remove && Q(key) == Q("phone"))) {
+				*error = Q(key) + Q(" is not accepted by this tool.");
+				return QJsonObject();
+			}
+			++given;
+		}
+		if (given != 1) {
+			*error = find
+				? Q("Give exactly one of username or phone.")
+				: remove
+				? Q("Give exactly one of user_id or username.")
+				: Q("Give exactly one of user_id, username or phone.");
+			return QJsonObject();
+		}
+		const auto id = arguments.value(Q("user_id"));
+		const auto username = arguments.value(Q("username"));
+		const auto phone = arguments.value(Q("phone"));
+		if (id.isString() || id.isDouble()) {
+			auto ok = false;
+			const auto number = id.isString()
+				? id.toString().trimmed().toULongLong(&ok)
+				: quint64(0);
+			if (id.isDouble()) {
+				const auto value = id.toDouble();
+				ok = (value > 0.
+					&& value < 9007199254740992.
+					&& std::floor(value) == value);
+			}
+			const auto parsed = id.isString() ? number : quint64(id.toDouble());
+			if (!ok || !parsed) {
+				*error = Q("user_id must be a Telegram user id.");
+				return QJsonObject();
+			}
+			result.insert(Q("user_id"), QString::number(parsed));
+		} else if (username.isString()) {
+			auto name = username.toString().trimmed();
+			if (name.startsWith(QChar('@'))) {
+				name = name.mid(1);
+			}
+			auto good = (name.size() >= 4 && name.size() <= 32);
+			for (const auto ch : name) {
+				const auto code = ch.unicode();
+				good = good && ((code >= 'a' && code <= 'z')
+					|| (code >= 'A' && code <= 'Z')
+					|| (code >= '0' && code <= '9')
+					|| (code == '_'));
+			}
+			if (!good) {
+				*error = Q("username is not a valid Telegram username.");
+				return QJsonObject();
+			}
+			result.insert(Q("username"), name);
+		} else if (phone.isString()) {
+			const auto digits = Digits(phone.toString());
+			if (digits.size() < 7 || digits.size() > 15) {
+				*error = Q("phone must be a full number with the country code.");
+				return QJsonObject();
+			}
+			result.insert(Q("phone"), digits);
+		} else {
+			*error = Q("user_id, username and phone are strings.");
+			return QJsonObject();
+		}
+		for (const auto key : { "first_name", "last_name" }) {
+			const auto value = arguments.value(Q(key));
+			if (value.isUndefined() || value.isNull()) {
+				continue;
+			} else if (tool != Q("add_friend") || !value.isString()) {
+				*error = Q(key) + Q(" must be a string, for add_friend only.");
+				return QJsonObject();
+			}
+			result.insert(Q(key), value.toString().trimmed().left(64));
+		}
+		return result;
+	}
 	auto limit = 0;
 	auto offset = 0;
 	const auto friends = (tool == Q("list_friends"));
@@ -375,16 +534,6 @@ constexpr const char *kProtocolVersions[] = {
 			return QJsonObject();
 		}
 		result.insert(Q("unread_only"), unread.toBool());
-	}
-	return result;
-}
-
-[[nodiscard]] QString Digits(const QString &text) {
-	auto result = QString();
-	for (const auto ch : text) {
-		if (ch >= QChar('0') && ch <= QChar('9')) {
-			result.push_back(ch);
-		}
 	}
 	return result;
 }
@@ -473,6 +622,31 @@ void CallSkillTool(
 		return fail(error);
 	} else if (!backend.call) {
 		return fail(Q("This tool is not available."));
+	}
+	const auto limit = LimitOf(name);
+	if (limit.perHour > 0 || limit.perDay > 0) {
+		if (!backend.loadTimes || !backend.saveTimes || !backend.nowMs) {
+			return fail(Q("This tool is not available."));
+		}
+		// Counted when asked, done or not: a failing loop is a loop too.
+		const auto key = RateSettingKey(name, account);
+		const auto now = backend.nowMs();
+		auto times = backend.loadTimes(key);
+		const auto wait = RateWaitSeconds(times, now, limit);
+		if (wait > 0) {
+			backend.saveTimes(key, times);
+			return fail(Q("Rate limit for ")
+				+ name
+				+ Q(" on this account (")
+				+ QString::number(limit.perHour)
+				+ Q(" an hour, ")
+				+ QString::number(limit.perDay)
+				+ Q(" a day). Try again in ")
+				+ QString::number(wait)
+				+ Q(" seconds. Do not retry sooner."));
+		}
+		times.push_back(now);
+		backend.saveTimes(key, times);
 	}
 	backend.call(name, account, checked, [=](ToolOutcome outcome) {
 		if (!outcome.error.isEmpty()) {
@@ -876,8 +1050,16 @@ const std::vector<SkillInfo> &Skills() {
 			kSkillFriends,
 			"好友",
 			"Friends",
-			"查看好友列表",
-			"See the list of friends",
+			"查看好友列表，按用户名或手机号查找用户",
+			"See the list of friends, find a user by username or phone",
+		},
+		{
+			kSkillFriendsManage,
+			"管理好友",
+			"Manage friends",
+			"加好友、删好友，有频率上限",
+			"Add and remove friends, rate limited",
+			true,
 		},
 		{
 			kSkillChats,
@@ -887,6 +1069,76 @@ const std::vector<SkillInfo> &Skills() {
 			"See the chat list and unread counts, no message texts",
 		},
 	};
+	return result;
+}
+
+RateLimit LimitOf(const QString &tool) {
+	if (tool == Q("add_friend")) {
+		return { 5, 20 };
+	} else if (tool == Q("remove_friend")) {
+		return { 20, 50 };
+	} else if (tool == Q("find_user")) {
+		return { 30, 100 }; // Telegram limits lookups hard.
+	}
+	return {};
+}
+
+qint64 RateWaitSeconds(
+		std::vector<qint64> &times,
+		qint64 nowMs,
+		RateLimit limit) {
+	constexpr auto kHour = qint64(60) * 60 * 1000;
+	constexpr auto kDay = 24 * kHour;
+	// A clock set back must not lock the tool: such entries are dropped.
+	times.erase(
+		std::remove_if(times.begin(), times.end(), [&](qint64 time) {
+			return (time > nowMs) || (nowMs - time >= kDay);
+		}),
+		times.end());
+	std::sort(times.begin(), times.end());
+	const auto waitFor = [&](int allowed, qint64 window) {
+		if (allowed <= 0) {
+			return qint64(0);
+		}
+		auto inside = std::vector<qint64>();
+		for (const auto time : times) {
+			if (nowMs - time < window) {
+				inside.push_back(time);
+			}
+		}
+		if (int(inside.size()) < allowed) {
+			return qint64(0);
+		}
+		// Free again when the oldest of the last `allowed` leaves.
+		const auto leaves = inside[inside.size() - allowed] + window;
+		return std::max(qint64(1), (leaves - nowMs + 999) / 1000);
+	};
+	return std::max(
+		waitFor(limit.perHour, kHour),
+		waitFor(limit.perDay, kDay));
+}
+
+QString RateSettingKey(const QString &tool, quint64 account) {
+	return Q("mcp_rate_") + tool + Q("_") + QString::number(account);
+}
+
+QString SerializeTimes(const std::vector<qint64> &times) {
+	auto list = QStringList();
+	for (const auto time : times) {
+		list.push_back(QString::number(time));
+	}
+	return list.join(QChar(','));
+}
+
+std::vector<qint64> ParseTimes(const QString &text) {
+	auto result = std::vector<qint64>();
+	for (const auto &part : text.split(QChar(','), Qt::SkipEmptyParts)) {
+		auto ok = false;
+		const auto time = part.toLongLong(&ok);
+		if (ok && time > 0) {
+			result.push_back(time);
+		}
+	}
 	return result;
 }
 

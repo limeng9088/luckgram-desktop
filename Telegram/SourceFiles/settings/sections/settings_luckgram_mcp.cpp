@@ -148,12 +148,42 @@ void LuckgramMcp::setupContent(
 						+ u" · "_q
 						+ Tr(skill.aboutZh, skill.aboutEn)),
 					st::settingsButtonNoIcon);
-				button->toggleOn(rpl::single(Mcp::SkillEnabled(id, key)));
+				const auto write = skill.write;
+				const auto name = account.name;
+				// The switch shows what is stored; a write skill goes on
+				// only after the user said yes for this account.
+				const auto shown = button->lifetime().make_state<
+					rpl::variable<bool>>(Mcp::SkillEnabled(id, key));
+				button->toggleOn(shown->value());
 				button->toggledChanges(
 				) | rpl::filter([=](bool toggled) {
 					return (toggled != Mcp::SkillEnabled(id, key));
 				}) | rpl::on_next([=](bool toggled) {
-					Mcp::SetSkillEnabled(id, key, toggled);
+					if (!toggled || !write) {
+						Mcp::SetSkillEnabled(id, key, toggled);
+						*shown = toggled;
+						return;
+					}
+					shown->force_assign(false); // Back until confirmed.
+					controller->show(Ui::MakeConfirmBox({
+						.text = Tr(
+							"开启后，拿到访问令牌的 AI 工具可以用账号「",
+							"With this on, AI tools that have the access "
+							"token can add and remove friends as \"")
+							+ name
+							+ Tr(
+								"」加好友和删好友，不会再逐次询问。"
+								"有频率上限，超过会被拒绝。",
+								"\" without asking each time. Calls are "
+								"rate limited; over the limit they are "
+								"refused."),
+						.confirmed = [=](Fn<void()> close) {
+							Mcp::SetSkillEnabled(id, key, true);
+							*shown = true;
+							close();
+						},
+						.confirmText = Tr("开启", "Turn on"),
+					}));
 				}, button->lifetime());
 			}
 		}

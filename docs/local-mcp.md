@@ -43,8 +43,14 @@ Skill 工具都有可选参数 `account`（`list_accounts` 里的 `id`），不�
 | Skill | 工具 | 参数 | 返回 |
 |---|---|---|---|
 | 好友 `friends` | `list_friends` | `account`、`query`（按昵称或用户名过滤）、`limit`（1–1000，默认 200）、`offset` | `total`、`friends`：`id`、`name`、`username`、`phone`、`bot`、`mutual` |
+| 好友 `friends` | `find_user` | `account`，`username` / `phone` 二选一 | `user`：`id`、`name`、`username`、`phone`、`bot`、`friend`。每账号每小时 30 次、每天 100 次 |
+| 管理好友 `friends_manage` | `add_friend` | `account`，`user_id` / `username` / `phone` 三选一，`first_name`、`last_name`（保存的备注名，可选） | `added`、`already_friend`、`user`。不发任何消息。每账号每小时 5 次、每天 20 次 |
+| 管理好友 `friends_manage` | `remove_friend` | `account`，`user_id` / `username` 二选一 | `removed`、`was_friend`、`user`。聊天记录保留。每账号每小时 20 次、每天 50 次 |
 | 会话 `chats` | `list_chats` | `account`、`unread_only`、`limit`（1–200，默认 50）、`offset` | `total`、`complete`、`chats`：`id`、`type`（user / bot / group / supergroup / channel）、`name`、`username`、`unread`、`unread_mark`、`muted`、`pinned`、`last_message_date` |
 
+- 「管理好友」是会改动账号的 Skill：开启时桌面版会弹确认框，确认一次后该账号不再逐次询问。
+- 频率上限按账号、按工具计数，重启后仍然有效，失败的调用也计数。超限时工具返回错误并给出还要等多少秒。上限是为了避免账号被 Telegram 限制，不能关闭。
+- Telegram 自己返回 `FLOOD_WAIT` 时，工具会把要等的秒数原样告诉调用方。
 - `list_chats` 只返回主列表（不含归档），不返回任何消息内容。`complete` 为 false 表示应用还只加载了长列表的前一部分。
 - `list_friends` 在本次启动第一次调用时要向服务器取通讯录，最多等 15 秒。
 
