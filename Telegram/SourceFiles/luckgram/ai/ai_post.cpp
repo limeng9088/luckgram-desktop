@@ -168,7 +168,7 @@ void ShowPanel(not_null<WritingHost*> host) {
 			object_ptr<Ui::FlatLabel>(
 				panel,
 				QString(),
-				st::defaultFlatLabel),
+				st::luckgramAiTextLabel),
 			margins));
 	status->hide(anim::type::instant);
 
