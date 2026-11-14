@@ -11,6 +11,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QUrl>
 
 #include <algorithm>
+#include <array>
 #include <utility>
 
 namespace Luckgram::Xray {
@@ -620,9 +621,91 @@ QString FromClash(const std::map<QString, QString> &m) {
 	return QString();
 }
 
+bool IsPrivateAddress(const QString &host) {
+	auto h = Lower(host);
+	if (h.startsWith(QChar('[')) && h.endsWith(QChar(']'))) {
+		h = h.mid(1, h.size() - 2);
+	}
+	if (h == QStringLiteral("localhost")) {
+		return true;
+	}
+	static const auto ipv4 = QRegularExpression(
+		QStringLiteral("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$"));
+	if (const auto m = ipv4.match(h); m.hasMatch()) {
+		auto b = std::array<int, 4>();
+		for (auto i = 0; i != 4; ++i) {
+			b[i] = m.captured(i + 1).toInt();
+			if (b[i] > 255) {
+				return false;
+			}
+		}
+		return (b[0] == 10)
+			|| (b[0] == 127)
+			|| (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
+			|| (b[0] == 192 && b[1] == 168)
+			|| (b[0] == 169 && b[1] == 254);
+	}
+	if (!h.contains(QChar(':'))) {
+		return false; // A host name.
+	}
+	if (h == QStringLiteral("::1")) {
+		return true;
+	}
+	// fc00::/7 (ULA) and fe80::/10 (link-local): the first group.
+	const auto first = h.section(QChar(':'), 0, 0);
+	if (first.size() != 4) {
+		return false; // "::..." or a short first group: not one of those.
+	}
+	const auto value = first.toUInt(nullptr, 16);
+	return ((value & 0xFE00) == 0xFC00) || ((value & 0xFFC0) == 0xFE80);
+}
+
+bool NeedsEncryption(const QString &link) {
+	const auto parts = Split(link);
+	if (!parts
+		|| (parts->protocol != L(kVless) && parts->protocol != L(kTrojan))) {
+		return false;
+	}
+	const auto value = [&](const char *key) {
+		const auto i = parts->query.find(L(key));
+		return (i != end(parts->query)) ? Lower(i->second) : QString();
+	};
+	const auto security = NonEmpty(value("security"), QStringLiteral("none"));
+	if (security != QStringLiteral("none")) {
+		return false; // tls / reality (anything else isn't built anyway).
+	}
+	const auto encryption = value("encryption");
+	if (parts->protocol == L(kVless)
+		&& !encryption.isEmpty()
+		&& encryption != QStringLiteral("none")) {
+		return false; // VLESS encryption (mlkem768x25519plus...).
+	}
+	return !IsPrivateAddress(parts->host);
+}
+
+QString StartFailureReason(const QByteArray &output) {
+	const auto text = QString::fromUtf8(output);
+	const auto marker = QStringLiteral("Failed to start:");
+	const auto at = text.lastIndexOf(marker);
+	if (at < 0) {
+		return QString();
+	}
+	auto line = text.mid(at + marker.size()).section(QChar('\n'), 0, 0);
+	const auto separator = line.lastIndexOf(QStringLiteral(" > "));
+	auto reason = ((separator >= 0) ? line.mid(separator + 3) : line).trimmed();
+	// Host names and addresses: never logged.
+	static const auto ipv6 = QRegularExpression(
+		QStringLiteral("\\[?[0-9A-Fa-f]{0,4}(:[0-9A-Fa-f]{0,4}){2,7}\\]?"));
+	static const auto names = QRegularExpression(
+		QStringLiteral("[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)+"));
+	reason.replace(ipv6, QStringLiteral("*"));
+	reason.replace(names, QStringLiteral("*"));
+	return reason.left(300);
+}
+
 QJsonObject Outbound(const QString &link) {
 	const auto parts = Split(link);
-	if (!parts) {
+	if (!parts || NeedsEncryption(link)) {
 		return QJsonObject();
 	}
 	const auto stream = StreamSettings(*parts);

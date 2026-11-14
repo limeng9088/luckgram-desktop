@@ -43,11 +43,13 @@ constexpr auto kOldStoreKey = "_xray_nodes";
 constexpr auto kOldSecretName = "xray_key";
 // The core counts as running once it is still alive after this long.
 constexpr auto kStartedAfter = crl::time(800);
+// The tail of xray's output kept in memory (for StartFailureReason).
+constexpr auto kOutputTail = 8 * 1024;
 
 struct Rec {
 	Node node;
 	int localPort = 0;
-	QJsonObject outbound;
+	QJsonObject outbound; // Empty: not run (NeedsEncryption).
 };
 
 struct State {
@@ -136,7 +138,11 @@ void Load() {
 		const auto node = Parse(item.value(u"link"_q).toString());
 		const auto local = item.value(u"local"_q).toInt();
 		auto outbound = node ? Outbound(node->link) : QJsonObject();
-		if (node && local > 0 && !outbound.isEmpty()) {
+		// A node the core refuses (added before #125) stays in the list,
+		// marked and deletable, but isn't run.
+		if (node
+			&& local > 0
+			&& (!outbound.isEmpty() || NeedsEncryption(node->link))) {
 			data.nodes.push_back({ *node, local, std::move(outbound) });
 		}
 	}
@@ -317,7 +323,7 @@ std::optional<MTP::ProxyData> Register(const Node &node) {
 	}
 	auto outbound = Outbound(node.link);
 	if (outbound.isEmpty()) {
-		return std::nullopt;
+		return std::nullopt; // RefusedText() says why.
 	}
 	auto used = std::set<int>();
 	for (const auto &rec : data.nodes) {
@@ -384,7 +390,13 @@ void Apply() {
 	}
 	auto runs = std::vector<Run>();
 	for (const auto &rec : data.nodes) {
-		runs.push_back({ rec.localPort, rec.outbound });
+		if (!rec.outbound.isEmpty()) {
+			runs.push_back({ rec.localPort, rec.outbound });
+		}
+	}
+	if (runs.empty()) {
+		SetState(false, QString()); // Only refused nodes: NodeProblem().
+		return;
 	}
 	if (const auto busy = FirstBusyPort(runs)) {
 		// Don't start: xray would exit anyway. Say which port.
@@ -404,9 +416,16 @@ void Apply() {
 	process->setProgram(BinaryPath());
 	process->setArguments({ u"run"_q, u"-c"_q, u"stdin:"_q });
 	process->setWorkingDirectory(QFileInfo(BinaryPath()).absolutePath());
-	// xray's output may name hosts: never kept or logged.
-	process->setStandardOutputFile(QProcess::nullDevice());
-	process->setStandardErrorFile(QProcess::nullDevice());
+	// xray's output may name hosts: only its tail is kept, in memory, and
+	// only the reason of a failed start is logged, without hosts (#125).
+	process->setProcessChannelMode(QProcess::MergedChannels);
+	const auto output = std::make_shared<QByteArray>();
+	QObject::connect(process, &QProcess::readyReadStandardOutput, [=] {
+		output->append(process->readAllStandardOutput());
+		if (output->size() > kOutputTail) {
+			*output = output->right(kOutputTail);
+		}
+	});
 #ifdef Q_OS_WIN
 	process->setCreateProcessArgumentsModifier([](
 			QProcess::CreateProcessArguments *args) {
@@ -436,7 +455,11 @@ void Apply() {
 		if (Data().process != process) {
 			return;
 		}
-		LOG(("Luckgram Xray: the core exited, code %1.").arg(exitCode));
+		output->append(process->readAllStandardOutput());
+		const auto reason = StartFailureReason(*output);
+		LOG(("Luckgram Xray: the core exited, code %1.%2"
+			).arg(exitCode
+			).arg(reason.isEmpty() ? QString() : (u" "_q + reason)));
 		SetState(false, Luckgram::IsChinese()
 			? (u"已退出（代码 "_q + QString::number(exitCode) + u"）"_q)
 			: (u"exited (code "_q + QString::number(exitCode) + u")"_q));
@@ -459,6 +482,20 @@ QString DeleteText() {
 
 QString UnavailableText() {
 	return Tr("这个节点现在用不了", "This node can't be used now");
+}
+
+QString UnencryptedText() {
+	return Tr(
+		"未加密的 VLESS / Trojan 节点内核不支持，需要 TLS 或 Reality",
+		"The core doesn't run unencrypted VLESS / Trojan nodes: TLS or Reality is needed");
+}
+
+QString RefusedText(const Node &node) {
+	return NeedsEncryption(node.link) ? UnencryptedText() : UnavailableText();
+}
+
+QString NodeProblem(const Node &node) {
+	return NeedsEncryption(node.link) ? UnencryptedText() : Problem();
 }
 
 } // namespace Luckgram::Xray
