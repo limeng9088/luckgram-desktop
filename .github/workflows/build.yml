@@ -338,6 +338,12 @@ jobs:
       # Windows hands that class on to cmake, MSBuild, cl and link. No MSBuild
       # node reuse, so no node from an earlier build keeps Normal priority.
       MSBUILDDISABLENODEREUSE: '1'
+      # English compiler / linker messages whatever the machine's VS
+      # language: ffmpeg's configure recognizes MSVC by cl's English banner
+      # ("Microsoft (R) C/C++ Optimizing Compiler"); with a Chinese VS on
+      # xs-master it treated cl as a generic cc and failed (LNK1136).
+      # Needs the English language pack in Visual Studio.
+      VSLANG: '1033'
     defaults:
       run:
         shell: cmd
