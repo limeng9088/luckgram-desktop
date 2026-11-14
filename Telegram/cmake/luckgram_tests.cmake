@@ -37,6 +37,8 @@ PRIVATE
     # D10 discover, square, people nearby, scan, block list
     luckgram/discover/luckgram_discover_logic.cpp
     luckgram/discover/luckgram_discover_logic.h
+    luckgram/discover/luckgram_discover_offline.cpp
+    luckgram/discover/luckgram_discover_offline.h
     luckgram/discover/luckgram_nearby_logic.cpp
     luckgram/discover/luckgram_nearby_logic.h
     luckgram/discover/luckgram_scan_logic.cpp

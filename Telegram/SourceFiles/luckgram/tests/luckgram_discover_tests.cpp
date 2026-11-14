@@ -6,8 +6,12 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/tests/luckgram_test.h"
 
 #include "luckgram/discover/luckgram_discover_logic.h"
+#include "luckgram/discover/luckgram_discover_offline.h"
+#include "luckgram/discover/luckgram_nearby_logic.h"
 #include "luckgram/discover/luckgram_scan_logic.h"
+#include "luckgram/discover/luckgram_square_logic.h"
 
+#include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 
 // Cases ported from mobile ScanLogicTest and BlockLogicTest, plus the
@@ -141,4 +145,67 @@ LUCKGRAM_TEST(DiscoverRowsFollowTheirSwitches) {
 	LG_EQUAL(Texts(false).emptyText(), U("No features available right now"));
 	LG_EQUAL(Texts(true).subtitle(Entry::Square), U("看看大家在分享什么"));
 	LG_EQUAL(Texts(false).title(Entry::Nearby), U("People Nearby"));
+}
+
+// #137: the CI session answers Discover locally, in the shapes the parsers
+// read, and with nothing to download.
+LUCKGRAM_TEST(DiscoverOfflineRoutes) {
+	using namespace Luckgram::Discover::Offline;
+	LG_CHECK(Handles(U("/v1/square/feed?tab=new")));
+	LG_CHECK(Handles(U("/v1/square")));
+	LG_CHECK(Handles(U("/v1/nearby?lat=1&lon=2")));
+	LG_CHECK(Handles(U("/v1/nearby/me")));
+	LG_CHECK(Handles(U("/v1/blocks?cursor=x")));
+	LG_CHECK(Handles(U("/v1/link?nonce=n")));
+	LG_CHECK(Handles(U("/v1/link/start")));
+	LG_CHECK(!Handles(U("/v1/squares")));
+	LG_CHECK(!Handles(U("/v1/version?platform=windows")));
+	LG_CHECK(!Handles(U("/v1/ai/chat")));
+	LG_CHECK(!Answer("GET", U("/v1/config"), 0).has_value());
+
+	const auto write = Answer("POST", U("/v1/square/posts"), 0);
+	LG_CHECK(write.has_value());
+	LG_EQUAL(write.value_or(Reply()).status, 503);
+	LG_CHECK(Answer("PUT", U("/v1/nearby/me"), 0).value_or(Reply()).status == 503);
+	LG_CHECK(Answer("POST", U("/v1/link/start"), 0).value_or(Reply()).status == 503);
+}
+
+LUCKGRAM_TEST(DiscoverOfflineData) {
+	using namespace Luckgram::Discover::Offline;
+	const auto now = qint64(1794645833) * 1000;
+	const auto body = [&](const char *path) {
+		const auto answer = Answer("GET", U(path), now);
+		LG_CHECK(answer.has_value());
+		if (!answer) {
+			return QJsonObject();
+		}
+		LG_EQUAL(answer->status, 200);
+		LG_CHECK(!answer->body.contains("http"));
+		return QJsonDocument::fromJson(answer->body).object();
+	};
+
+	const auto feed = Luckgram::Square::ParsePosts(body("/v1/square/feed?tab=hot"));
+	LG_EQUAL(int(feed.items.size()), 3);
+	LG_CHECK(feed.nextCursor.isEmpty());
+	for (const auto &post : feed.items) {
+		LG_CHECK(post.images.empty());
+		LG_CHECK(!post.video.has_value());
+		LG_CHECK(post.author.avatarUrl.isEmpty());
+		LG_CHECK(!post.author.displayName.isEmpty());
+		LG_CHECK(post.createdAtMs > 0 && post.createdAtMs < now);
+		LG_CHECK(!post.isHidden());
+	}
+
+	const auto people = Luckgram::Nearby::ParseList(
+		body("/v1/nearby?lat=1&lon=2"),
+		QString());
+	LG_EQUAL(int(people.size()), 3);
+	LG_EQUAL(people[0].bucket, U("500m"));
+	LG_CHECK(people[0].avatarUrl.isEmpty());
+
+	LG_CHECK(!Luckgram::Nearby::ParseMe(body("/v1/nearby/me"), now).visible);
+	LG_CHECK(body("/v1/link").value(U("linked")).toBool());
+	LG_CHECK(!body("/v1/square/profile").value(U("display_name")).toString().isEmpty());
+	LG_CHECK(body("/v1/square/posts/x/comments").value(U("items")).toArray().isEmpty());
+	LG_CHECK(body("/v1/blocks").value(U("items")).toArray().isEmpty());
 }
