@@ -246,6 +246,8 @@ struct CloudResult {
 // Which host the next poll goes to: the same one while it answers, the
 // other one after two failed polls in a row on it.
 [[nodiscard]] int NextCloudHost(int host, int failuresOnHost);
-[[nodiscard]] QString CloudClientConfigJson(const QString &key);
+// host: see CloudHostUrl; the backup one for an AI tool on a network where
+// the main name is blocked.
+[[nodiscard]] QString CloudClientConfigJson(const QString &key, int host = 0);
 
 } // namespace Luckgram::Mcp

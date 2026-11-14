@@ -208,6 +208,21 @@ void LuckgramMcp::setupContent(
 	});
 	AddButtonWithIcon(
 		container,
+		rpl::single(Tr(
+			"复制备用地址的客户端配置",
+			"Copy client config with the backup address")),
+		st::settingsButtonNoIcon
+	)->addClickHandler([=] {
+		const auto key = Cloud::Key();
+		if (key.isEmpty()) {
+			controller->showToast(
+				Tr("请先开启云端 MCP", "Turn Cloud MCP on first"));
+		} else {
+			copy(Mcp::CloudClientConfigJson(key, 1));
+		}
+	});
+	AddButtonWithIcon(
+		container,
 		rpl::single(Tr("复制云端密钥", "Copy cloud key")),
 		st::settingsButtonNoIcon
 	)->addClickHandler([=] {
@@ -302,11 +317,14 @@ void LuckgramMcp::setupContent(
 		rpl::single(Tr(
 			"多台电脑用同一把云端密钥，AI 工具只连一个地址就能操作所有"
 			"电脑：先调用 list_devices，再用 device 参数指定电脑。"
-			"每台电脑上的 Skill 仍然在各自的应用里按账号开启。",
+			"每台电脑上的 Skill 仍然在各自的应用里按账号开启。"
+			"AI 工具所在的网络打不开 luckgram.cc 时，用备用地址的配置。",
 			"Computers that use the same cloud key are reached at one "
 			"address: the tool calls list_devices, then names the "
 			"computer with \"device\". Skills are still switched on per "
-			"account in the app on each computer.")));
+			"account in the app on each computer. Where luckgram.cc does "
+			"not open for the AI tool, use the config with the backup "
+			"address.")));
 	Ui::AddSkip(container);
 
 	// Skills, per account, all off until switched on here.
