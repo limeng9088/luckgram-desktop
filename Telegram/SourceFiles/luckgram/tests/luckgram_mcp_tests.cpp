@@ -1050,4 +1050,15 @@ LUCKGRAM_TEST(McpCloudBackupHost) {
 	// And back, when the backup is the one that does not answer.
 	LG_EQUAL(NextCloudHost(1, 1), 1);
 	LG_EQUAL(NextCloudHost(1, 2), 0);
+
+	const auto key = CloudKeyFromBytes(QByteArray(32, 'k'));
+	const auto backup = J(CloudClientConfigJson(key, 1).toUtf8()).value(
+		S("mcpServers")).toObject().value(S("luckgram-cloud")).toObject();
+	LG_EQUAL(
+		backup.value(S("url")).toString(),
+		S("https://lg-mcp.cat158.com/mcp"));
+	LG_EQUAL(
+		backup.value(S("headers")).toObject().value(
+			S("Authorization")).toString(),
+		S("Bearer ") + key);
 }

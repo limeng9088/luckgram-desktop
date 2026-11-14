@@ -1640,12 +1640,12 @@ int NextCloudHost(int host, int failuresOnHost) {
 	return (failuresOnHost >= 2) ? (1 - current) : current;
 }
 
-QString CloudClientConfigJson(const QString &key) {
+QString CloudClientConfigJson(const QString &key, int host) {
 	auto headers = QJsonObject();
 	headers.insert(Q("Authorization"), Q("Bearer ") + key);
 	auto server = QJsonObject();
 	server.insert(Q("type"), Q("http"));
-	server.insert(Q("url"), Q(kCloudUrl) + Q(kPath));
+	server.insert(Q("url"), CloudHostUrl(host) + Q(kPath));
 	server.insert(Q("headers"), headers);
 	auto servers = QJsonObject();
 	servers.insert(Q("luckgram-cloud"), server);
