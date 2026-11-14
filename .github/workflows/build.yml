@@ -1118,7 +1118,8 @@ jobs:
             -D LUCKGRAM_BUILD_NUMBER=$LUCKGRAM_BUILD \
             -D LUCKGRAM_COMMIT=${{ github.sha }} \
             -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON \
-            -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON
+            -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON \
+            -D LUCKGRAM_MAC_WALLET_CONTENT_OPT="${{ vars.MAC_WALLET_CONTENT_OPT || '-O1' }}"
 
       # The hosted Mac (3 cores, ~7 GB) went down twice after ~2 h 16 min
       # ("runner has received a shutdown signal", no compile error), most
@@ -1266,6 +1267,17 @@ jobs:
         run: |
           echo "Build parts: $RESULTS"
           case " $RESULTS " in *" success "*) ;; *) echo "::error::the build did not finish in this run; the compiler cache is saved, the next run continues"; exit 1 ;; esac
+
+      - name: Free disk space after the build.
+        # The hosted Mac's data volume was at 91% (28 GB left) after the
+        # build. The compiler cache is saved and only out/Release/Luckgram.app
+        # is used below, so the Xcode intermediates (out/build: objects,
+        # dependency files) and DerivedData (module and index caches) go.
+        continue-on-error: true
+        run: |
+          df -h "$GITHUB_WORKSPACE" | tail -1
+          rm -rf luckgram-desktop/out/build "$HOME/Library/Developer/Xcode/DerivedData"
+          df -h "$GITHUB_WORKSPACE" | tail -1
 
       - name: Stage Luckgram.app.
         run: |

@@ -379,3 +379,21 @@ target_link_libraries(Telegram PRIVATE lib_luckgram_call_tap)
 if (WIN32)
     target_link_libraries(Telegram PRIVATE dnsapi)
 endif()
+
+# macOS (Apple clang, -O3): wallet/wallet_content.cpp (~490 KB, one function
+# of ~1800 lines with many lambdas) did not finish in 3.5 hours on the
+# hosted Mac (run 43576736393: 3 cores / 7 GB, swapping hard), so the build
+# never got past it. Until the file is split, it is compiled with less
+# optimization on macOS only; it is UI code (boxes), not a hot path.
+# Override with -D LUCKGRAM_MAC_WALLET_CONTENT_OPT=-O2 (or "" for the
+# normal flags).
+if (APPLE)
+    set(LUCKGRAM_MAC_WALLET_CONTENT_OPT "-O1" CACHE STRING
+        "Optimization flag for wallet/wallet_content.cpp on macOS")
+    if (LUCKGRAM_MAC_WALLET_CONTENT_OPT)
+        set_source_files_properties(${src_loc}/wallet/wallet_content.cpp
+        PROPERTIES
+            COMPILE_OPTIONS "${LUCKGRAM_MAC_WALLET_CONTENT_OPT}"
+        )
+    endif()
+endif()
