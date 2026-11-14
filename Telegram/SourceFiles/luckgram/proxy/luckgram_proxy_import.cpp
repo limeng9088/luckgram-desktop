@@ -478,7 +478,9 @@ void HandleIn(
 		const auto proxy = ToProxy(*entry);
 		if (!proxy) {
 			if (entry->type == QString::fromLatin1(kTypeXray)) {
-				Inform(show, InputTitle(), Xray::UnavailableText());
+				Inform(show, InputTitle(), entry->node
+					? Xray::RefusedText(*entry->node)
+					: Xray::UnavailableText());
 				return;
 			}
 			break;

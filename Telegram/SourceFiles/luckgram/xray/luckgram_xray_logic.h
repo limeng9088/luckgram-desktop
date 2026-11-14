@@ -64,9 +64,24 @@ struct Node {
 
 // --- Running the core.
 
+// Xray 26 refuses VLESS / Trojan without TLS, Reality or VLESS encryption
+// unless the server is a private address ("... is prohibited unless the
+// server address is a private IP or domain"), and one such outbound makes
+// the whole config fail (exit code 23, no node works). True for such a link:
+// Outbound() is empty for it and it is never given to the core.
+[[nodiscard]] bool NeedsEncryption(const QString &link);
+// Loopback, private (10/8, 172.16/12, 192.168/16), link-local, IPv6 ULA /
+// link-local / ::1, localhost; checked against xray 26.10.31 `run -test`.
+// Other names count as public (xray accepts .local / .lan too, missing one
+// only leaves a node unused).
+[[nodiscard]] bool IsPrivateAddress(const QString &host);
+// The reason part of xray's "Failed to start: ... > reason" output line,
+// with IP addresses and host names replaced by "*"; empty if none.
+[[nodiscard]] QString StartFailureReason(const QByteArray &output);
+
 // The Xray outbound for a canonical link (vnext / servers, streamSettings
 // with tls / reality and tcp / ws / grpc / http / xhttp / httpupgrade);
-// empty for anything it can't build.
+// empty for anything it can't build or the core refuses (NeedsEncryption).
 [[nodiscard]] QJsonObject Outbound(const QString &link);
 
 struct Run {

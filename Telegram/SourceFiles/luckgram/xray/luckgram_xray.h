@@ -39,6 +39,9 @@ void Start();
 // Why the nodes can't be used now (not in this build / switched off /
 // starting / not running: reason); empty while the core runs.
 [[nodiscard]] QString Problem();
+// Problem() for one node; first that the core refuses it (NeedsEncryption:
+// it is kept in the list but never run, so it can't stop the others).
+[[nodiscard]] QString NodeProblem(const Node &node);
 // Fires when Running() / Problem() may have changed.
 [[nodiscard]] rpl::producer<> StateChanges();
 
@@ -64,5 +67,9 @@ void Apply();
 [[nodiscard]] QString LinkCopiedText();
 [[nodiscard]] QString DeleteText();
 [[nodiscard]] QString UnavailableText();
+// Unencrypted VLESS / Trojan to a public address (NeedsEncryption).
+[[nodiscard]] QString UnencryptedText();
+// Why Register() gave nothing for this node.
+[[nodiscard]] QString RefusedText(const Node &node);
 
 } // namespace Luckgram::Xray

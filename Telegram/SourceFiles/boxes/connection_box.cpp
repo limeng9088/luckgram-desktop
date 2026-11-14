@@ -2663,7 +2663,7 @@ void ProxiesBoxController::updateView(const Item &item) {
 	const auto xray = Luckgram::Xray::Find(item.data);
 	auto shownType = type;
 	if (xray) {
-		const auto problem = Luckgram::Xray::Problem();
+		const auto problem = Luckgram::Xray::NodeProblem(*xray);
 		shownType = Luckgram::Xray::Label(xray->protocol)
 			+ (problem.isEmpty() ? QString() : (u" · "_q + problem));
 		supportsShare = true;

@@ -300,3 +300,72 @@ LUCKGRAM_TEST(XrayBase64AndLooksLikeLink) {
 	LG_EQUAL(Label(S("vmess")), S("VMess"));
 	LG_EQUAL(Label(S("ss")), S("SS"));
 }
+
+// #125: xray 26 exits with code 23 for VLESS / Trojan without TLS to a
+// public address (checked with xray 26.10.31 `run -test`); such a node
+// isn't built, so it can't stop the core for the other nodes.
+LUCKGRAM_TEST(XrayRefusesPlainVlessTrojan) {
+	const auto vless = [](const char *rest) {
+		return S("vless://") + kUuid + S(rest);
+	};
+	const auto plain = vless("@5.6.7.8:443?encryption=none&security=none&type=tcp#QA");
+	LG_CHECK(NeedsEncryption(plain));
+	LG_CHECK(Outbound(plain).isEmpty());
+	LG_CHECK(Parse(plain).has_value()); // Still a node (shown, deletable).
+	LG_CHECK(NeedsEncryption(vless("@example.com:443?type=ws")));
+	LG_CHECK(NeedsEncryption(S("trojan://pw@5.6.7.8:443?security=none&type=tcp")));
+	// Trojan without security is TLS (v2rayN / Clash): run, with TLS.
+	const auto trojan = S("trojan://pw@5.6.7.8:443?sni=x#n");
+	LG_CHECK(!NeedsEncryption(trojan));
+	const auto trojanStream = Outbound(trojan).value(S("streamSettings")).toObject();
+	LG_EQUAL(trojanStream.value(S("security")).toString(), S("tls"));
+	LG_EQUAL(trojanStream.value(S("tlsSettings")).toObject()
+		.value(S("serverName")).toString(), S("x"));
+	// Encrypted, or a private address: fine.
+	LG_CHECK(!NeedsEncryption(vless("@5.6.7.8:443?security=tls&type=tcp")));
+	LG_CHECK(!NeedsEncryption(vless("@5.6.7.8:443?security=reality&pbk=k&type=tcp")));
+	LG_CHECK(!NeedsEncryption(vless("@5.6.7.8:443?encryption=mlkem768x25519plus.native.0rtt.x&type=tcp")));
+	const auto lan = vless("@192.168.1.5:443?security=none&type=tcp");
+	LG_CHECK(!NeedsEncryption(lan));
+	LG_CHECK(!Outbound(lan).isEmpty());
+	LG_CHECK(!NeedsEncryption(S("vmess://") + kUuid + S("@5.6.7.8:443?encryption=auto&type=tcp")));
+	LG_CHECK(!NeedsEncryption(S("http://example.com")));
+}
+
+LUCKGRAM_TEST(XrayPrivateAddress) {
+	for (const auto host : { "10.1.1.1", "172.16.0.1", "172.31.255.1",
+			"192.168.0.1", "127.0.0.1", "169.254.1.1", "fd00::1", "fe80::1",
+			"[fe80::1]", "::1", "localhost", "LocalHost" }) {
+		LG_CHECK(IsPrivateAddress(S(host)));
+	}
+	for (const auto host : { "5.6.7.8", "172.32.0.1", "100.64.0.1",
+			"300.1.1.1", "2001:db8::1", "::", "example.com", "a.lan" }) {
+		LG_CHECK(!IsPrivateAddress(S(host)));
+	}
+}
+
+LUCKGRAM_TEST(XrayStartFailureReason) {
+	const auto output = QByteArray(
+		"Xray 26.10.31 (Xray, Penetrates Everything.)\r\n"
+		"Failed to start: main: failed to load config files: [stdin:] > "
+		"infra/conf: failed to build outbound config with tag out-0 > "
+		"infra/conf: vless without TLS or other encryption is prohibited "
+		"unless the server address is a private IP or domain\r\n");
+	LG_EQUAL(StartFailureReason(output), S("infra/conf: vless without TLS or "
+		"other encryption is prohibited unless the server address is a "
+		"private IP or domain"));
+	// Hosts and addresses never reach the log.
+	const auto hosts = StartFailureReason(QByteArray(
+		"Failed to start: x > dial edge.example.com 5.6.7.8:443 [2001:db8::1]:443"));
+	LG_CHECK(!hosts.contains(S("example")));
+	LG_CHECK(!hosts.contains(S("5.6.7.8")));
+	LG_CHECK(!hosts.contains(S("2001")));
+	// Nor UUIDs and passwords.
+	const auto secrets = StartFailureReason(QByteArray(
+		"Failed to start: x > invalid user id: 1b0c5e6a-0000-4000-8000-000000000001, "
+		"password=hunter2 pass: \"s3cret\""));
+	LG_CHECK(!secrets.contains(S("1b0c5e6a")));
+	LG_CHECK(!secrets.contains(S("hunter2")));
+	LG_CHECK(!secrets.contains(S("s3cret")));
+	LG_CHECK(StartFailureReason(QByteArray("started")).isEmpty());
+}
