@@ -348,3 +348,26 @@ LUCKGRAM_TEST(TranslateOutHint) {
 	LG_EQUAL(OutHint(S("Spanish"), false) + UndoLabel(false),
 		S("Translated to Spanish · Undo"));
 }
+
+// specs#176: Spanish recognized as Galician.
+
+LUCKGRAM_TEST(TranslateResolveGalician) {
+	// The build 103 case: Spanish text, the recognizer says Galician.
+	LG_EQUAL(ResolveDetected(S("gl"), S("Hola, ¿cómo estás? Muy bien, gracias.")),
+		S("es"));
+	LG_EQUAL(ResolveDetected(S("gl"), S("Ya no tengo tiempo hoy")), S("es"));
+	// No telling words either way: Spanish, as on mobile.
+	LG_EQUAL(ResolveDetected(S("gl"), S("Sí")), S("es"));
+	LG_EQUAL(ResolveDetected(S("gl"), QString()), S("es"));
+	// Real Galician stays Galician.
+	LG_EQUAL(ResolveDetected(S("gl"), S("Ola, moitas grazas, xa o teño.")),
+		S("gl"));
+	LG_EQUAL(ResolveDetected(S("gl-ES"), S("Non sei onde está, é moi tarde")),
+		S("gl-ES"));
+	// Upper case and punctuation do not matter.
+	LG_EQUAL(ResolveDetected(S("gl"), S("¡HOLA! ¿DÓNDE ESTÁS?")), S("es"));
+	// Other languages are left alone, Spanish words or not.
+	LG_EQUAL(ResolveDetected(S("pt"), S("Hola, muy bien")), S("pt"));
+	LG_EQUAL(ResolveDetected(S("es"), S("Ola, moitas grazas")), S("es"));
+	LG_CHECK(ResolveDetected(QString(), S("Hola")).isEmpty());
+}
