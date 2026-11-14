@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "main/main_account.h"
+#include "luckgram/luckgram_ci_login.h" // CiOfflineSession
 #include "luckgram/luckgram_logout_logic.h" // Luckgram D2
 #include "luckgram/luckgram_service.h" // Luckgram D2
 
@@ -469,6 +470,11 @@ void Account::startMtp(std::unique_ptr<MTP::Config> config) {
 		checkForUpdates(message) || checkForNewSession(message);
 	});
 	_mtp->setGlobalFailHandler([=](const MTP::Error &, const MTP::Response &) {
+		if (Luckgram::CiOfflineSession()) {
+			// CI screenshots only (never true in a release build): the
+			// session has no authorization, every request gets 401.
+			return;
+		}
 		if (const auto session = maybeSession()) {
 			crl::on_main(session, [=] { logOut(); });
 		}
