@@ -19,6 +19,15 @@ namespace Luckgram {
 // code is X repeated, as long as auth.sendCode says; 22222 on DC 2) and
 // calls `done(true)` once
 // the session exists. Production accounts and data are not touched.
+//
+// Telegram answers PHONE_CODE_INVALID to these codes now (test accounts
+// are switched off); then, or after any other failure, the session is made
+// on this computer only, without authorization: CiOfflineSession().
 void CiTestLogin(Fn<void(bool)> done);
+
+// True once CiTestLogin made its session without the server. Main::Account
+// then does not log out on the 401 every request gets. Always false in a
+// release build.
+[[nodiscard]] bool CiOfflineSession();
 
 } // namespace Luckgram

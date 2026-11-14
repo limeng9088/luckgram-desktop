@@ -32,8 +32,12 @@ namespace {
 constexpr auto kMarker = "LuckgramCiTestLogin";
 constexpr auto kTestDc = 2; // When the account has no main DC 1..3 yet.
 constexpr auto kCodeLength = 5; // When sentCode gives none.
-constexpr auto kMaxNumbers = 3;
+constexpr auto kMaxNumbers = 1;
 constexpr auto kStartDelay = 3000;
+// The self user of the session that is made without the server.
+constexpr auto kOfflineUserId = int64(9990000001);
+
+auto OfflineSession = false;
 
 void Log(const QString &text) {
 	LOG(("%1: %2").arg(QString::fromLatin1(kMarker), text));
@@ -74,6 +78,52 @@ void CreateSession(std::shared_ptr<Flow> flow, const MTPUser &user) {
 	Finish(flow, true);
 }
 
+// Telegram has switched the fixed codes of the test numbers off (every
+// auth.signIn answers PHONE_CODE_INVALID, on all three test DCs and with
+// any api_id), so the screenshots are taken in a session that exists on
+// this computer only: a self user, no authorization. Everything asked from
+// the server fails with 401, which must not log the account out, see
+// CiOfflineSession() in Main::Account. Settings pages and the layout of the
+// main window are as with an account; chats and anything loaded are empty.
+void CreateOfflineSession(std::shared_ptr<Flow> flow) {
+	using Flag = MTPDuser::Flag;
+	const auto account = flow->account;
+	if (account->sessionExists()) {
+		Finish(flow, true);
+		return;
+	}
+	OfflineSession = true;
+	account->createSession(MTP_user(
+		MTP_flags(Flag::f_self
+			| Flag::f_first_name
+			| Flag::f_last_name
+			| Flag::f_username
+			| Flag::f_phone),
+		MTP_long(kOfflineUserId),
+		MTPlong(), // access_hash
+		MTP_string(u"Luckgram"_q),
+		MTP_string(u"CI"_q),
+		MTP_string(u"luckgram_ci"_q),
+		MTP_string(u"99966200000"_q),
+		MTPUserProfilePhoto(),
+		MTPUserStatus(),
+		MTPint(), // bot_info_version
+		MTPVector<MTPRestrictionReason>(),
+		MTPstring(), // bot_inline_placeholder
+		MTPstring(), // lang_code
+		MTPEmojiStatus(),
+		MTPVector<MTPUsername>(),
+		MTPRecentStory(),
+		MTPPeerColor(), // color
+		MTPPeerColor(), // profile_color
+		MTPint(), // bot_active_users
+		MTPlong(), // bot_verification_icon
+		MTPlong(), // send_paid_messages_stars
+		MTPlong())); // linked_community_id
+	Log(u"offline session (no authorization, nothing from the server)"_q);
+	Finish(flow, true);
+}
+
 void SignUp(std::shared_ptr<Flow> flow);
 
 void Authorized(
@@ -91,7 +141,7 @@ void Authorized(
 
 void Fail(std::shared_ptr<Flow> flow, const QString &step, const MTP::Error &error) {
 	Log(step + u" failed: "_q + error.type());
-	Finish(flow, false);
+	CreateOfflineSession(flow);
 }
 
 void SignUp(std::shared_ptr<Flow> flow) {
@@ -204,7 +254,7 @@ void SendCode(std::shared_ptr<Flow> flow) {
 			Authorized(flow, data.vauthorization());
 		}, [&](const MTPDauth_sentCodePaymentRequired &) {
 			Log(u"auth.sendCode: payment required"_q);
-			Finish(flow, false);
+			CreateOfflineSession(flow);
 		});
 	}).fail([=](const MTP::Error &error) {
 		Fail(flow, u"auth.sendCode"_q, error);
@@ -275,6 +325,10 @@ bool CiTestLoginAvailable() {
 	return true;
 }
 
+bool CiOfflineSession() {
+	return OfflineSession;
+}
+
 void CiTestLogin(Fn<void(bool)> done) {
 	Core::App().domain().addActivated(MTP::Environment::Test);
 	const auto account = &Core::App().activeAccount();
@@ -297,6 +351,10 @@ void CiTestLogin(Fn<void(bool)> done) {
 namespace Luckgram {
 
 bool CiTestLoginAvailable() {
+	return false;
+}
+
+bool CiOfflineSession() {
 	return false;
 }
 
