@@ -35,6 +35,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "window/window_peer_menu.h"
 #include "window/window_session_controller.h"
 #include "styles/style_boxes.h"
+#include "styles/style_chat_helpers.h"
 #include "styles/style_layers.h"
 #include "styles/style_widgets.h"
 #include "styles/style_window.h"
@@ -423,7 +424,7 @@ Bubble::Bubble(
 , _message(message)
 , _data(Data::FromJson(message.data))
 , _radial([=] { update(_picture); }, st::windowShellLoading)
-, _status(this, QString(), st::defaultFlatLabel) {
+, _status(this, QString(), st::luckgramAiTextLabel) {
 	const auto prompt = _message.text.value_or(QString());
 	if (_data.state == State::Pending
 		&& !StateFor(_session).requests.contains(_message.id)) {
