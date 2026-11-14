@@ -15,7 +15,9 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "lang/lang_cloud_manager.h"
 #include "lang/lang_keys.h"
 #include "logs.h"
+#include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_ci_login.h"
+#include "luckgram/discover/luckgram_discover_offline.h"
 #include "luckgram/ai/ai_assistant.h"
 #include "luckgram/d9/luckgram_keyword_folders.h"
 #include "luckgram/luckgram_desktop.h"
@@ -45,6 +47,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "ui/widgets/popup_menu.h"
 #include "window/window_controller.h"
 
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QTimer>
 #include <QtGui/QPainter>
@@ -397,6 +400,26 @@ void RunScreenshotsIfRequested() {
 	}
 	QDir().mkpath(dir);
 	Log(u"into "_q + dir);
+	// #137: the CI artifacts are public, so Square, Nearby, blocks and the
+	// account link show local made up data, never the real online content.
+	Api::SetLocalResponder([](const Api::RequestArgs &args)
+	-> std::optional<Api::LocalAnswer> {
+		const auto answer = Discover::Offline::Answer(
+			args.method,
+			args.path,
+			QDateTime::currentMSecsSinceEpoch());
+		if (!answer) {
+			return std::nullopt;
+		}
+		// Without the query (Nearby sends the coordinates there).
+		Log(u"local answer "_q
+			+ QString::fromLatin1(args.method)
+			+ u" "_q
+			+ args.path.section(QChar('?'), 0, 0)
+			+ u" -> "_q
+			+ QString::number(answer->status));
+		return Api::LocalAnswer{ answer->status, answer->body };
+	});
 	QTimer::singleShot(kStartDelay, qApp, [=] {
 		if (HasUserData()) {
 			Log(u"refused: this client has a logged in account or a passcode"_q);

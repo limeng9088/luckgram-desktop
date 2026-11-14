@@ -7,6 +7,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 #include <QtCore/QJsonObject>
 
+#include <optional>
+
 // D2 §5-6 (mobile 00 / S2): the Luckgram API client.
 // - Dev builds talk to api-dev.luckgram.cc, release builds to api.luckgram.cc;
 //   when the entry can't be reached the cat158 backup is used (same rule as
@@ -65,6 +67,17 @@ public:
 	virtual void cancel() = 0;
 };
 using RequestPtr = std::shared_ptr<Request>;
+
+// CI screenshots (#137): while a responder is set, a request it answers
+// never leaves the machine; the answer is handled as if the server sent it
+// (2xx: done, else fail with the "error" of the body). std::nullopt lets the
+// request go out as usual.
+struct LocalAnswer {
+	int status = 200;
+	QByteArray body; // JSON.
+};
+using LocalResponder = Fn<std::optional<LocalAnswer>(const RequestArgs&)>;
+void SetLocalResponder(LocalResponder responder);
 
 // Callbacks run on the main thread; exactly one of them is called (none
 // after cancel()).

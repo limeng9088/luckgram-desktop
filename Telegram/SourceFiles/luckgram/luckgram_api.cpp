@@ -388,10 +388,50 @@ QJsonObject Response::json() const {
 	return QJsonDocument::fromJson(body).object();
 }
 
+[[nodiscard]] LocalResponder &CurrentLocalResponder() {
+	static auto result = LocalResponder();
+	return result;
+}
+
+void SetLocalResponder(LocalResponder responder) {
+	CurrentLocalResponder() = std::move(responder);
+}
+
 RequestPtr Send(
 		RequestArgs &&args,
 		Fn<void(Response)> done,
 		Fn<void(Error)> fail) {
+	if (const auto &responder = CurrentLocalResponder()) {
+		if (auto answer = responder(args)) {
+			class LocalRequest final : public Request {
+			public:
+				bool cancelled = false;
+				void cancel() override {
+					cancelled = true;
+				}
+			};
+			auto result = std::make_shared<LocalRequest>();
+			auto response = Response{
+				.status = answer->status,
+				.body = std::move(answer->body),
+				.contentType = u"application/json"_q,
+			};
+			// Asynchronous like a real reply; kept alive until it runs, also
+			// when the caller drops the RequestPtr.
+			crl::on_main([=] {
+				if (result->cancelled) {
+					return;
+				} else if (response.status >= 200 && response.status < 300) {
+					if (done) {
+						done(response);
+					}
+				} else if (fail) {
+					fail(ErrorFrom(response));
+				}
+			});
+			return result;
+		}
+	}
 	MaybeProbePrimary();
 	const auto result = std::make_shared<RequestImpl>(
 		std::move(args),
