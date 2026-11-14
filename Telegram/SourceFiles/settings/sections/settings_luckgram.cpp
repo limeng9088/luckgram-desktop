@@ -245,7 +245,7 @@ void AddFeatureRow(
 		AddButtonWithIcon(
 			container,
 			TrValue("设置", "Settings"),
-			st::settingsButtonNoIcon
+			st::luckgramFeatureSettingsButton
 		)->addClickHandler([=] {
 			controller->showSettings(subpage());
 		});
