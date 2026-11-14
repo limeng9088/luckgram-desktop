@@ -52,6 +52,14 @@ inline constexpr auto kEmptyResult = "EMPTY_RESULT";
 // Lower case, no region, every zh-* is zh, nb/nn is no. Empty if unknown.
 [[nodiscard]] QString Base(const QString &language);
 
+// specs#176: the platform recognizer (Windows ELS above all) calls short
+// Spanish text Galician, mobile (ML Kit) calls it Spanish. A Galician guess
+// stays only when the text has more Galician-only words than Spanish-only
+// ones, otherwise it is Spanish. Any other guess is returned as is.
+[[nodiscard]] QString ResolveDetected(
+	const QString &recognized,
+	const QString &text);
+
 [[nodiscard]] bool IsExcluded(
 	const QString &language,
 	const QStringList &doNotTranslate);

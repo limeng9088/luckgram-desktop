@@ -287,7 +287,9 @@ void ShowFailure(const Api::Error &error) {
 
 [[nodiscard]] QString DetectedLanguage(const QString &text) {
 	const auto id = Platform::Language::Recognize(text);
-	return id.known() ? id.twoLetterCode() : QString();
+	return id.known()
+		? ResolveDetected(id.twoLetterCode(), text) // specs#176.
+		: QString();
 }
 
 [[nodiscard]] QString HeaderFor(const QString &from, const QString &to) {
@@ -393,6 +395,22 @@ void ViaAi(
 	} else {
 		fail({ .code = QString::fromLatin1(Api::kConsentDenied) });
 	}
+}
+
+// The source language of a cached Luckgram AI translation, or empty when
+// Telegram translated it (Telegram does not report one).
+[[nodiscard]] QString AiSourceLanguage(
+		not_null<Main::Session*> session,
+		const QString &text,
+		const QString &to) {
+	const auto lang = AiLanguage(to);
+	if (lang.isEmpty()) {
+		return QString();
+	}
+	const auto hit = GetStore(session).results.get(
+		Cache::Key(lang, text),
+		Now());
+	return hit ? hit->fromLang : QString();
 }
 
 class Provider final : public Ui::TranslateProvider {
@@ -502,10 +520,15 @@ void RequestInto(
 		}
 		if (const auto item = strong->data().message(id)) {
 			if (item->originalText().text == original.text) {
+				// As mobile: the source Luckgram AI reported, if it ran.
+				const auto ai = AiSourceLanguage(
+					strong,
+					original.text,
+					to);
 				Remember(
 					item,
 					result.text->text,
-					DetectedLanguage(original.text),
+					ai.isEmpty() ? DetectedLanguage(original.text) : ai,
 					to);
 			}
 		}

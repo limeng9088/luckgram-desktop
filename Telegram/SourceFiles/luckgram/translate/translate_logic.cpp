@@ -26,6 +26,53 @@ namespace {
 	return true;
 }
 
+// Frequent words written only one way in each language (spelling, not
+// meaning, so a mixed message counts both). Words both languages use
+// (a, o, que, con, por, está; dos "two", ten "have", no "in the") are left
+// out.
+[[nodiscard]] const std::set<QString> &SpanishOnlyWords() {
+	static const auto result = std::set<QString>{
+		QStringLiteral("el"), QStringLiteral("los"), QStringLiteral("las"),
+		QStringLiteral("y"), QStringLiteral("muy"), QStringLiteral("una"),
+		QStringLiteral("del"), QStringLiteral("al"), QStringLiteral("yo"),
+		QStringLiteral("usted"), QStringLiteral("hola"),
+		QStringLiteral("gracias"), QStringLiteral("hay"),
+		QStringLiteral("tengo"), QStringLiteral("bien"),
+		QStringLiteral("también"), QStringLiteral("cuando"),
+		QStringLiteral("donde"), QStringLiteral("dónde"),
+		QStringLiteral("ya"), QStringLiteral("mucho"),
+		QStringLiteral("muchas"), QStringLiteral("es"),
+		QStringLiteral("pero"), QStringLiteral("nosotros"),
+		QStringLiteral("ahora"), QStringLiteral("hoy"),
+		QStringLiteral("mañana"), QStringLiteral("bueno"),
+		QStringLiteral("buenos"), QStringLiteral("hace"),
+		QStringLiteral("tiene"), QStringLiteral("quiero"),
+		QStringLiteral("puedo"), QStringLiteral("ella"),
+	};
+	return result;
+}
+
+[[nodiscard]] const std::set<QString> &GalicianOnlyWords() {
+	static const auto result = std::set<QString>{
+		QStringLiteral("os"), QStringLiteral("as"), QStringLiteral("e"),
+		QStringLiteral("moi"), QStringLiteral("unha"), QStringLiteral("é"),
+		QStringLiteral("do"), QStringLiteral("da"), QStringLiteral("das"),
+		QStringLiteral("ao"), QStringLiteral("eu"),
+		QStringLiteral("vostede"), QStringLiteral("ola"),
+		QStringLiteral("grazas"), QStringLiteral("hai"),
+		QStringLiteral("teño"), QStringLiteral("ben"),
+		QStringLiteral("tamén"), QStringLiteral("cando"),
+		QStringLiteral("onde"), QStringLiteral("xa"), QStringLiteral("moito"),
+		QStringLiteral("moitas"), QStringLiteral("non"),
+		QStringLiteral("coa"), QStringLiteral("nun"), QStringLiteral("nunha"),
+		QStringLiteral("nós"), QStringLiteral("agora"),
+		QStringLiteral("hoxe"), QStringLiteral("mañá"), QStringLiteral("bo"),
+		QStringLiteral("bos"), QStringLiteral("fai"), QStringLiteral("quero"),
+		QStringLiteral("podo"), QStringLiteral("ela"),
+	};
+	return result;
+}
+
 } // namespace
 
 QString TelegramFailure(const QString &errorText, bool timedOut) {
@@ -81,6 +128,32 @@ QString Base(const QString &language) {
 		return QStringLiteral("no");
 	}
 	return s;
+}
+
+
+QString ResolveDetected(const QString &recognized, const QString &text) {
+	if (Base(recognized) != QStringLiteral("gl")) {
+		return recognized;
+	}
+	auto spanish = 0;
+	auto galician = 0;
+	auto word = QString();
+	const auto count = [&] {
+		if (!word.isEmpty()) {
+			spanish += SpanishOnlyWords().contains(word) ? 1 : 0;
+			galician += GalicianOnlyWords().contains(word) ? 1 : 0;
+			word.clear();
+		}
+	};
+	for (const auto ch : text) {
+		if (ch.isLetter()) {
+			word.append(ch.toLower());
+		} else {
+			count();
+		}
+	}
+	count();
+	return (galician > spanish) ? recognized : QStringLiteral("es");
 }
 
 bool IsExcluded(const QString &language, const QStringList &doNotTranslate) {
