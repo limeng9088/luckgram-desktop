@@ -46,6 +46,7 @@ struct AccountInfo {
 // Skills: groups of tools switched on per account on the settings page
 // (all off at first). The "accounts" tools above every skill are always on.
 inline constexpr auto kSkillFriends = "friends";
+inline constexpr auto kSkillFriendsManage = "friends_manage";
 inline constexpr auto kSkillChats = "chats";
 
 struct SkillInfo {
@@ -54,10 +55,32 @@ struct SkillInfo {
 	const char *titleEn = "";
 	const char *aboutZh = "";
 	const char *aboutEn = "";
+	// Changes something on the account (adds, removes): the settings page
+	// asks before switching it on, and its tools are rate limited.
+	bool write = false;
 };
 [[nodiscard]] const std::vector<SkillInfo> &Skills();
 // The key of the setting that holds one account's switch for one skill.
 [[nodiscard]] QString SkillSettingKey(const QString &skill, quint64 account);
+
+// Write tools are limited per account so an agent in a loop can't get the
+// account restricted by Telegram: at most perHour calls in any hour and
+// perDay in any 24 hours. Zero: no limit (read tools).
+struct RateLimit {
+	int perHour = 0;
+	int perDay = 0;
+};
+[[nodiscard]] RateLimit LimitOf(const QString &tool);
+// `times` are the earlier calls (ms since epoch, any order). Allowed: 0 is
+// returned and `now` belongs in the list. Otherwise how many seconds to
+// wait. Entries older than a day are dropped from `times` either way.
+[[nodiscard]] qint64 RateWaitSeconds(
+	std::vector<qint64> &times,
+	qint64 nowMs,
+	RateLimit limit);
+[[nodiscard]] QString RateSettingKey(const QString &tool, quint64 account);
+[[nodiscard]] QString SerializeTimes(const std::vector<qint64> &times);
+[[nodiscard]] std::vector<qint64> ParseTimes(const QString &text);
 
 // How a skill tool ended: a value, or why it could not be done.
 struct ToolOutcome {
@@ -84,6 +107,13 @@ struct Backend {
 		quint64 account,
 		const QJsonObject &arguments,
 		ToolDone done)> call;
+	// The rate limits: when a limited tool was called for an account
+	// (kept across restarts), and the clock.
+	std::function<std::vector<qint64>(const QString &key)> loadTimes;
+	std::function<void(
+		const QString &key,
+		const std::vector<qint64> &times)> saveTimes;
+	std::function<qint64()> nowMs;
 };
 
 struct Request {
