@@ -60,6 +60,8 @@ private:
 	std::vector<CloudResult> _results;
 	int _generation = 0;
 	int _failures = 0;
+	int _host = 0; // See CloudHostUrl.
+	int _hostFailures = 0;
 	bool _running = false;
 	bool _connected = false;
 	bool _retryScheduled = false;

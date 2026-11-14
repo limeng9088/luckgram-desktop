@@ -1631,6 +1631,15 @@ qint64 CloudRetryDelayMs(int failures) {
 	return std::min(qint64(1000) << step, qint64(60) * 1000);
 }
 
+QString CloudHostUrl(int host) {
+	return Q((host == 1) ? kCloudBackupUrl : kCloudUrl);
+}
+
+int NextCloudHost(int host, int failuresOnHost) {
+	const auto current = (host == 1) ? 1 : 0;
+	return (failuresOnHost >= 2) ? (1 - current) : current;
+}
+
 QString CloudClientConfigJson(const QString &key) {
 	auto headers = QJsonObject();
 	headers.insert(Q("Authorization"), Q("Bearer ") + key);

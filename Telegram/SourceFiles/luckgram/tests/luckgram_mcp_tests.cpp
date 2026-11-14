@@ -1038,3 +1038,16 @@ LUCKGRAM_TEST(McpGroupsProfileAndReadArguments) {
 		LG_EQUAL(skill.write, !read);
 	}
 }
+
+LUCKGRAM_TEST(McpCloudBackupHost) {
+	LG_EQUAL(CloudHostUrl(0), S("https://mcp.luckgram.cc"));
+	LG_EQUAL(CloudHostUrl(1), S("https://lg-mcp.cat158.com"));
+	LG_EQUAL(CloudHostUrl(7), S("https://mcp.luckgram.cc"));
+	// One failed poll is not a blocked name.
+	LG_EQUAL(NextCloudHost(0, 0), 0);
+	LG_EQUAL(NextCloudHost(0, 1), 0);
+	LG_EQUAL(NextCloudHost(0, 2), 1);
+	// And back, when the backup is the one that does not answer.
+	LG_EQUAL(NextCloudHost(1, 1), 1);
+	LG_EQUAL(NextCloudHost(1, 2), 0);
+}

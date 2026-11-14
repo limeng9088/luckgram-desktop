@@ -209,6 +209,10 @@ void HandleMessageAsync(
 // next poll. Skills stay per account and are switched on in the app.
 
 inline constexpr auto kCloudUrl = "https://mcp.luckgram.cc";
+// The same relay under a second name, for networks where luckgram.cc is
+// blocked by name (luckgram-specs#160).
+inline constexpr auto kCloudBackupUrl = "https://lg-mcp.cat158.com";
+inline constexpr auto kCloudHostCount = 2;
 inline constexpr auto kCloudPollPath = "/device/poll";
 inline constexpr auto kCloudKeyPrefix = "lgc_";
 
@@ -237,6 +241,11 @@ struct CloudResult {
 	bool *ok);
 // 2 s, 4 s, 8 s ... 60 s after that many failed polls in a row.
 [[nodiscard]] qint64 CloudRetryDelayMs(int failures);
+// Host 0 is kCloudUrl, host 1 the backup.
+[[nodiscard]] QString CloudHostUrl(int host);
+// Which host the next poll goes to: the same one while it answers, the
+// other one after two failed polls in a row on it.
+[[nodiscard]] int NextCloudHost(int host, int failuresOnHost);
 [[nodiscard]] QString CloudClientConfigJson(const QString &key);
 
 } // namespace Luckgram::Mcp
