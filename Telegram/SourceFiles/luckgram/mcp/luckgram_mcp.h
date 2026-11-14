@@ -7,8 +7,9 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 
 // Local MCP server (「Luckgram 功能 → 本机 MCP 接口」, off by default): an
 // AI agent on this computer lists the logged-in accounts and switches the
-// active one, the same thing a click in the account switcher does. Nothing
-// else is exposed - no chats, no messages, no sending.
+// active one, the same thing a click in the account switcher does. Skills
+// switched on per account add more (friends, the chat list); nothing reads
+// or sends messages.
 //
 // Listens on 127.0.0.1 only. Every request needs the access token shown on
 // the settings page (kept in the system credential store, never in a file
@@ -24,6 +25,16 @@ void Start();
 [[nodiscard]] QString LastError();
 // Fires when Running() / Port() / LastError() or the token changed.
 [[nodiscard]] rpl::producer<> StateChanges();
+
+// The settings page: the logged-in accounts that may be shown now (user id
+// and name), each with its own skill switches (luckgram_mcp_logic.h).
+struct AccountRow {
+	quint64 id = 0;
+	QString name;
+};
+[[nodiscard]] std::vector<AccountRow> AccountRows();
+[[nodiscard]] bool SkillEnabled(quint64 account, const QString &skill);
+void SetSkillEnabled(quint64 account, const QString &skill, bool enabled);
 
 // Created at the first call.
 [[nodiscard]] QString Token();

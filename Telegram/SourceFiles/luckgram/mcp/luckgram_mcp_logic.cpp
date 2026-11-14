@@ -240,6 +240,142 @@ constexpr const char *kProtocolVersions[] = {
 		"username, phone or index.",
 		properties,
 		false));
+
+	const auto account = Property(
+		"string",
+		"Telegram user id of the logged-in account to use, from "
+		"list_accounts. Default: the active account. The account does not "
+		"have to be the active one.");
+	const auto limit = [](const char *text) {
+		return Property("integer", text);
+	};
+	const auto offset = Property(
+		"integer",
+		"How many entries to skip, for the next page. Default 0.");
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("query"), Property(
+		"string",
+		"Only friends whose name or username contains this text."));
+	properties.insert(Q("limit"), limit("At most this many, 1-1000. Default 200."));
+	properties.insert(Q("offset"), offset);
+	result.push_back(Tool(
+		"list_friends",
+		"List friends",
+		"Skill \"friends\". The contacts of an account: id, name, username, "
+		"phone (when the account can see it), bot and mutual flags, with "
+		"the total count. Needs the friends skill switched on for the "
+		"account in Luckgram Desktop.",
+		properties,
+		true));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("unread_only"), Property(
+		"boolean",
+		"Only chats with unread messages. Default false."));
+	properties.insert(Q("limit"), limit("At most this many, 1-200. Default 50."));
+	properties.insert(Q("offset"), offset);
+	result.push_back(Tool(
+		"list_chats",
+		"List chats",
+		"Skill \"chats\". The chat list of an account in its own order "
+		"(pinned first, then by last message): id, type (user, bot, group, "
+		"supergroup, channel), name, username, unread count, muted, pinned "
+		"and the time of the last message. No message texts. Needs the "
+		"chats skill switched on for the account in Luckgram Desktop.",
+		properties,
+		true));
+	return result;
+}
+
+// Which skill a tool belongs to, or nullptr for the account tools.
+[[nodiscard]] const char *SkillOf(const QString &tool) {
+	if (tool == Q("list_friends")) {
+		return kSkillFriends;
+	} else if (tool == Q("list_chats")) {
+		return kSkillChats;
+	}
+	return nullptr;
+}
+
+// A whole number argument within [min, max], or the default when absent.
+[[nodiscard]] bool IntArgument(
+		const QJsonObject &arguments,
+		const char *key,
+		int def,
+		int min,
+		int max,
+		int *result,
+		QString *error) {
+	const auto value = arguments.value(Q(key));
+	if (value.isUndefined() || value.isNull()) {
+		*result = def;
+		return true;
+	}
+	const auto number = value.toDouble(-1.);
+	if (!value.isDouble()
+		|| std::floor(number) != number
+		|| number < double(min)
+		|| number > double(max)) {
+		*error = Q(key)
+			+ Q(" must be a whole number from ")
+			+ QString::number(min)
+			+ Q(" to ")
+			+ QString::number(max)
+			+ Q(".");
+		return false;
+	}
+	*result = int(number);
+	return true;
+}
+
+// The arguments of a skill tool, checked, with the defaults filled in and
+// without "account". An empty result with *error set when they are wrong.
+[[nodiscard]] QJsonObject SkillArguments(
+		const QString &tool,
+		const QJsonObject &arguments,
+		QString *error) {
+	auto result = QJsonObject();
+	auto limit = 0;
+	auto offset = 0;
+	const auto friends = (tool == Q("list_friends"));
+	if (!IntArgument(
+			arguments,
+			"limit",
+			friends ? 200 : 50,
+			1,
+			friends ? 1000 : 200,
+			&limit,
+			error)
+		|| !IntArgument(
+			arguments,
+			"offset",
+			0,
+			0,
+			1000000,
+			&offset,
+			error)) {
+		return QJsonObject();
+	}
+	result.insert(Q("limit"), limit);
+	result.insert(Q("offset"), offset);
+	if (friends) {
+		const auto query = arguments.value(Q("query"));
+		if (!query.isUndefined() && !query.isNull() && !query.isString()) {
+			*error = Q("query must be a string.");
+			return QJsonObject();
+		}
+		result.insert(Q("query"), query.toString().trimmed().left(64));
+	} else {
+		const auto unread = arguments.value(Q("unread_only"));
+		if (!unread.isUndefined() && !unread.isNull() && !unread.isBool()) {
+			*error = Q("unread_only must be true or false.");
+			return QJsonObject();
+		}
+		result.insert(Q("unread_only"), unread.toBool());
+	}
 	return result;
 }
 
@@ -275,10 +411,78 @@ constexpr const char *kProtocolVersions[] = {
 	result.insert(Q("capabilities"), capabilities);
 	result.insert(Q("serverInfo"), info);
 	result.insert(Q("instructions"), Q(
-		"Controls which Telegram account is active in the Luckgram Desktop "
-		"app running on this computer. Call list_accounts first, then "
-		"switch_account with the id of the account you need."));
+		"The Telegram accounts logged in to the Luckgram Desktop app on "
+		"this computer. Call list_accounts first. switch_account changes "
+		"which account the window shows. Skill tools (list_friends, "
+		"list_chats) take an optional \"account\" id and work on any "
+		"logged-in account without switching; each skill is switched on "
+		"per account by the user in the app, and a call to one that is "
+		"off says so."));
 	return result;
+}
+
+void CallSkillTool(
+		const QJsonValue &id,
+		const QString &name,
+		const char *skill,
+		const QJsonObject &arguments,
+		const Backend &backend,
+		std::function<void(QJsonObject)> done) {
+	const auto fail = [&](const QString &text) {
+		done(RpcResult(id, ToolError(text)));
+	};
+	if (backend.locked()) {
+		return fail(Q(
+			"Luckgram Desktop is locked with a passcode. Unlock it on the "
+			"computer first."));
+	}
+	const auto accounts = backend.accounts();
+	auto account = quint64(0);
+	const auto given = arguments.value(Q("account"));
+	if (given.isUndefined() || given.isNull()) {
+		for (const auto &entry : accounts) {
+			if (entry.active) {
+				account = entry.id;
+			}
+		}
+		if (!account) {
+			return fail(Q(
+				"No account is active: Luckgram Desktop shows a login "
+				"screen. Give \"account\" from list_accounts."));
+		}
+	} else {
+		auto wanted = QJsonObject();
+		wanted.insert(Q("id"), given);
+		auto error = QString();
+		account = ResolveAccount(accounts, wanted, &error);
+		if (!account) {
+			return fail(Q("account: ") + error);
+		}
+	}
+	if (!backend.skillEnabled || !backend.skillEnabled(account, Q(skill))) {
+		return fail(Q("The \"")
+			+ Q(skill)
+			+ Q("\" skill is off for account ")
+			+ QString::number(account)
+			+ Q(". The user switches it on in Luckgram Desktop: Settings > "
+				"Luckgram > Local MCP server."));
+	}
+	auto error = QString();
+	const auto checked = SkillArguments(name, arguments, &error);
+	if (!error.isEmpty()) {
+		return fail(error);
+	} else if (!backend.call) {
+		return fail(Q("This tool is not available."));
+	}
+	backend.call(name, account, checked, [=](ToolOutcome outcome) {
+		if (!outcome.error.isEmpty()) {
+			done(RpcResult(id, ToolError(outcome.error)));
+			return;
+		}
+		// Which account answered: the default may have been used.
+		outcome.value.insert(Q("account"), QString::number(account));
+		done(RpcResult(id, ToolResult(outcome.value)));
+	});
 }
 
 [[nodiscard]] QJsonObject CallTool(
@@ -455,25 +659,31 @@ QByteArray Serialize(const Response &response) {
 	return result;
 }
 
-Response Handle(
+namespace {
+
+// Everything that needs no JSON: the answer when the request is refused.
+[[nodiscard]] bool Refused(
 		const Request &request,
 		const Config &config,
-		const Backend &backend) {
+		Response *response) {
 	// No CORS answer anywhere: a web page can't read a reply, and with the
 	// checks below it can't even make a request that is looked at.
 	if (!IsLoopbackHost(request.header("host"))) {
-		return Plain(403, "Forbidden host.");
+		*response = Plain(403, "Forbidden host.");
+		return true;
 	}
 	const auto origin = request.header("origin");
 	if (!origin.isEmpty() && !IsLoopbackOrigin(origin)) {
-		return Plain(403, "Forbidden origin.");
+		*response = Plain(403, "Forbidden origin.");
+		return true;
 	}
 	auto path = request.path;
 	if (path.size() > 1 && path.endsWith('/')) {
 		path.chop(1);
 	}
 	if (path != kPath) {
-		return Plain(404, "Not found. The MCP endpoint is /mcp.");
+		*response = Plain(404, "Not found. The MCP endpoint is /mcp.");
+		return true;
 	}
 	const auto authorization = request.header("authorization");
 	const auto prefix = QByteArray("bearer ");
@@ -482,99 +692,206 @@ Response Handle(
 		|| !SameToken(
 			authorization.mid(prefix.size()).trimmed(),
 			config.token.toLatin1())) {
-		auto result = Plain(401, "Missing or wrong access token.");
-		result.headers.emplace_back("WWW-Authenticate", "Bearer");
-		return result;
+		*response = Plain(401, "Missing or wrong access token.");
+		response->headers.emplace_back("WWW-Authenticate", "Bearer");
+		return true;
 	}
 	if (request.method != "POST") {
 		// GET would open the optional server-to-client stream; there is
 		// nothing to send on it.
-		auto result = Plain(405, "Use POST.");
-		result.headers.emplace_back("Allow", "POST");
-		return result;
+		*response = Plain(405, "Use POST.");
+		response->headers.emplace_back("Allow", "POST");
+		return true;
 	}
 	const auto type = request.header("content-type").toLower();
 	if (!type.startsWith("application/json")) {
-		return Plain(415, "Content-Type must be application/json.");
+		*response = Plain(415, "Content-Type must be application/json.");
+		return true;
+	}
+	return false;
+}
+
+[[nodiscard]] Response Accepted202() {
+	auto result = Response();
+	result.status = 202;
+	return result;
+}
+
+} // namespace
+
+void HandleAsync(
+		const Request &request,
+		const Config &config,
+		const Backend &backend,
+		std::function<void(Response)> done) {
+	auto refused = Response();
+	if (Refused(request, config, &refused)) {
+		done(std::move(refused));
+		return;
 	}
 	auto error = QJsonParseError();
 	const auto document = QJsonDocument::fromJson(request.body, &error);
 	if (error.error != QJsonParseError::NoError) {
-		return Json(400, QJsonDocument(RpcError(
+		done(Json(400, QJsonDocument(RpcError(
 			QJsonValue(QJsonValue::Null),
 			kParseError,
-			Q("Parse error: ") + error.errorString())));
+			Q("Parse error: ") + error.errorString()))));
+		return;
 	}
 	if (document.isObject()) {
-		const auto reply = HandleMessage(document.object(), backend);
-		if (reply.isEmpty()) {
-			auto result = Response();
-			result.status = 202;
-			return result;
-		}
-		return Json(200, QJsonDocument(reply));
+		HandleMessageAsync(document.object(), backend, [=](QJsonObject reply) {
+			done(reply.isEmpty()
+				? Accepted202()
+				: Json(200, QJsonDocument(reply)));
+		});
+		return;
 	}
 	const auto batch = document.array();
 	if (batch.isEmpty()) {
-		return Json(400, QJsonDocument(RpcError(
+		done(Json(400, QJsonDocument(RpcError(
 			QJsonValue(QJsonValue::Null),
 			kInvalidRequest,
-			Q("Invalid request."))));
+			Q("Invalid request.")))));
+		return;
 	}
-	auto replies = QJsonArray();
-	for (const auto &entry : batch) {
-		const auto reply = entry.isObject()
-			? HandleMessage(entry.toObject(), backend)
-			: RpcError(
+	// Answers keep the order of the requests, whenever each one comes.
+	struct Collected {
+		std::vector<QJsonObject> replies;
+		int left = 0;
+		std::function<void(Response)> done;
+	};
+	const auto collected = std::make_shared<Collected>();
+	collected->replies.resize(batch.size());
+	collected->left = int(batch.size());
+	collected->done = std::move(done);
+	const auto finish = [=](int index, QJsonObject reply) {
+		collected->replies[index] = std::move(reply);
+		if (--collected->left) {
+			return;
+		}
+		auto replies = QJsonArray();
+		for (const auto &entry : collected->replies) {
+			if (!entry.isEmpty()) {
+				replies.push_back(entry);
+			}
+		}
+		const auto onstack = std::exchange(collected->done, nullptr);
+		onstack(replies.isEmpty()
+			? Accepted202()
+			: Json(200, QJsonDocument(replies)));
+	};
+	for (auto i = 0; i != int(batch.size()); ++i) {
+		const auto entry = batch.at(i);
+		if (!entry.isObject()) {
+			finish(i, RpcError(
 				QJsonValue(QJsonValue::Null),
 				kInvalidRequest,
-				Q("Invalid request."));
-		if (!reply.isEmpty()) {
-			replies.push_back(reply);
+				Q("Invalid request.")));
+			continue;
 		}
+		HandleMessageAsync(entry.toObject(), backend, [=](QJsonObject reply) {
+			finish(i, std::move(reply));
+		});
 	}
-	if (replies.isEmpty()) {
-		auto result = Response();
-		result.status = 202;
-		return result;
-	}
-	return Json(200, QJsonDocument(replies));
 }
 
-QJsonObject HandleMessage(
+void HandleMessageAsync(
 		const QJsonObject &message,
-		const Backend &backend) {
+		const Backend &backend,
+		std::function<void(QJsonObject)> done) {
 	const auto id = message.value(Q("id"));
 	const auto hasId = id.isString() || id.isDouble();
 	const auto method = message.value(Q("method"));
 	if (!method.isString()) {
 		// A response to something this server never asked: dropped.
 		if (message.contains(Q("result")) || message.contains(Q("error"))) {
-			return QJsonObject();
+			done(QJsonObject());
+			return;
 		}
-		return RpcError(
+		done(RpcError(
 			hasId ? id : QJsonValue(QJsonValue::Null),
 			kInvalidRequest,
-			Q("Invalid request."));
+			Q("Invalid request.")));
+		return;
 	} else if (!hasId) {
-		return QJsonObject(); // A notification.
+		done(QJsonObject()); // A notification.
+		return;
 	} else if (message.value(Q("jsonrpc")).toString() != Q("2.0")) {
-		return RpcError(id, kInvalidRequest, Q("Invalid request."));
+		done(RpcError(id, kInvalidRequest, Q("Invalid request.")));
+		return;
 	}
 	const auto name = method.toString();
 	const auto params = message.value(Q("params")).toObject();
 	if (name == Q("initialize")) {
-		return RpcResult(id, Initialize(params));
+		done(RpcResult(id, Initialize(params)));
 	} else if (name == Q("ping")) {
-		return RpcResult(id, QJsonObject());
+		done(RpcResult(id, QJsonObject()));
 	} else if (name == Q("tools/list")) {
 		auto result = QJsonObject();
 		result.insert(Q("tools"), Tools());
-		return RpcResult(id, result);
+		done(RpcResult(id, result));
 	} else if (name == Q("tools/call")) {
-		return CallTool(id, params, backend);
+		const auto tool = params.value(Q("name")).toString();
+		if (const auto skill = SkillOf(tool)) {
+			CallSkillTool(
+				id,
+				tool,
+				skill,
+				params.value(Q("arguments")).toObject(),
+				backend,
+				std::move(done));
+		} else {
+			done(CallTool(id, params, backend));
+		}
+	} else {
+		done(RpcError(id, kMethodNotFound, Q("Method not found: ") + name));
 	}
-	return RpcError(id, kMethodNotFound, Q("Method not found: ") + name);
+}
+
+Response Handle(
+		const Request &request,
+		const Config &config,
+		const Backend &backend) {
+	auto result = Response();
+	result.status = 500;
+	HandleAsync(request, config, backend, [&](Response response) {
+		result = std::move(response);
+	});
+	return result;
+}
+
+QJsonObject HandleMessage(
+		const QJsonObject &message,
+		const Backend &backend) {
+	auto result = QJsonObject();
+	HandleMessageAsync(message, backend, [&](QJsonObject reply) {
+		result = std::move(reply);
+	});
+	return result;
+}
+
+const std::vector<SkillInfo> &Skills() {
+	static const auto result = std::vector<SkillInfo>{
+		{
+			kSkillFriends,
+			"好友",
+			"Friends",
+			"查看好友列表",
+			"See the list of friends",
+		},
+		{
+			kSkillChats,
+			"会话",
+			"Chats",
+			"查看会话列表和未读数，不含消息内容",
+			"See the chat list and unread counts, no message texts",
+		},
+	};
+	return result;
+}
+
+QString SkillSettingKey(const QString &skill, quint64 account) {
+	return Q("mcp_skill_") + skill + Q("_") + QString::number(account);
 }
 
 quint64 ResolveAccount(

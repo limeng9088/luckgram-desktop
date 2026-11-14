@@ -10,6 +10,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QString>
 
 #include <functional>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -42,6 +43,29 @@ struct AccountInfo {
 	bool active = false;
 };
 
+// Skills: groups of tools switched on per account on the settings page
+// (all off at first). The "accounts" tools above every skill are always on.
+inline constexpr auto kSkillFriends = "friends";
+inline constexpr auto kSkillChats = "chats";
+
+struct SkillInfo {
+	const char *key = "";
+	const char *titleZh = "";
+	const char *titleEn = "";
+	const char *aboutZh = "";
+	const char *aboutEn = "";
+};
+[[nodiscard]] const std::vector<SkillInfo> &Skills();
+// The key of the setting that holds one account's switch for one skill.
+[[nodiscard]] QString SkillSettingKey(const QString &skill, quint64 account);
+
+// How a skill tool ended: a value, or why it could not be done.
+struct ToolOutcome {
+	QJsonObject value;
+	QString error;
+};
+using ToolDone = std::function<void(ToolOutcome)>;
+
 // What the server needs from the app. Called on the main thread.
 struct Backend {
 	// Passcode lock: nothing is listed or switched while locked.
@@ -50,6 +74,16 @@ struct Backend {
 	std::function<std::vector<AccountInfo>()> accounts;
 	// Makes the account active. Empty result on success, else why not.
 	std::function<QString(quint64 id)> activate;
+	// Is the skill switched on for this account.
+	std::function<bool(quint64 account, const QString &skill)> skillEnabled;
+	// Runs a skill tool on an account from accounts(). The arguments come
+	// checked and with defaults filled in. done is called exactly once,
+	// now or later (a tool may wait for the network).
+	std::function<void(
+		const QString &tool,
+		quint64 account,
+		const QJsonObject &arguments,
+		ToolDone done)> call;
 };
 
 struct Request {
@@ -87,14 +121,27 @@ struct Config {
 	int port = 0;
 };
 
-// The whole answer to one HTTP request.
+// The whole answer to one HTTP request; done is called exactly once, now
+// or when the last skill tool of the request has answered.
+void HandleAsync(
+	const Request &request,
+	const Config &config,
+	const Backend &backend,
+	std::function<void(Response)> done);
+
+// One JSON-RPC message. An empty object when nothing is sent back (a
+// notification or a response).
+void HandleMessageAsync(
+	const QJsonObject &message,
+	const Backend &backend,
+	std::function<void(QJsonObject)> done);
+
+// The same for a backend that answers at once (tests): status 500 / an
+// empty object when it did not.
 [[nodiscard]] Response Handle(
 	const Request &request,
 	const Config &config,
 	const Backend &backend);
-
-// One JSON-RPC message. An empty object when nothing is sent back (a
-// notification or a response).
 [[nodiscard]] QJsonObject HandleMessage(
 	const QJsonObject &message,
 	const Backend &backend);

@@ -5,6 +5,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 */
 #include "luckgram/mcp/luckgram_mcp_server.h"
 
+#include <QtCore/QPointer>
 #include <QtCore/QTimer>
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QTcpServer>
@@ -14,7 +15,8 @@ namespace Luckgram::Mcp {
 namespace {
 
 constexpr auto kMaxConnections = 16;
-constexpr auto kRequestTimeout = 10 * 1000; // ms, for the whole request.
+// For the whole request, a skill tool waiting for the network included.
+constexpr auto kRequestTimeout = 30 * 1000; // ms.
 
 void Reply(QTcpSocket *socket, const Response &response) {
 	socket->write(Serialize(response));
@@ -102,7 +104,14 @@ void Server::accept(QTcpSocket *socket) {
 		auto config = Config();
 		config.token = _token();
 		config.port = port();
-		Reply(socket, Handle(request, config, _backend));
+		// A skill tool may answer later, when the socket is long gone.
+		const auto guard = QPointer<QTcpSocket>(socket);
+		HandleAsync(request, config, _backend, [=](Response response) {
+			if (guard
+				&& guard->state() == QAbstractSocket::ConnectedState) {
+				Reply(guard.data(), response);
+			}
+		});
 	});
 }
 
