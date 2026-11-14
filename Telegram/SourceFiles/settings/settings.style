@@ -770,3 +770,12 @@ detailedSettingsButtonStyle: DetailedSettingsButtonStyle {
 }
 
 settingsToastStarIcon: icon {{ "toast/star", toastFg }};
+
+// Luckgram (#136): the "Settings" entry under a Luckgram feature switch,
+// aligned with the switch title (detailedSettingsButtonStyle, 68px) and in
+// the link color, so it does not read as a section header.
+luckgramFeatureSettingsButton: SettingsButton(settingsButtonNoIcon) {
+	textFg: lightButtonFg;
+	textFgOver: lightButtonFgOver;
+	padding: margins(68px, 4px, 22px, 10px);
+}
