@@ -551,16 +551,16 @@ void SummaryBar::setup() {
 		result->setSelectable(true);
 		return result;
 	};
-	state->status = label(st::defaultSubTextLabel);
-	state->summary = label(st::defaultFlatLabel);
-	state->qa = label(st::defaultFlatLabel);
+	state->status = label(st::luckgramAiSubTextLabel);
+	state->summary = label(st::luckgramAiTextLabel);
+	state->qa = label(st::luckgramAiTextLabel);
 	state->summary->hide();
 	state->qa->hide();
 	state->card->add(
 		object_ptr<Ui::FlatLabel>(
 			state->card,
 			Tr("AI 生成，可能有误", "AI-generated, may be inaccurate"),
-			st::defaultSubTextLabel),
+			st::luckgramAiSubTextLabel),
 		QMargins(padding.left(), padding.top() / 2, padding.right(), 0));
 
 	state->body->heightValue() | rpl::on_next([=](int height) {

@@ -15,6 +15,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/luckgram_strings.h"
 #include "main/main_session.h"
 #include "ui/widgets/labels.h"
+#include "styles/style_chat_helpers.h"
 #include "styles/style_widgets.h"
 #include "window/window_session_controller.h"
 
@@ -119,7 +120,7 @@ void RegisterDebugDemos() {
 				parent,
 				QString::fromUtf8("🧪 debug_card\n")
 					+ message.text.value_or(QString()),
-				st::defaultFlatLabel);
+				st::luckgramAiTextLabel);
 		},
 		.contextText = [](const Conversations::Message &) {
 			return QString(); // Not sent to the model.

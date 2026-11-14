@@ -214,7 +214,7 @@ void MessageRow::setMessage(const Message &message) {
 void MessageRow::rebuildContent() {
 	_label = nullptr;
 	if (isTextLike()) {
-		auto label = object_ptr<Ui::FlatLabel>(this, st::defaultFlatLabel);
+		auto label = object_ptr<Ui::FlatLabel>(this, st::luckgramAiTextLabel);
 		_label = label.data();
 		_label->setSelectable(true);
 		_content = std::move(label);
@@ -224,7 +224,7 @@ void MessageRow::rebuildContent() {
 		_content = registered->create(this, _host, _message);
 		if (!_content) {
 			// A type that failed to build: the placeholder.
-			auto label = object_ptr<Ui::FlatLabel>(this, st::defaultFlatLabel);
+			auto label = object_ptr<Ui::FlatLabel>(this, st::luckgramAiTextLabel);
 			_label = label.data();
 			_content = std::move(label);
 			updateLabel();
@@ -575,7 +575,7 @@ void ChatSection::setupTop() {
 			Tr(
 				"可以提问、总结或改写长文、讲解、解题。",
 				"Ask anything, summarize or rewrite text, explain, solve problems."),
-			st::defaultSubTextLabel),
+			st::luckgramAiSubTextLabel),
 		QMargins(0, Scaled(6), 0, 0));
 	_welcome = welcome;
 	_welcome->setVisible(_conversation.messages.empty());
