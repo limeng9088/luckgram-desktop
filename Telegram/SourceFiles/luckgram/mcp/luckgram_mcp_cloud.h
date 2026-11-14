@@ -29,7 +29,11 @@ void SetEnabled(bool enabled);
 // A new key: the other computers and the AI tools need it again.
 void RegenerateKey();
 
+// The name this computer has in list_devices. It is sent to the relay, so
+// the user may set one that says nothing about the computer; until then
+// it is the computer's host name.
 [[nodiscard]] QString DeviceName();
+void SetDeviceName(const QString &name);
 [[nodiscard]] bool Connected();
 [[nodiscard]] QString LastError();
 [[nodiscard]] rpl::producer<> StateChanges();
