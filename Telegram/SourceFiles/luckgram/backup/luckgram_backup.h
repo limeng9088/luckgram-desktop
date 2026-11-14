@@ -30,6 +30,8 @@ inline constexpr auto kFeatureKey = "account_backup";
 [[nodiscard]] QString SelectHeaderText();
 [[nodiscard]] QString ExportText();
 [[nodiscard]] QString RestoreText();
+// Follows the language (the login page is built before a language switch).
+[[nodiscard]] rpl::producer<QString> RestoreTextValue();
 [[nodiscard]] QString ExportHintText();
 [[nodiscard]] QString RestoreHintText();
 [[nodiscard]] QString WarningText();

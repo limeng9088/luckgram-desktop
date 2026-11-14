@@ -539,6 +539,10 @@ QString RestoreText() {
 	return Tr("从备份恢复", "Restore from backup");
 }
 
+rpl::producer<QString> RestoreTextValue() {
+	return TrValue("从备份恢复", "Restore from backup");
+}
+
 QString ExportHintText() {
 	return Luckgram::IsChinese()
 		? (u"导出的文件以 ."_q + Ext() + u" 结尾，例如 luckgram-20261113-0930."_q + Ext() + u"。请存到你之后能找到的地方（如「下载」或「文件」）。"_q)
