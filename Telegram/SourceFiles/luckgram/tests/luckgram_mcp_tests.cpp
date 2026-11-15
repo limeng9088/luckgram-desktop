@@ -1008,12 +1008,35 @@ LUCKGRAM_TEST(McpGroupsProfileAndReadArguments) {
 	LG_EQUAL(fake.calledArguments.value(S("bio")).toString(), QString());
 	LG_CHECK(!fake.calledArguments.contains(S("last_name")));
 
+	// Links: a public name, an invite (join_chat only).
+	ToolReply(fake, "join_chat", R"({"chat":"https://t.me/tuii345"})");
+	LG_EQUAL(
+		fake.calledArguments.value(S("chat_username")).toString(),
+		S("tuii345"));
+	ToolReply(fake, "join_chat", R"({"chat":"t.me/some_bot?start=abc"})");
+	LG_EQUAL(
+		fake.calledArguments.value(S("chat_username")).toString(),
+		S("some_bot"));
+	ToolReply(fake, "join_chat", R"({"chat":"https://t.me/+AbCd_123-xyz"})");
+	LG_EQUAL(
+		fake.calledArguments.value(S("chat_invite")).toString(),
+		S("AbCd_123-xyz"));
+	LG_CHECK(!fake.calledArguments.contains(S("chat_username")));
+	LG_EQUAL(ParseChatLink(S("tg://resolve?domain=durov&x=1")).username, S("durov"));
+	LG_EQUAL(ParseChatLink(S("https://t.me/joinchat/AAAAbbbb1234")).invite, S("AAAAbbbb1234"));
+	LG_EQUAL(ParseChatLink(S("tg://join?invite=AAAAbbbb1234")).invite, S("AAAAbbbb1234"));
+	LG_CHECK(ParseChatLink(S("durov")).username.isEmpty());
+	LG_CHECK(ParseChatLink(S("https://example.com/durov")).username.isEmpty());
+	LG_CHECK(ParseChatLink(S("https://t.me/+short")).invite.isEmpty());
+
 	const auto before = fake.calls;
 	const auto bad = [&](const char *tool, const char *arguments) {
 		LG_CHECK(!ErrorText(ToolReply(fake, tool, arguments)).isEmpty());
 	};
 	bad("mark_chat_read", "{}");
 	bad("join_chat", R"({"chat":"https://t.me/+abcdef"})");
+	bad("leave_chat", R"({"chat":"https://t.me/+AbCd_123-xyz"})");
+	bad("join_chat", R"({"chat":"https://example.com/durov"})");
 	bad("leave_chat", R"({"chat":""})");
 	bad("update_profile", "{}");
 	bad("update_profile", R"({"first_name":""})");

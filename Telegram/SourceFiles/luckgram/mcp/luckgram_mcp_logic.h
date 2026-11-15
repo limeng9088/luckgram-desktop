@@ -190,6 +190,16 @@ void HandleMessageAsync(
 	const QJsonObject &arguments,
 	QString *error);
 
+// What a "chat" argument written as a link means: https://t.me/name,
+// t.me/name, tg://resolve?domain=name give the username; https://t.me/+hash,
+// t.me/joinchat/hash, tg://join?invite=hash give the invite (8-64
+// characters of A-Z a-z 0-9 _ -). Both empty: not a link (or a broken one).
+struct ChatLink {
+	QString username;
+	QString invite;
+};
+[[nodiscard]] ChatLink ParseChatLink(const QString &text);
+
 // 32 random bytes as 43 URL-safe characters come from the caller; this only
 // says whether a stored token is usable.
 [[nodiscard]] bool IsValidToken(const QString &token);
