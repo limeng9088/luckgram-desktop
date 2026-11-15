@@ -418,7 +418,11 @@ PeerId Session::userPeerId() const {
 bool Session::validateSelf(UserId id) {
 	if (id != userId()) {
 		LOG(("Auth Error: wrong self user received."));
-		crl::on_main(this, [=] { _account->logOut(); });
+		crl::on_main(this, [=] {
+			_account->logOut({
+				.reason = Luckgram::Logout::Reason::WrongSelf,
+			});
+		});
 		return false;
 	}
 	return true;
