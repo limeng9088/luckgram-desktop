@@ -447,6 +447,95 @@ constexpr const char *kProtocolVersions[] = {
 		properties,
 		false));
 
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	result.push_back(Tool(
+		"list_proxies",
+		"List proxies",
+		"Skill \"proxy\". The proxies saved in this Luckgram and which "
+		"one is in use. The proxy setting belongs to the whole app: every "
+		"account connects through it. Answers mode (\"direct\", "
+		"\"proxy\" or \"system\") and proxies with index, type, host, "
+		"port, user, has_password and selected. Passwords and MTProto "
+		"secrets are never returned.",
+		properties,
+		true));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("link"), Property(
+		"string",
+		"A proxy link instead of the fields below: "
+		"tg://socks?server=..&port=..&user=..&pass=.., "
+		"tg://proxy?server=..&port=..&secret=.. or the same as "
+		"https://t.me/socks?.. / https://t.me/proxy?..."));
+	properties.insert(Q("type"), Property(
+		"string",
+		"\"socks5\", \"http\" or \"mtproto\"."));
+	properties.insert(Q("host"), Property(
+		"string",
+		"Host name or IP address of the proxy."));
+	properties.insert(Q("port"), Property("integer", "Port, 1-65535."));
+	properties.insert(Q("user"), Property(
+		"string",
+		"User name (socks5 / http), if the proxy asks for one."));
+	properties.insert(Q("password"), Property(
+		"string",
+		"Password (socks5 / http), if the proxy asks for one."));
+	properties.insert(Q("secret"), Property(
+		"string",
+		"The secret of an mtproto proxy."));
+	properties.insert(Q("use"), Property(
+		"boolean",
+		"Switch to this proxy right away. Default true; false only "
+		"saves it in the list."));
+	result.push_back(Tool(
+		"add_proxy",
+		"Add proxy",
+		"Skill \"proxy\". Save a proxy in this Luckgram and, unless use "
+		"is false, connect every account through it. Give a link, or "
+		"type + host + port (+ user / password, or secret for mtproto). "
+		"A proxy already in the list is not added twice. The proxy is "
+		"not tested first: if it does not work the app goes offline, the "
+		"cloud MCP with it, until the proxy is changed in the app. Ask "
+		"the user first. At most 20 an hour and 60 a day per account.",
+		properties,
+		false));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("index"), Property(
+		"integer",
+		"The index of a saved proxy from list_proxies."));
+	properties.insert(Q("mode"), Property(
+		"string",
+		"Instead of index: \"direct\" (no proxy) or \"system\" (the "
+		"proxy of the operating system)."));
+	result.push_back(Tool(
+		"use_proxy",
+		"Use proxy",
+		"Skill \"proxy\". Switch every account of this Luckgram to a "
+		"saved proxy (index), to a direct connection or to the system "
+		"proxy (mode). Exactly one of index or mode. At most 20 an hour "
+		"and 60 a day per account.",
+		properties,
+		false));
+
+	properties = QJsonObject();
+	properties.insert(Q("account"), account);
+	properties.insert(Q("index"), Property(
+		"integer",
+		"The index of a saved proxy from list_proxies."));
+	result.push_back(Tool(
+		"remove_proxy",
+		"Remove proxy",
+		"Skill \"proxy\". Remove a saved proxy from the list. Removing "
+		"the one in use switches to a direct connection. Indexes change "
+		"after a removal: call list_proxies again. At most 20 an hour "
+		"and 60 a day per account.",
+		properties,
+		false));
+
 	const auto bot = Property(
 		"string",
 		"Username of one of the account's bots, with or without @.");
@@ -638,6 +727,11 @@ constexpr const char *kProtocolVersions[] = {
 		return kSkillProfile;
 	} else if (tool.startsWith(Q("botfather_"))) {
 		return kSkillBotFather;
+	} else if (tool == Q("list_proxies")
+		|| tool == Q("add_proxy")
+		|| tool == Q("use_proxy")
+		|| tool == Q("remove_proxy")) {
+		return kSkillProxy;
 	}
 	return nullptr;
 }
@@ -937,6 +1031,131 @@ constexpr const char *kProtocolVersions[] = {
 			ok = false;
 		}
 		return ok ? result : QJsonObject();
+	}
+	if (tool == Q("list_proxies")) {
+		return result;
+	} else if (tool == Q("use_proxy") || tool == Q("remove_proxy")) {
+		const auto index = arguments.value(Q("index"));
+		const auto mode = arguments.value(Q("mode"));
+		const auto hasIndex = !index.isUndefined() && !index.isNull();
+		const auto hasMode = !mode.isUndefined() && !mode.isNull();
+		if (tool == Q("remove_proxy")) {
+			if (hasMode || !hasIndex) {
+				*error = Q("index is required: the index of a proxy "
+					"from list_proxies.");
+				return QJsonObject();
+			}
+		} else if (hasIndex == hasMode) {
+			*error = Q("Give exactly one of index or mode.");
+			return QJsonObject();
+		}
+		if (hasMode) {
+			const auto value = mode.toString().trimmed().toLower();
+			if (!mode.isString()
+				|| (value != Q("direct") && value != Q("system"))) {
+				*error = Q("mode must be \"direct\" or \"system\".");
+				return QJsonObject();
+			}
+			result.insert(Q("mode"), value);
+			return result;
+		}
+		auto value = 0;
+		if (!IntArgument(arguments, "index", 0, 1, 1000, &value, error)) {
+			return QJsonObject();
+		}
+		result.insert(Q("index"), value);
+		return result;
+	} else if (tool == Q("add_proxy")) {
+		auto spec = ProxySpec();
+		const auto string = [&](const char *key, int max, QString *to) {
+			const auto value = arguments.value(Q(key));
+			if (value.isUndefined() || value.isNull()) {
+				return true;
+			} else if (!value.isString() || value.toString().size() > max) {
+				*error = Q(key)
+					+ Q(" must be a string of at most ")
+					+ QString::number(max)
+					+ Q(" characters.");
+				return false;
+			}
+			*to = value.toString().trimmed();
+			return true;
+		};
+		auto link = QString();
+		auto secret = QString();
+		if (!string("link", 2048, &link)) {
+			return QJsonObject();
+		} else if (!link.isEmpty()) {
+			for (const auto key : {
+					"type", "host", "port", "user", "password", "secret" }) {
+				const auto value = arguments.value(Q(key));
+				if (!value.isUndefined() && !value.isNull()) {
+					*error = Q("Give either link or the separate fields, "
+						"not both.");
+					return QJsonObject();
+				}
+			}
+			spec = ParseProxyLink(link);
+			if (spec.type.isEmpty()) {
+				*error = Q("link is not a proxy link: tg://socks?server="
+					"..&port=.. or tg://proxy?server=..&port=..&secret=.. "
+					"(or the same as https://t.me/socks, /proxy).");
+				return QJsonObject();
+			}
+		} else {
+			if (!string("type", 16, &spec.type)
+				|| !string("host", 255, &spec.host)
+				|| !string("user", 255, &spec.user)
+				|| !string("password", 255, &spec.password)
+				|| !string("secret", 512, &secret)
+				|| !IntArgument(
+					arguments, "port", 0, 1, 65535, &spec.port, error)) {
+				return QJsonObject();
+			}
+			spec.type = spec.type.toLower();
+			if (spec.type == Q("socks")) {
+				spec.type = Q("socks5");
+			}
+			if (spec.type != Q("socks5")
+				&& spec.type != Q("http")
+				&& spec.type != Q("mtproto")) {
+				*error = Q("type must be \"socks5\", \"http\" or "
+					"\"mtproto\" (or give a link).");
+				return QJsonObject();
+			} else if (!spec.port) {
+				*error = Q("port is required: 1-65535.");
+				return QJsonObject();
+			} else if (spec.type == Q("mtproto")) {
+				if (!spec.user.isEmpty() || !spec.password.isEmpty()) {
+					*error = Q("An mtproto proxy has a secret, no user "
+						"or password.");
+					return QJsonObject();
+				}
+				spec.password = secret;
+			} else if (!secret.isEmpty()) {
+				*error = Q("secret is for an mtproto proxy only.");
+				return QJsonObject();
+			}
+		}
+		if (!IsValidProxyHost(spec.host)) {
+			*error = Q("host must be a host name or an IP address.");
+			return QJsonObject();
+		} else if (spec.type == Q("mtproto") && spec.password.isEmpty()) {
+			*error = Q("secret is required for an mtproto proxy.");
+			return QJsonObject();
+		}
+		const auto use = arguments.value(Q("use"));
+		if (!use.isUndefined() && !use.isNull() && !use.isBool()) {
+			*error = Q("use must be true or false.");
+			return QJsonObject();
+		}
+		result.insert(Q("type"), spec.type);
+		result.insert(Q("host"), spec.host);
+		result.insert(Q("port"), spec.port);
+		result.insert(Q("user"), spec.user);
+		result.insert(Q("password"), spec.password);
+		result.insert(Q("use"), use.toBool(true));
+		return result;
 	}
 	if (tool == Q("update_profile")) {
 		auto given = 0;
@@ -1677,6 +1896,15 @@ const std::vector<SkillInfo> &Skills() {
 			"including their API tokens",
 			true,
 		},
+		{
+			kSkillProxy,
+			"代理",
+			"Proxy",
+			"查看、添加、切换和删除本机 Luckgram 的代理，对所有账号生效",
+			"See, add, switch and remove the proxies of this Luckgram; "
+			"the proxy applies to every account",
+			true,
+		},
 	};
 	return result;
 }
@@ -1756,6 +1984,100 @@ ChatLink ParseChatLink(const QString &text) {
 	return result;
 }
 
+bool IsValidProxyHost(const QString &host) {
+	if (host.isEmpty() || host.size() > 255) {
+		return false;
+	}
+	for (const auto ch : host) {
+		const auto code = ch.unicode();
+		if (!((code >= '0' && code <= '9')
+			|| (code >= 'a' && code <= 'z')
+			|| (code >= 'A' && code <= 'Z')
+			|| code == '.'
+			|| code == '-'
+			|| code == ':')) {
+			return false;
+		}
+	}
+	return true;
+}
+
+ProxySpec ParseProxyLink(const QString &text) {
+	auto rest = text.trimmed();
+	const auto cut = [&](const char *prefix) {
+		const auto value = Q(prefix);
+		if (rest.startsWith(value, Qt::CaseInsensitive)) {
+			rest = rest.mid(value.size());
+			return true;
+		}
+		return false;
+	};
+	if (!cut("tg://")) {
+		if (!cut("https://")) {
+			cut("http://");
+		}
+		if (!cut("t.me/")
+			&& !cut("telegram.me/")
+			&& !cut("telegram.dog/")) {
+			return {};
+		}
+	}
+	auto result = ProxySpec();
+	if (cut("socks?")) {
+		result.type = Q("socks5");
+	} else if (cut("proxy?")) {
+		result.type = Q("mtproto");
+	} else {
+		return {};
+	}
+	const auto hash = rest.indexOf(QChar('#'));
+	if (hash >= 0) {
+		rest = rest.left(hash);
+	}
+	auto secret = QString();
+	auto port = QString();
+	for (const auto &part : rest.split(QChar('&'), Qt::SkipEmptyParts)) {
+		const auto equal = part.indexOf(QChar('='));
+		if (equal <= 0) {
+			continue;
+		}
+		const auto key = part.left(equal).toLower();
+		const auto value = QString::fromUtf8(QByteArray::fromPercentEncoding(
+			part.mid(equal + 1).toUtf8()));
+		if (key == Q("server")) {
+			result.host = value.trimmed();
+		} else if (key == Q("port")) {
+			port = value.trimmed();
+		} else if (key == Q("user")) {
+			result.user = value;
+		} else if (key == Q("pass")) {
+			result.password = value;
+		} else if (key == Q("secret")) {
+			secret = value.trimmed();
+		}
+	}
+	auto ok = false;
+	result.port = port.toInt(&ok);
+	if (!ok
+		|| port != QString::number(result.port)
+		|| result.port < 1
+		|| result.port > 65535
+		|| !IsValidProxyHost(result.host)
+		|| result.user.size() > 255
+		|| result.password.size() > 255
+		|| secret.size() > 512) {
+		return {};
+	}
+	if (result.type == Q("mtproto")) {
+		if (secret.isEmpty()) {
+			return {};
+		}
+		result.user = QString();
+		result.password = secret;
+	}
+	return result;
+}
+
 RateLimit LimitOf(const QString &tool) {
 	if (tool == Q("add_friend")) {
 		return { 5, 20 };
@@ -1773,6 +2095,10 @@ RateLimit LimitOf(const QString &tool) {
 		return { 10, 30 };
 	} else if (tool == Q("update_profile")) {
 		return { 5, 10 };
+	} else if (tool == Q("add_proxy")
+		|| tool == Q("use_proxy")
+		|| tool == Q("remove_proxy")) {
+		return { 20, 60 };
 	} else if (tool == Q("botfather_create_bot")
 		|| tool == Q("botfather_delete_bot")) {
 		return { 3, 10 };

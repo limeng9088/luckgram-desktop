@@ -10,6 +10,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "base/call_delayed.h"
 #include "base/random.h"
 #include "core/application.h"
+#include "core/core_settings.h"
+#include "core/core_settings_proxy.h"
 #include "data/data_channel.h"
 #include "data/data_chat_participant_status.h"
 #include "data/data_histories.h"
@@ -34,6 +36,8 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
+#include "mtproto/mtproto_proxy_data.h"
+#include "storage/localstorage.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDateTime>
@@ -823,6 +827,153 @@ void UpdateProfile(
 	}).send();
 }
 
+// Skill "proxy". The proxy setting belongs to the app, not to an account.
+[[nodiscard]] QString ProxyTypeName(MTP::ProxyData::Type type) {
+	using Type = MTP::ProxyData::Type;
+	switch (type) {
+	case Type::Socks5: return u"socks5"_q;
+	case Type::Http: return u"http"_q;
+	case Type::Mtproto: return u"mtproto"_q;
+	case Type::Web: return u"web"_q;
+	case Type::None: break;
+	}
+	return u"none"_q;
+}
+
+[[nodiscard]] QString ProxyModeName() {
+	const auto &proxy = Core::App().settings().proxy();
+	return proxy.isSystem()
+		? u"system"_q
+		: (proxy.isEnabled() && proxy.selected())
+		? u"proxy"_q
+		: u"direct"_q;
+}
+
+// Never the password / the secret.
+[[nodiscard]] QJsonObject ProxyJson(
+		const MTP::ProxyData &proxy,
+		int index,
+		bool selected) {
+	using Type = MTP::ProxyData::Type;
+	auto result = QJsonObject();
+	result.insert(u"index"_q, index);
+	result.insert(u"type"_q, ProxyTypeName(proxy.type));
+	result.insert(u"host"_q, proxy.host);
+	result.insert(u"port"_q, int(proxy.port));
+	if (proxy.type == Type::Socks5 || proxy.type == Type::Http) {
+		result.insert(u"user"_q, proxy.user);
+		result.insert(u"has_password"_q, !proxy.password.isEmpty());
+	}
+	result.insert(u"selected"_q, selected);
+	return result;
+}
+
+[[nodiscard]] ToolOutcome ProxiesOutcome() {
+	const auto &proxy = Core::App().settings().proxy();
+	const auto mode = ProxyModeName();
+	const auto used = (mode == u"proxy"_q)
+		? proxy.indexInList(proxy.selected())
+		: -1;
+	auto list = QJsonArray();
+	auto index = 0;
+	for (const auto &entry : proxy.list()) {
+		list.push_back(ProxyJson(entry, index + 1, index == used));
+		++index;
+	}
+	auto outcome = ToolOutcome();
+	outcome.value.insert(u"mode"_q, mode);
+	outcome.value.insert(u"proxies"_q, list);
+	return outcome;
+}
+
+[[nodiscard]] ToolOutcome AddProxy(const QJsonObject &arguments) {
+	using Type = MTP::ProxyData::Type;
+	const auto type = arguments.value(u"type"_q).toString();
+	auto data = MTP::ProxyData();
+	data.type = (type == u"socks5"_q)
+		? Type::Socks5
+		: (type == u"http"_q)
+		? Type::Http
+		: Type::Mtproto;
+	data.host = arguments.value(u"host"_q).toString();
+	data.port = uint32(arguments.value(u"port"_q).toInt());
+	data.user = arguments.value(u"user"_q).toString();
+	data.password = arguments.value(u"password"_q).toString();
+	if (!data.valid()) {
+		return Failed((data.type == Type::Mtproto)
+			? "This is not a usable mtproto proxy: check the secret."
+			: "This is not a usable proxy.");
+	}
+	auto &proxy = Core::App().settings().proxy();
+	const auto existed = (proxy.indexInList(data) >= 0);
+	if (!existed) {
+		proxy.addToList(data);
+	}
+	const auto use = arguments.value(u"use"_q).toBool(true);
+	if (use) {
+		Core::App().setCurrentProxy(
+			data,
+			MTP::ProxyData::Settings::Enabled);
+	}
+	Local::writeSettings();
+	auto outcome = ProxiesOutcome();
+	outcome.value.insert(u"added"_q, !existed);
+	outcome.value.insert(u"index"_q, proxy.indexInList(data) + 1);
+	outcome.value.insert(u"used"_q, use);
+	return outcome;
+}
+
+[[nodiscard]] ToolOutcome UseProxy(const QJsonObject &arguments) {
+	using Mode = MTP::ProxyData::Settings;
+	auto &proxy = Core::App().settings().proxy();
+	if (arguments.contains(u"mode"_q)) {
+		const auto system
+			= (arguments.value(u"mode"_q).toString() == u"system"_q);
+		Core::App().setCurrentProxy(
+			proxy.selected(),
+			system ? Mode::System : Mode::Disabled);
+	} else {
+		const auto index = arguments.value(u"index"_q).toInt();
+		if (index < 1 || index > int(proxy.list().size())) {
+			return Failed(
+				"No proxy has this index. Call list_proxies to see them.");
+		}
+		const auto data = proxy.list()[index - 1];
+		if (!data.valid()) {
+			return Failed("This saved proxy is not usable.");
+		}
+		Core::App().setCurrentProxy(data, Mode::Enabled);
+	}
+	Local::writeSettings();
+	return ProxiesOutcome();
+}
+
+[[nodiscard]] ToolOutcome RemoveProxy(const QJsonObject &arguments) {
+	using Mode = MTP::ProxyData::Settings;
+	auto &proxy = Core::App().settings().proxy();
+	const auto index = arguments.value(u"index"_q).toInt();
+	if (index < 1 || index > int(proxy.list().size())) {
+		return Failed(
+			"No proxy has this index. Call list_proxies to see them.");
+	}
+	const auto data = proxy.list()[index - 1];
+	const auto selected = (proxy.selected() == data);
+	const auto inUse = selected && proxy.isEnabled();
+	if (!proxy.removeFromList(data)) {
+		return Failed("This proxy could not be removed.");
+	}
+	if (selected) {
+		// The one in use: a direct connection from now on.
+		Core::App().setCurrentProxy(
+			MTP::ProxyData(),
+			inUse ? Mode::Disabled : proxy.settings());
+	}
+	Local::writeSettings();
+	auto outcome = ProxiesOutcome();
+	outcome.value.insert(u"removed"_q, true);
+	return outcome;
+}
+
 // Skill "chats".
 [[nodiscard]] ToolOutcome ChatsOf(
 		not_null<Main::Session*> session,
@@ -912,6 +1063,14 @@ void UpdateProfile(
 			done(Failed(
 				"No such account is logged in. Call list_accounts to see "
 				"the accounts."));
+		} else if (tool == u"list_proxies"_q) {
+			done(ProxiesOutcome());
+		} else if (tool == u"add_proxy"_q) {
+			done(AddProxy(arguments));
+		} else if (tool == u"use_proxy"_q) {
+			done(UseProxy(arguments));
+		} else if (tool == u"remove_proxy"_q) {
+			done(RemoveProxy(arguments));
 		} else if (tool == u"list_friends"_q) {
 			ListFriends(session, arguments, std::move(done));
 		} else if (tool == u"list_chats"_q) {
