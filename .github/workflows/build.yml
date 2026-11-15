@@ -673,6 +673,7 @@ jobs:
       # English and Simplified Chinese; see luckgram_screenshots.h. Never fails
       # the build.
       - name: Screenshots.
+        id: shots
         continue-on-error: true
         shell: pwsh
         run: |
@@ -693,8 +694,12 @@ jobs:
             Select-String -Path $_.FullName -Pattern 'Luckgram Screenshots|LuckgramCiTestLogin' | ForEach-Object { $_.Line }
           }
 
+      # Only after the Screenshots step ran: screenshots/ lives in the
+      # workspace of the self-hosted runner, so when an earlier step failed
+      # it still held the pictures of the last run (build 150 uploaded those
+      # of build 148).
       - name: Upload screenshots.
-        if: always()
+        if: always() && steps.shots.outcome != 'skipped'
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
