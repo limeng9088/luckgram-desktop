@@ -620,19 +620,50 @@ jobs:
           if ($bytes.Contains("LuckgramCiTestLogin")) { Write-Error "CI test login code found in Luckgram.exe"; exit 1 }
           if ($bytes.Contains("Luckgram Screenshots")) { Write-Error "CI screenshot mode found in Luckgram.exe"; exit 1 }
 
+      # Large uploads stall now and then from the self-hosted runner ("Upload
+      # progress stalled", runs 43602412784 and 43661887989). Each package
+      # gets one retry, and a failed upload does not stop the screenshots
+      # and tests below: "Packages uploaded." at the end of the job fails it
+      # then (so Release Windows does not run either).
       - name: Upload installer.
+        id: up_setup
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: Luckgram-Setup-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64
           path: dist/Luckgram-Setup-*.exe
           if-no-files-found: error
 
+      - name: Upload installer (retry).
+        id: up_setup_retry
+        if: steps.up_setup.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: Luckgram-Setup-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64
+          path: dist/Luckgram-Setup-*.exe
+          if-no-files-found: error
+          overwrite: true
+
       - name: Upload portable.
+        id: up_portable
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64-portable
           path: dist/Luckgram-*-portable.zip
           if-no-files-found: error
+
+      - name: Upload portable (retry).
+        id: up_portable_retry
+        if: steps.up_portable.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64-portable
+          path: dist/Luckgram-*-portable.zip
+          if-no-files-found: error
+          overwrite: true
 
       # Self-hosted only: relinks a copy with the CI-only screenshot mode and
       # Telegram test-server login (LUCKGRAM_CI_BUILD, see
@@ -729,6 +760,21 @@ jobs:
           cd /d %OUT%
           "%EXE%"
           exit /b %errorlevel%
+
+      # See "Upload installer.": fails the job, last, when a package is
+      # still not uploaded after its retry.
+      - name: Packages uploaded.
+        if: always() && steps.up_setup.outcome != 'skipped'
+        shell: pwsh
+        env:
+          SETUP: ${{ steps.up_setup.outcome }}/${{ steps.up_setup_retry.outcome }}
+          PORTABLE: ${{ steps.up_portable.outcome }}/${{ steps.up_portable_retry.outcome }}
+        run: |
+          Write-Host "installer: $env:SETUP, portable: $env:PORTABLE (first/retry)"
+          $failed = @()
+          if ($env:SETUP -notmatch '^success/|/success$') { $failed += 'installer' }
+          if ($env:PORTABLE -notmatch '^success/|/success$') { $failed += 'portable' }
+          if ($failed) { Write-Host "::error::not uploaded: $($failed -join ', ')"; exit 1 }
 
   # D4: master builds go to dl.luckgram.cc (never GitHub), the Luckgram API
   # (GET /v1/version?platform=windows, S16) and luckgram.cc/download.
