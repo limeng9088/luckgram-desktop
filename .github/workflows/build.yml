@@ -703,6 +703,17 @@ jobs:
           }
           if ($failed) { exit 1 }
 
+      # The role can write public files on dl.luckgram.cc: the steps below
+      # (the CI build of Luckgram.exe for the screenshots, luckgram_tests on
+      # the self-hosted machine) must not see its keys, so they are emptied
+      # for the rest of the job right after the upload, whatever its outcome.
+      - name: Drop the AWS credentials.
+        if: always() && steps.aws.outcome != 'skipped'
+        shell: pwsh
+        run: |
+          foreach ($n in 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN') { "$n=" >> $env:GITHUB_ENV }
+          Write-Host 'AWS credentials emptied for the following steps'
+
       - name: Upload installer.
         id: up_setup
         if: github.event_name == 'workflow_dispatch' && inputs.upload_packages && github.ref != 'refs/heads/master'
