@@ -377,6 +377,10 @@ LUCKGRAM_TEST(McpInitializeAndToolsList) {
 		S("join_chat"),
 		S("leave_chat"),
 		S("update_profile"),
+		S("list_proxies"),
+		S("add_proxy"),
+		S("use_proxy"),
+		S("remove_proxy"),
 		S("botfather_list_bots"),
 		S("botfather_create_bot"),
 		S("botfather_get_token"),
@@ -700,7 +704,7 @@ LUCKGRAM_TEST(McpSkillLockedAndLate) {
 }
 
 LUCKGRAM_TEST(McpSkillRegistry) {
-	LG_EQUAL(int(Skills().size()), 9);
+	LG_EQUAL(int(Skills().size()), 10);
 	LG_CHECK(!Skills()[0].write);
 	LG_CHECK(Skills()[1].write); // friends_manage asks before it goes on.
 	LG_EQUAL(
@@ -1076,6 +1080,108 @@ LUCKGRAM_TEST(McpGroupsProfileAndReadArguments) {
 			|| (key == S("messages"));
 		// "botfather" changes things too: bots are made and deleted.
 		LG_EQUAL(skill.write, !read);
+	}
+}
+
+LUCKGRAM_TEST(McpProxySkill) {
+	// Links.
+	const auto socks = ParseProxyLink(S(
+		"tg://socks?server=1.2.3.4&port=1080&user=bob&pass=p%40ss"));
+	LG_EQUAL(socks.type, S("socks5"));
+	LG_EQUAL(socks.host, S("1.2.3.4"));
+	LG_EQUAL(socks.port, 1080);
+	LG_EQUAL(socks.user, S("bob"));
+	LG_EQUAL(socks.password, S("p@ss"));
+	const auto mt = ParseProxyLink(S(
+		"https://t.me/proxy?server=px.example.com&port=443"
+		"&secret=ee00112233445566778899aabbccddeeff"));
+	LG_EQUAL(mt.type, S("mtproto"));
+	LG_EQUAL(mt.host, S("px.example.com"));
+	LG_EQUAL(mt.port, 443);
+	LG_EQUAL(mt.password, S("ee00112233445566778899aabbccddeeff"));
+	LG_CHECK(mt.user.isEmpty());
+	LG_EQUAL(ParseProxyLink(S("t.me/socks?server=h.io&port=1")).type, S("socks5"));
+	for (const auto bad : {
+		"https://example.com/socks?server=1.2.3.4&port=1080",
+		"tg://socks?server=1.2.3.4",
+		"tg://socks?server=1.2.3.4&port=0",
+		"tg://socks?server=1.2.3.4&port=70000",
+		"tg://socks?server=1.2.3.4&port=10x",
+		"tg://socks?server=a b&port=1080",
+		"tg://proxy?server=1.2.3.4&port=443",
+		"tg://resolve?domain=durov",
+		"1.2.3.4:1080",
+	}) {
+		LG_CHECK(ParseProxyLink(S(bad)).type.isEmpty());
+	}
+	LG_CHECK(IsValidProxyHost(S("2001:db8::1")));
+	LG_CHECK(!IsValidProxyHost(S("")));
+	LG_CHECK(!IsValidProxyHost(S("host/path")));
+
+	auto fake = Fake();
+	fake.enabled = { S("proxy/111") };
+	ToolReply(fake, "list_proxies", "{}");
+	LG_EQUAL(fake.calledTool, S("list_proxies"));
+	LG_EQUAL(int(fake.calledArguments.size()), 0);
+
+	ToolReply(fake, "add_proxy", R"({"type":"SOCKS5","host":" 10.0.0.2 ","port":1080})");
+	LG_EQUAL(fake.calledTool, S("add_proxy"));
+	LG_EQUAL(fake.calledArguments.value(S("type")).toString(), S("socks5"));
+	LG_EQUAL(fake.calledArguments.value(S("host")).toString(), S("10.0.0.2"));
+	LG_EQUAL(fake.calledArguments.value(S("port")).toInt(), 1080);
+	LG_EQUAL(fake.calledArguments.value(S("use")).toBool(), true);
+	ToolReply(fake, "add_proxy", R"({"type":"http","host":"p.io","port":8080,"user":"u","password":"pw","use":false})");
+	LG_EQUAL(fake.calledArguments.value(S("user")).toString(), S("u"));
+	LG_EQUAL(fake.calledArguments.value(S("password")).toString(), S("pw"));
+	LG_EQUAL(fake.calledArguments.value(S("use")).toBool(), false);
+	ToolReply(fake, "add_proxy", R"({"type":"mtproto","host":"p.io","port":443,"secret":"dd00112233445566778899aabbccddeeff"})");
+	LG_EQUAL(
+		fake.calledArguments.value(S("password")).toString(),
+		S("dd00112233445566778899aabbccddeeff"));
+	ToolReply(fake, "add_proxy", R"({"link":"tg://socks?server=1.2.3.4&port=1080"})");
+	LG_EQUAL(fake.calledArguments.value(S("host")).toString(), S("1.2.3.4"));
+
+	ToolReply(fake, "use_proxy", R"({"index":2})");
+	LG_EQUAL(fake.calledTool, S("use_proxy"));
+	LG_EQUAL(fake.calledArguments.value(S("index")).toInt(), 2);
+	LG_CHECK(!fake.calledArguments.contains(S("mode")));
+	ToolReply(fake, "use_proxy", R"({"mode":"Direct"})");
+	LG_EQUAL(fake.calledArguments.value(S("mode")).toString(), S("direct"));
+	LG_CHECK(!fake.calledArguments.contains(S("index")));
+	ToolReply(fake, "remove_proxy", R"({"index":1})");
+	LG_EQUAL(fake.calledTool, S("remove_proxy"));
+
+	const auto before = fake.calls;
+	const auto bad = [&](const char *tool, const char *arguments) {
+		LG_CHECK(!ErrorText(ToolReply(fake, tool, arguments)).isEmpty());
+	};
+	bad("add_proxy", "{}");
+	bad("add_proxy", R"({"type":"socks5","host":"1.2.3.4"})");
+	bad("add_proxy", R"({"type":"ftp","host":"1.2.3.4","port":21})");
+	bad("add_proxy", R"({"type":"socks5","host":"a b","port":1080})");
+	bad("add_proxy", R"({"type":"socks5","host":"1.2.3.4","port":70000})");
+	bad("add_proxy", R"({"type":"mtproto","host":"1.2.3.4","port":443})");
+	bad("add_proxy", R"({"type":"mtproto","host":"1.2.3.4","port":443,"secret":"aa","user":"u"})");
+	bad("add_proxy", R"({"type":"socks5","host":"1.2.3.4","port":1080,"secret":"aa"})");
+	bad("add_proxy", R"({"link":"tg://socks?server=1.2.3.4&port=1080","host":"x"})");
+	bad("add_proxy", R"({"link":"https://example.com"})");
+	bad("add_proxy", R"({"type":"socks5","host":"1.2.3.4","port":1080,"use":"yes"})");
+	bad("use_proxy", "{}");
+	bad("use_proxy", R"({"index":1,"mode":"direct"})");
+	bad("use_proxy", R"({"index":0})");
+	bad("use_proxy", R"({"mode":"off"})");
+	bad("remove_proxy", "{}");
+	bad("remove_proxy", R"({"mode":"direct"})");
+	LG_EQUAL(fake.calls, before);
+
+	// Its own switch; the tools that change the proxy are limited.
+	auto other = Fake();
+	other.enabled = { S("groups/111") };
+	LG_CHECK(ErrorText(ToolReply(other, "list_proxies", "{}")).contains(S("proxy")));
+	LG_CHECK(LimitOf(S("list_proxies")).perHour == 0);
+	for (const auto tool : { "add_proxy", "use_proxy", "remove_proxy" }) {
+		LG_CHECK(LimitOf(S(tool)).perHour > 0);
+		LG_CHECK(LimitOf(S(tool)).perDay >= LimitOf(S(tool)).perHour);
 	}
 }
 

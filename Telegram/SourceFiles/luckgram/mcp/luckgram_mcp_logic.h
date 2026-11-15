@@ -55,6 +55,7 @@ inline constexpr auto kSkillChatsManage = "chats_manage";
 inline constexpr auto kSkillGroups = "groups";
 inline constexpr auto kSkillProfile = "profile";
 inline constexpr auto kSkillBotFather = "botfather";
+inline constexpr auto kSkillProxy = "proxy";
 
 struct SkillInfo {
 	const char *key = "";
@@ -199,6 +200,22 @@ struct ChatLink {
 	QString invite;
 };
 [[nodiscard]] ChatLink ParseChatLink(const QString &text);
+
+// Skill "proxy": what add_proxy was given, from its arguments or from a
+// proxy link (tg://socks?server=..&port=..&user=..&pass=..,
+// tg://proxy?server=..&port=..&secret=.., and the same as https://t.me/socks
+// and https://t.me/proxy). type is "socks5", "http" or "mtproto"; for
+// mtproto the secret is in password. An empty type: not a proxy link.
+struct ProxySpec {
+	QString type;
+	QString host;
+	int port = 0;
+	QString user;
+	QString password;
+};
+[[nodiscard]] ProxySpec ParseProxyLink(const QString &text);
+// Letters, digits, dots, dashes and colons (IPv6), 1-255 characters.
+[[nodiscard]] bool IsValidProxyHost(const QString &host);
 
 // 32 random bytes as 43 URL-safe characters come from the caller; this only
 // says whether a stored token is usable.

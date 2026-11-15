@@ -53,6 +53,12 @@ Skill 工具都有可选参数 `account`（`list_accounts` 里的 `id`），不�
 | 群组和频道 `groups` | `join_chat` | `account`、`chat`（公开用户名、`https://t.me/名字` 链接、`https://t.me/+…` 邀请链接，或 `list_chats` 的 `id`）。`chat` 是机器人时发送 `/start` 启动它 | `joined`、`already_member`；机器人返回 `started`（`/start` 已排队发送；账号屏蔽了该机器人时不会送达）；需要管理员审批的群返回 `requested`。每账号每小时 5 次、每天 20 次 |
 | 群组和频道 `groups` | `leave_chat` | `account`、`chat` | `left`、`was_member`。只支持超级群和频道，自己创建的不能用它退出。每账号每小时 10 次、每天 30 次 |
 | 资料 `profile` | `update_profile` | `account`，`first_name` / `last_name` / `bio` 至少一个 | `updated`、`name`、`bio`。每账号每小时 5 次、每天 10 次 |
+| 代理 `proxy` | `list_proxies` | `account` | `mode`（`direct` 直连 / `proxy` 使用代理 / `system` 系统代理）、`proxies`（`index`、`type`、`host`、`port`、`user`、`has_password`、`selected`）。不返回密码和 MTProto 密钥 |
+| 代理 `proxy` | `add_proxy` | `account`，`link`（`tg://socks?server=…&port=…`、`tg://proxy?server=…&port=…&secret=…` 或对应的 `https://t.me/socks`、`/proxy` 链接），或者 `type`（`socks5` / `http` / `mtproto`）+ `host` + `port`（+ `user`、`password`，MTProto 用 `secret`）；`use`（默认 true，false 只保存不切换） | `added`、`index`、`used`，以及和 `list_proxies` 一样的列表。已有的代理不会重复添加。每账号每小时 20 次、每天 60 次 |
+| 代理 `proxy` | `use_proxy` | `account`，`index`（`list_proxies` 里的序号）或 `mode`（`direct` / `system`），二选一 | 和 `list_proxies` 一样。每账号每小时 20 次、每天 60 次 |
+| 代理 `proxy` | `remove_proxy` | `account`、`index` | `removed` 和剩下的列表；删掉正在使用的那个会改成直连，删除后序号会变。每账号每小时 20 次、每天 60 次 |
+
+代理是整个 Luckgram 的设置，不属于某个账号：切换后所有账号都走它。`account` 只决定用哪个账号的「代理」开关和限额。`add_proxy`、`use_proxy` 不会先测试代理能不能用；换成一个不通的代理，Luckgram 会掉线，云端 MCP 也跟着断，只能到 Luckgram 里手动改回来。
 
 ### BotFather `botfather`
 
