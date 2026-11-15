@@ -50,7 +50,7 @@ Skill 工具都有可选参数 `account`（`list_accounts` 里的 `id`），不�
 | 读消息 `messages` | `get_messages` | `account`、`chat`（`list_chats` 的 `id` 或用户名）、`limit`（1–100，默认 20）、`before_id` | `chat_id`、`chat_name`、`messages`（从新到旧）：`id`、`date`、`from_id`、`from_name`、`out`、`text`、`attachment`、`reply_to`、`service`。不会把会话标记为已读 |
 | 发消息 `messages_send` | `send_message` | `account`、`chat`、`text`（1–4096 字，纯文本）、`reply_to`（可选） | `queued`、`chat_id`、`chat_name`。每账号每小时 30 次、每天 200 次 |
 | 管理会话 `chats_manage` | `mark_chat_read` | `account`、`chat` | `chat_id`、`chat_name`、`was_unread`。每账号每小时 60 次、每天 500 次 |
-| 群组和频道 `groups` | `join_chat` | `account`、`chat`（公开用户名或 `list_chats` 的 `id`） | `joined`、`already_member`。每账号每小时 5 次、每天 20 次 |
+| 群组和频道 `groups` | `join_chat` | `account`、`chat`（公开用户名、`https://t.me/名字` 链接、`https://t.me/+…` 邀请链接，或 `list_chats` 的 `id`）。`chat` 是机器人时发送 `/start` 启动它 | `joined`、`already_member`；机器人返回 `started`；需要管理员审批的群返回 `requested`。每账号每小时 5 次、每天 20 次 |
 | 群组和频道 `groups` | `leave_chat` | `account`、`chat` | `left`、`was_member`。只支持超级群和频道，自己创建的不能用它退出。每账号每小时 10 次、每天 30 次 |
 | 资料 `profile` | `update_profile` | `account`，`first_name` / `last_name` / `bio` 至少一个 | `updated`、`name`、`bio`。每账号每小时 5 次、每天 10 次 |
 

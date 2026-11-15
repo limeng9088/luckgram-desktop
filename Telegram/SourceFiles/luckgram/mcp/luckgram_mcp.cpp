@@ -604,17 +604,110 @@ void MarkChatRead(
 }
 
 // Skill "groups".
+// A private group or channel, by the hash of its invite link.
+void JoinByInvite(
+		not_null<Main::Session*> session,
+		const QString &hash,
+		ToolDone done) {
+	session->api().request(MTPmessages_ImportChatInvite(
+		MTP_string(hash)
+	)).done([=](const MTPmessages_ChatInviteJoinResult &result) {
+		result.match([&](const MTPDmessages_chatInviteJoinResultOk &data) {
+			session->api().applyUpdates(data.vupdates());
+			auto outcome = ToolOutcome();
+			const auto chats = data.vupdates().match([](
+					const MTPDupdates &data) {
+				return &data.vchats().v;
+			}, [](const MTPDupdatesCombined &data) {
+				return &data.vchats().v;
+			}, [](const auto &) {
+				return (const QVector<MTPChat>*)nullptr;
+			});
+			if (chats && !chats->isEmpty()) {
+				const auto peerId = chats->front().match([](
+						const MTPDchat &data) {
+					return PeerId(ChatId(data.vid()));
+				}, [](const MTPDchannel &data) {
+					return PeerId(ChannelId(data.vid()));
+				}, [](const auto &) {
+					return PeerId(0);
+				});
+				if (const auto peer = session->data().peerLoaded(peerId)) {
+					outcome.value = ChatJson(peer);
+				}
+			}
+			outcome.value.insert(u"joined"_q, true);
+			outcome.value.insert(u"already_member"_q, false);
+			done(std::move(outcome));
+		}, [&](const auto &) {
+			done(Failed(
+				"This group asks new members a question first. A "
+				"person has to join it in the app."));
+		});
+	}).fail([=](const MTP::Error &error) {
+		const auto &type = error.type();
+		if (type == u"USER_ALREADY_PARTICIPANT"_q) {
+			auto outcome = ToolOutcome();
+			outcome.value.insert(u"joined"_q, false);
+			outcome.value.insert(u"already_member"_q, true);
+			done(std::move(outcome));
+		} else if (type == u"INVITE_REQUEST_SENT"_q) {
+			// The group approves new members by hand: asked, not in yet.
+			auto outcome = ToolOutcome();
+			outcome.value.insert(u"joined"_q, false);
+			outcome.value.insert(u"already_member"_q, false);
+			outcome.value.insert(u"requested"_q, true);
+			done(std::move(outcome));
+		} else if (type == u"INVITE_HASH_EXPIRED"_q
+			|| type == u"INVITE_HASH_INVALID"_q
+			|| type == u"INVITE_HASH_EMPTY"_q) {
+			done(Failed("This invite link is not valid any more."));
+		} else {
+			done(ServerError(error));
+		}
+	}).send();
+}
+
+// "Joining" a bot: /start, through the app's normal sending.
+void StartBot(
+		not_null<Main::Session*> session,
+		not_null<UserData*> bot,
+		ToolDone done) {
+	const auto history = session->data().history(bot);
+	auto message = Api::MessageToSend(Api::SendAction(history));
+	message.textWithTags = { u"/start"_q, TextWithTags::Tags() };
+	message.action.clearDraft = false; // The user's draft stays.
+	session->api().sendMessage(std::move(message));
+	auto outcome = ToolOutcome();
+	outcome.value = ChatJson(bot);
+	outcome.value.insert(u"started"_q, true);
+	outcome.value.insert(u"joined"_q, false);
+	outcome.value.insert(u"already_member"_q, false);
+	done(std::move(outcome));
+}
+
 void JoinChat(
 		not_null<Main::Session*> session,
 		const QJsonObject &arguments,
 		ToolDone done) {
+	const auto invite = arguments.value(u"chat_invite"_q).toString();
+	if (!invite.isEmpty()) {
+		JoinByInvite(session, invite, std::move(done));
+		return;
+	}
 	ResolveChat(session, arguments, [=](PeerData *peer, ToolOutcome failure) {
 		const auto channel = peer ? peer->asChannel() : nullptr;
+		const auto user = peer ? peer->asUser() : nullptr;
 		if (!peer) {
 			done(std::move(failure));
 			return;
+		} else if (user && user->isBot()) {
+			StartBot(session, user, done);
+			return;
 		} else if (!channel) {
-			done(Failed("This is not a public group or channel."));
+			done(Failed(
+				"This is a person, not a group, channel or bot. Use "
+				"add_friend or send_message."));
 			return;
 		} else if (channel->amIn()) {
 			auto result = ToolOutcome();
@@ -640,6 +733,15 @@ void JoinChat(
 					"person has to join it in the app."));
 			});
 		}).fail([=](const MTP::Error &error) {
+			if (error.type() == u"INVITE_REQUEST_SENT"_q) {
+				auto outcome = ToolOutcome();
+				outcome.value = ChatJson(peer);
+				outcome.value.insert(u"joined"_q, false);
+				outcome.value.insert(u"already_member"_q, false);
+				outcome.value.insert(u"requested"_q, true);
+				done(std::move(outcome));
+				return;
+			}
 			done(ServerError(error));
 		}).send();
 	});

@@ -405,13 +405,17 @@ constexpr const char *kProtocolVersions[] = {
 	properties.insert(Q("account"), account);
 	properties.insert(Q("chat"), Property(
 		"string",
-		"The public username of the group or channel, with or without @, "
-		"or its id from list_chats."));
+		"The group, channel or bot: its public username (with or without "
+		"@), a link (https://t.me/name), an invite link "
+		"(https://t.me/+...) for join_chat, or an id from list_chats."));
 	result.push_back(Tool(
 		"join_chat",
-		"Join group or channel",
-		"Skill \"groups\". Join one public group or channel as the "
-		"account. At most 5 an hour and 20 a day per account.",
+		"Join group, channel or bot",
+		"Skill \"groups\". Join one group or channel as the account, by "
+		"username, link or invite link; for a bot, start it (sends "
+		"/start). Answers joined, already_member, started (a bot) or "
+		"requested (the group approves new members by hand). At most 5 "
+		"an hour and 20 a day per account.",
 		properties,
 		false));
 	result.push_back(Tool(
@@ -976,6 +980,17 @@ constexpr const char *kProtocolVersions[] = {
 		auto text = chat.isString()
 			? chat.toString().trimmed()
 			: QString::number(quint64(std::max(chat.toDouble(), 0.)));
+		const auto link = ParseChatLink(text);
+		if (!link.invite.isEmpty()) {
+			if (tool != Q("join_chat")) {
+				*error = Q("An invite link only works with join_chat.");
+				return QJsonObject();
+			}
+			result.insert(Q("chat_invite"), link.invite);
+			return result;
+		} else if (!link.username.isEmpty()) {
+			text = link.username;
+		}
 		if (text.startsWith(QChar('@'))) {
 			text = text.mid(1);
 		}
@@ -995,7 +1010,8 @@ constexpr const char *kProtocolVersions[] = {
 		} else if (name && !digits) {
 			result.insert(Q("chat_username"), text);
 		} else {
-			*error = Q("chat must be an id from list_chats or a username.");
+			*error = Q("chat must be an id from list_chats, a username or "
+				"a t.me link.");
 			return QJsonObject();
 		}
 		if (!send && !read) {
@@ -1661,6 +1677,76 @@ const std::vector<SkillInfo> &Skills() {
 			true,
 		},
 	};
+	return result;
+}
+
+ChatLink ParseChatLink(const QString &text) {
+	auto result = ChatLink();
+	auto rest = text.trimmed();
+	const auto cut = [&](const char *prefix) {
+		const auto value = Q(prefix);
+		if (rest.startsWith(value, Qt::CaseInsensitive)) {
+			rest = rest.mid(value.size());
+			return true;
+		}
+		return false;
+	};
+	const auto validInvite = [](const QString &hash) {
+		if (hash.size() < 8 || hash.size() > 64) {
+			return false;
+		}
+		for (const auto ch : hash) {
+			const auto code = ch.unicode();
+			if (!((code >= '0' && code <= '9')
+				|| (code >= 'a' && code <= 'z')
+				|| (code >= 'A' && code <= 'Z')
+				|| code == '_'
+				|| code == '-')) {
+				return false;
+			}
+		}
+		return true;
+	};
+	const auto until = [](const QString &value, const char *stops) {
+		auto end = value.size();
+		for (auto stop = stops; *stop; ++stop) {
+			const auto index = value.indexOf(QChar(*stop));
+			if (index >= 0 && index < end) {
+				end = index;
+			}
+		}
+		return value.left(end);
+	};
+	if (cut("tg://resolve?domain=")) {
+		result.username = until(rest, "&#");
+		return result;
+	} else if (cut("tg://join?invite=")) {
+		const auto hash = until(rest, "&#");
+		if (validInvite(hash)) {
+			result.invite = hash;
+		}
+		return result;
+	}
+	if (!cut("https://")) {
+		cut("http://");
+	}
+	if (!cut("t.me/")
+		&& !cut("telegram.me/")
+		&& !cut("telegram.dog/")) {
+		return result;
+	}
+	auto invite = QString();
+	if (cut("+")) {
+		invite = until(rest, "/?#");
+	} else if (cut("joinchat/")) {
+		invite = until(rest, "/?#");
+	} else {
+		result.username = until(rest, "/?#");
+		return result;
+	}
+	if (validInvite(invite)) {
+		result.invite = invite;
+	}
 	return result;
 }
 
