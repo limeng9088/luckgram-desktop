@@ -76,9 +76,15 @@ function Invoke-S3([string]$Method, [string]$RequestUrl, [string]$Route,
 	Remove-Item -Force $outFile, $headFile -ErrorAction SilentlyContinue
 	$start = Get-Date
 	# curl's own error message goes to stderr (the log), no secrets in it.
+	# No --speed-limit: curl counts bytes as sent once they are in the
+	# socket buffer, which Windows makes several MB large, so on a slow line
+	# the first MBs of a part "go" at once and then nothing moves for tens
+	# of seconds while the buffer drains (run 43696110572: every part was
+	# given up after 31-36 s at "less than 20 KB/s", the line did ~128 KB/s).
+	# --max-time alone bounds a try.
 	$res = "user = `"$($env:AWS_ACCESS_KEY_ID):$($env:AWS_SECRET_ACCESS_KEY)`"" | curl.exe -sS -K - @extra `
 		-X $Method --aws-sigv4 "aws:amz:$($Region):s3" -H 'x-amz-content-sha256: UNSIGNED-PAYLOAD' `
-		--connect-timeout 20 --speed-limit 20480 --speed-time 20 --max-time $MaxTime `
+		--connect-timeout 20 --max-time $MaxTime `
 		-D $headFile -o $outFile -w '%{http_code} %{speed_upload}' $RequestUrl
 	$exit = $LASTEXITCODE
 	$secs = ((Get-Date) - $start).TotalSeconds
