@@ -677,7 +677,12 @@ jobs:
         run: |
           $ProgressPreference = 'SilentlyContinue'
           $v = $env:LUCKGRAM_VERSION; $b = $env:LUCKGRAM_BUILD
-          $prefix = if ($env:GITHUB_EVENT_NAME -eq 'push') { "windows/windows-$v-$b" } else { "windows/manual/windows-$v-$b" }
+          # A re-run keeps the run number: its packages get a folder of their
+          # own (-<attempt>), because dl.luckgram.cc (Cloudflare, query
+          # strings ignored) may still serve the files of the attempt before
+          # under the old name, and the size and SHA-256 checks would fail.
+          $tag = "windows-$v-$b" + $(if ($env:GITHUB_RUN_ATTEMPT -and $env:GITHUB_RUN_ATTEMPT -ne '1') { "-$env:GITHUB_RUN_ATTEMPT" } else { '' })
+          $prefix = if ($env:GITHUB_EVENT_NAME -eq 'push') { "windows/$tag" } else { "windows/manual/$tag" }
           "prefix=$prefix" >> $env:GITHUB_OUTPUT
           $bucket = 'https://luckgram-downloads-515517431844.s3.ap-southeast-1.amazonaws.com'
           $upload = "$env:TBUILD\luckgram-desktop\.github\scripts\s3_multipart_upload.ps1"
@@ -898,7 +903,6 @@ jobs:
           [ -n "$VER" ] || { echo "::error::Could not read AppVersionStr"; exit 1; }
           echo "VER=$VER" >> "$GITHUB_ENV"
           echo "BUILD=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
-          echo "TAG=windows-$VER-$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
 
       # The files the next steps hash and hand to luckgram.cc, read back
       # through the CDN: same bytes as uploaded by the build job.
@@ -911,7 +915,13 @@ jobs:
           PORTABLE_SIZE: ${{ needs.build.outputs.portable_size }}
         run: |
           set -euo pipefail
-          [ "$PREFIX" = "windows/$TAG" ] || { echo "::error::build job uploaded to '$PREFIX', expected windows/$TAG"; exit 1; }
+          # The folder the build job uploaded to: windows-<version>-<build>,
+          # with -<attempt> when the build job ran again (re-run), see
+          # "Upload packages to dl.luckgram.cc." there. TAG follows it, so a
+          # re-run of this job alone uses the files the build job made.
+          [[ "$PREFIX" =~ ^windows/(windows-"$VER"-"$BUILD"(-[0-9]+)?)$ ]] || { echo "::error::build job uploaded to '$PREFIX', expected windows/windows-$VER-$BUILD[-attempt]"; exit 1; }
+          TAG=${BASH_REMATCH[1]}
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
           mkdir -p out
           fetch() {
             local name=$1 want=$2 size=$3 key="$PREFIX/$1"
