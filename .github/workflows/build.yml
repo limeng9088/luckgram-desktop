@@ -336,6 +336,17 @@ jobs:
       && (needs.libs.result == 'success' || (needs.libs.result == 'skipped' && (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted'))))
     runs-on: ${{ (inputs.runner == 'self-hosted' || (inputs.runner != 'hosted' && vars.WIN_RUNNER == 'self-hosted')) && fromJSON('["self-hosted","luckgram-win"]') || 'windows-latest' }}
     timeout-minutes: 355
+    # id-token: the packages go to dl.luckgram.cc from this job (OIDC role
+    # luckgram-ci-downloads, see "Upload packages to dl.luckgram.cc.").
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      dl_prefix: ${{ steps.up_s3.outputs.prefix }}
+      setup_sha256: ${{ steps.up_s3.outputs.setup_sha256 }}
+      setup_size: ${{ steps.up_s3.outputs.setup_size }}
+      portable_sha256: ${{ steps.up_s3.outputs.portable_sha256 }}
+      portable_size: ${{ steps.up_s3.outputs.portable_size }}
     env:
       # Self-hosted (xs-master also runs emulators): the steps that build
       # lower their own cmd.exe to BelowNormal (the line with PriorityClass),
@@ -624,17 +635,77 @@ jobs:
           if ($bytes.Contains("LuckgramCiTestLogin")) { Write-Error "CI test login code found in Luckgram.exe"; exit 1 }
           if ($bytes.Contains("Luckgram Screenshots")) { Write-Error "CI screenshot mode found in Luckgram.exe"; exit 1 }
 
-      # Large uploads stall now and then from the self-hosted runner ("Upload
-      # progress stalled", runs 43602412784 and 43661887989). Each package
-      # gets one retry, and a failed upload does not stop the screenshots
-      # and tests below: "Packages uploaded." at the end of the job fails it
-      # then (so Release Windows does not run either).
-      # Manual runs upload them only with 'upload_packages' (w-1109: the
-      # test and screenshot runs lost 40 min to these ~180 MB). Pushes
-      # always do: Release Windows takes the packages from these artifacts.
+      # Packages go from this job straight to S3 (dl.luckgram.cc), not
+      # through GitHub artifacts: from the self-hosted runner large artifact
+      # uploads stalled again and again ("Upload progress stalled", runs
+      # 43602412784, 43661887989, 43664066777: 10 min per try, both tries
+      # failed). Master pushes: windows/windows-<version>-<build>/, which
+      # Release Windows checks and publishes. Manual runs on master with
+      # 'upload_packages': windows/manual/windows-<version>-<build>/ (never
+      # published, for testing). The role trusts master only, so manual runs
+      # of other branches with 'upload_packages' still use GitHub artifacts
+      # (the four steps after these). A failed upload does not stop the
+      # screenshots and tests below: "Packages uploaded." at the end of the
+      # job fails it then (so Release Windows does not run either).
+      - name: AWS for dl.luckgram.cc.
+        id: aws
+        if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || inputs.upload_packages)
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::515517431844:role/luckgram-ci-downloads
+          aws-region: ap-southeast-1
+
+      # curl --aws-sigv4, keys via stdin (-K -), never argv or the log. Up
+      # to four tries per file, alternating the runner's proxy (HTTPS_PROXY
+      # of the self-hosted runner) and a direct connection; a try that sends
+      # less than 50 KB/s for a minute is given up instead of hanging.
+      - name: Upload packages to dl.luckgram.cc.
+        id: up_s3
+        if: steps.aws.outcome == 'success'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $v = $env:LUCKGRAM_VERSION; $b = $env:LUCKGRAM_BUILD
+          $prefix = if ($env:GITHUB_EVENT_NAME -eq 'push') { "windows/windows-$v-$b" } else { "windows/manual/windows-$v-$b" }
+          "prefix=$prefix" >> $env:GITHUB_OUTPUT
+          $bucket = 'https://luckgram-downloads-515517431844.s3.ap-southeast-1.amazonaws.com'
+          $files = @(
+            @{ id = 'setup'; name = "Luckgram-Setup-$v-$b-x64.exe"; type = 'application/vnd.microsoft.portable-executable' },
+            @{ id = 'portable'; name = "Luckgram-$v-$b-x64-portable.zip"; type = 'application/zip' })
+          $failed = $false
+          foreach ($f in $files) {
+            $path = "$env:GITHUB_WORKSPACE\dist\$($f.name)"
+            $size = (Get-Item $path).Length
+            $sha = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLower()
+            $ok = $false
+            foreach ($try in 1..4) {
+              $route = if ($try % 2) { 'proxy' } else { 'direct' }
+              $px = if ($route -eq 'direct') { @('--noproxy', '*') } else { @() }
+              $start = Get-Date
+              $res = "user = `"$($env:AWS_ACCESS_KEY_ID):$($env:AWS_SECRET_ACCESS_KEY)`"" | curl.exe -sS --fail-with-body -K - @px `
+                --aws-sigv4 'aws:amz:ap-southeast-1:s3' -H "x-amz-security-token: $env:AWS_SESSION_TOKEN" `
+                -H 'x-amz-content-sha256: UNSIGNED-PAYLOAD' -H "Content-Type: $($f.type)" `
+                --speed-limit 51200 --speed-time 60 --max-time 1200 `
+                -T $path -o NUL -w '%{http_code} %{speed_upload}' "$bucket/$prefix/$($f.name)"
+              $code = $LASTEXITCODE
+              $secs = [int]((Get-Date) - $start).TotalSeconds
+              $http, $speed = "$res" -split ' '
+              Write-Host ("{0} try {1} ({2}): curl {3}, HTTP {4}, {5:N2} MB/s, {6} s" -f $f.name, $try, $route, $code, $http, ([double]$speed / 1MB), $secs)
+              if ($code -eq 0 -and $http -eq '200') { $ok = $true; break }
+              Start-Sleep -Seconds 10
+            }
+            if (-not $ok) { Write-Host "::error::$($f.name) not uploaded to dl.luckgram.cc"; $failed = $true; continue }
+            "$($f.id)_sha256=$sha" >> $env:GITHUB_OUTPUT
+            "$($f.id)_size=$size" >> $env:GITHUB_OUTPUT
+            Write-Host "https://dl.luckgram.cc/$prefix/$($f.name)  sha256 $sha  size $size"
+          }
+          if ($failed) { exit 1 }
+
       - name: Upload installer.
         id: up_setup
-        if: github.event_name != 'workflow_dispatch' || inputs.upload_packages
+        if: github.event_name == 'workflow_dispatch' && inputs.upload_packages && github.ref != 'refs/heads/master'
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
@@ -655,7 +726,7 @@ jobs:
 
       - name: Upload portable.
         id: up_portable
-        if: github.event_name != 'workflow_dispatch' || inputs.upload_packages
+        if: github.event_name == 'workflow_dispatch' && inputs.upload_packages && github.ref != 'refs/heads/master'
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
@@ -770,29 +841,34 @@ jobs:
           "%EXE%"
           exit /b %errorlevel%
 
-      # See "Upload installer.": fails the job, last, when a package is
-      # still not uploaded after its retry.
+      # See "AWS for dl.luckgram.cc.": fails the job, last, when the
+      # packages were to be uploaded and are not.
       - name: Packages uploaded.
-        if: always() && steps.up_setup.outcome != 'skipped'
+        if: always() && (steps.aws.outcome != 'skipped' || steps.up_setup.outcome != 'skipped')
         shell: pwsh
         env:
+          S3: ${{ steps.aws.outcome }}/${{ steps.up_s3.outcome }}
           SETUP: ${{ steps.up_setup.outcome }}/${{ steps.up_setup_retry.outcome }}
           PORTABLE: ${{ steps.up_portable.outcome }}/${{ steps.up_portable_retry.outcome }}
         run: |
-          Write-Host "installer: $env:SETUP, portable: $env:PORTABLE (first/retry)"
           $failed = @()
-          if ($env:SETUP -notmatch '^success/|/success$') { $failed += 'installer' }
-          if ($env:PORTABLE -notmatch '^success/|/success$') { $failed += 'portable' }
+          if ($env:S3 -ne 'skipped/skipped') {
+            Write-Host "dl.luckgram.cc: $env:S3 (credentials/upload)"
+            if ($env:S3 -ne 'success/success') { $failed += 'dl.luckgram.cc' }
+          } else {
+            Write-Host "artifacts: installer $env:SETUP, portable $env:PORTABLE (first/retry)"
+            if ($env:SETUP -notmatch '^success/|/success$') { $failed += 'installer' }
+            if ($env:PORTABLE -notmatch '^success/|/success$') { $failed += 'portable' }
+          }
           if ($failed) { Write-Host "::error::not uploaded: $($failed -join ', ')"; exit 1 }
 
   # D4: master builds go to dl.luckgram.cc (never GitHub), the Luckgram API
   # (GET /v1/version?platform=windows, S16) and luckgram.cc/download.
-  # Same chain as the Android release: OIDC role luckgram-ci-downloads
-  # (PutObject on windows/* and macos/*, master only), curl --aws-sigv4
-  # (no AWS CLI, keys only via stdin), each file read back through the CDN
-  # and compared by SHA-256 (a mismatch fails the job). The API and the
-  # site are only told when the upload succeeded, so they never point at
-  # a file that isn't there.
+  # The build job uploads the packages to S3 itself (see "AWS for
+  # dl.luckgram.cc." there); this job reads each file back through the CDN
+  # and compares SHA-256 and size with what the build job uploaded (a
+  # mismatch fails the job). The API and the site are only told after
+  # that, so they never point at a file that isn't there.
   release-windows:
     name: Release Windows
     needs: build
@@ -803,7 +879,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -819,42 +894,30 @@ jobs:
           echo "BUILD=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
           echo "TAG=windows-$VER-$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
 
-      - name: Download packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: Luckgram-*${{ github.run_number }}-x64*
-          path: out
-          merge-multiple: true
-
-      - name: Check packages
-        run: |
-          ls -l out
-          test -f "out/Luckgram-Setup-$VER-$BUILD-x64.exe" || { echo "::error::installer missing"; exit 1; }
-          test -f "out/Luckgram-$VER-$BUILD-x64-portable.zip" || { echo "::error::portable zip missing"; exit 1; }
-
-      - name: Configure AWS for dl.luckgram.cc
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::515517431844:role/luckgram-ci-downloads
-          aws-region: ap-southeast-1
-
-      - name: Upload to dl.luckgram.cc
+      # The files the next steps hash and hand to luckgram.cc, read back
+      # through the CDN: same bytes as uploaded by the build job.
+      - name: Download packages from dl.luckgram.cc
+        env:
+          PREFIX: ${{ needs.build.outputs.dl_prefix }}
+          SETUP_SHA256: ${{ needs.build.outputs.setup_sha256 }}
+          SETUP_SIZE: ${{ needs.build.outputs.setup_size }}
+          PORTABLE_SHA256: ${{ needs.build.outputs.portable_sha256 }}
+          PORTABLE_SIZE: ${{ needs.build.outputs.portable_size }}
         run: |
           set -euo pipefail
-          for f in "out/Luckgram-Setup-$VER-$BUILD-x64.exe" "out/Luckgram-$VER-$BUILD-x64-portable.zip"; do
-            case "$f" in *.exe) type=application/vnd.microsoft.portable-executable ;; *) type=application/zip ;; esac
-            key="windows/$TAG/$(basename "$f")"
-            # keys via stdin (-K -), never argv
-            printf 'user = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" | curl -sS --fail-with-body --retry 3 --retry-all-errors -K - \
-              --aws-sigv4 "aws:amz:ap-southeast-1:s3" -H "x-amz-security-token: $AWS_SESSION_TOKEN" \
-              -H "x-amz-content-sha256: UNSIGNED-PAYLOAD" -H "Content-Type: $type" \
-              -T "$f" -o /dev/null "https://luckgram-downloads-515517431844.s3.ap-southeast-1.amazonaws.com/$key"
-            # check through the CDN, same bytes
-            want=$(sha256sum "$f" | cut -d' ' -f1)
-            got=$(curl -sS --fail --retry 3 --retry-all-errors "https://dl.luckgram.cc/$key" | sha256sum | cut -d' ' -f1)
-            [ "$want" = "$got" ] || { echo "::error::dl.luckgram.cc/$key checksum mismatch"; exit 1; }
-            echo "https://dl.luckgram.cc/$key  sha256 $want  size $(stat -c %s "$f")"
-          done
+          [ "$PREFIX" = "windows/$TAG" ] || { echo "::error::build job uploaded to '$PREFIX', expected windows/$TAG"; exit 1; }
+          mkdir -p out
+          fetch() {
+            local name=$1 want=$2 size=$3 key="$PREFIX/$1"
+            [ -n "$want" ] && [ -n "$size" ] || { echo "::error::no checksum for $name from the build job"; exit 1; }
+            curl -sS --fail --retry 3 --retry-all-errors -o "out/$name" "https://dl.luckgram.cc/$key"
+            got=$(sha256sum "out/$name" | cut -d' ' -f1)
+            [ "$got" = "$want" ] || { echo "::error::dl.luckgram.cc/$key checksum mismatch"; exit 1; }
+            [ "$(stat -c %s "out/$name")" = "$size" ] || { echo "::error::dl.luckgram.cc/$key size mismatch"; exit 1; }
+            echo "https://dl.luckgram.cc/$key  sha256 $got  size $size"
+          }
+          fetch "Luckgram-Setup-$VER-$BUILD-x64.exe" "$SETUP_SHA256" "$SETUP_SIZE"
+          fetch "Luckgram-$VER-$BUILD-x64-portable.zip" "$PORTABLE_SHA256" "$PORTABLE_SIZE"
 
       # S5 / S16: GET /v1/version?platform=windows answers with this build.
       # api-dev on every master build; api.luckgram.cc only while the
