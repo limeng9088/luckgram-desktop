@@ -662,10 +662,13 @@ jobs:
           role-to-assume: arn:aws:iam::515517431844:role/luckgram-ci-downloads
           aws-region: ap-southeast-1
 
-      # curl --aws-sigv4, keys via stdin (-K -), never argv or the log. Up
-      # to four tries per file, alternating the runner's proxy (HTTPS_PROXY
-      # of the self-hosted runner) and a direct connection; a try that sends
-      # less than 50 KB/s for a minute is given up instead of hanging.
+      # S3 multipart upload, .github/scripts/s3_multipart_upload.ps1: from
+      # xs-master every connection is cut after about 50 s (run 43691567256:
+      # single PUTs of the 76 MB installer died at 50-55 s, proxy and direct
+      # alike), so the files go up in parts of 5 MiB, each retried on its own
+      # (5 tries, proxy and direct by turns), then CompleteMultipartUpload
+      # and a size check through dl.luckgram.cc. curl --aws-sigv4, keys via
+      # stdin, never argv or the log.
       - name: Upload packages to dl.luckgram.cc.
         id: up_s3
         if: steps.aws.outcome == 'success'
@@ -677,6 +680,7 @@ jobs:
           $prefix = if ($env:GITHUB_EVENT_NAME -eq 'push') { "windows/windows-$v-$b" } else { "windows/manual/windows-$v-$b" }
           "prefix=$prefix" >> $env:GITHUB_OUTPUT
           $bucket = 'https://luckgram-downloads-515517431844.s3.ap-southeast-1.amazonaws.com'
+          $upload = "$env:TBUILD\luckgram-desktop\.github\scripts\s3_multipart_upload.ps1"
           $files = @(
             @{ id = 'setup'; name = "Luckgram-Setup-$v-$b-x64.exe"; type = 'application/vnd.microsoft.portable-executable' },
             @{ id = 'portable'; name = "Luckgram-$v-$b-x64-portable.zip"; type = 'application/zip' })
@@ -685,24 +689,9 @@ jobs:
             $path = "$env:GITHUB_WORKSPACE\dist\$($f.name)"
             $size = (Get-Item $path).Length
             $sha = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLower()
-            $ok = $false
-            foreach ($try in 1..4) {
-              $route = if ($try % 2) { 'proxy' } else { 'direct' }
-              $px = if ($route -eq 'direct') { @('--noproxy', '*') } else { @() }
-              $start = Get-Date
-              $res = "user = `"$($env:AWS_ACCESS_KEY_ID):$($env:AWS_SECRET_ACCESS_KEY)`"" | curl.exe -sS --fail-with-body -K - @px `
-                --aws-sigv4 'aws:amz:ap-southeast-1:s3' -H "x-amz-security-token: $env:AWS_SESSION_TOKEN" `
-                -H 'x-amz-content-sha256: UNSIGNED-PAYLOAD' -H "Content-Type: $($f.type)" `
-                --speed-limit 51200 --speed-time 60 --max-time 1200 `
-                -T $path -o NUL -w '%{http_code} %{speed_upload}' "$bucket/$prefix/$($f.name)"
-              $code = $LASTEXITCODE
-              $secs = [int]((Get-Date) - $start).TotalSeconds
-              $http, $speed = "$res" -split ' '
-              Write-Host ("{0} try {1} ({2}): curl {3}, HTTP {4}, {5:N2} MB/s, {6} s" -f $f.name, $try, $route, $code, $http, ([double]$speed / 1MB), $secs)
-              if ($code -eq 0 -and $http -eq '200') { $ok = $true; break }
-              Start-Sleep -Seconds 10
-            }
-            if (-not $ok) { Write-Host "::error::$($f.name) not uploaded to dl.luckgram.cc"; $failed = $true; continue }
+            & $upload -Path $path -Url "$bucket/$prefix/$($f.name)" -ContentType $f.type `
+              -CheckUrl "https://dl.luckgram.cc/$prefix/$($f.name)"
+            if ($LASTEXITCODE -ne 0) { Write-Host "::error::$($f.name) not uploaded to dl.luckgram.cc"; $failed = $true; continue }
             "$($f.id)_sha256=$sha" >> $env:GITHUB_OUTPUT
             "$($f.id)_size=$size" >> $env:GITHUB_OUTPUT
             Write-Host "https://dl.luckgram.cc/$prefix/$($f.name)  sha256 $sha  size $size"
