@@ -1028,6 +1028,8 @@ LUCKGRAM_TEST(McpGroupsProfileAndReadArguments) {
 	LG_CHECK(ParseChatLink(S("durov")).username.isEmpty());
 	LG_CHECK(ParseChatLink(S("https://example.com/durov")).username.isEmpty());
 	LG_CHECK(ParseChatLink(S("https://t.me/+short")).invite.isEmpty());
+	LG_CHECK(ParseChatLink(S("https://t.me/+8613800000000")).invite.isEmpty());
+	LG_EQUAL(ParseChatLink(S("https://t.me/+AbCd1234efgh")).invite, S("AbCd1234efgh"));
 
 	const auto before = fake.calls;
 	const auto bad = [&](const char *tool, const char *arguments) {
