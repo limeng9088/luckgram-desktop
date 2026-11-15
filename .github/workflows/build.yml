@@ -56,6 +56,10 @@ on:
         description: 'Also build and run luckgram_tests (Luckgram unit tests, Windows build job)'
         type: boolean
         default: false
+      upload_packages:
+        description: 'Upload the Windows installer and portable zip as artifacts (screenshots and tests are uploaded either way; master pushes always upload)'
+        type: boolean
+        default: false
       platforms:
         description: 'Platforms to build: windows skips mac-libs and macos, macos skips libs and the Windows build'
         type: choice
@@ -625,8 +629,12 @@ jobs:
       # gets one retry, and a failed upload does not stop the screenshots
       # and tests below: "Packages uploaded." at the end of the job fails it
       # then (so Release Windows does not run either).
+      # Manual runs upload them only with 'upload_packages' (w-1109: the
+      # test and screenshot runs lost 40 min to these ~180 MB). Pushes
+      # always do: Release Windows takes the packages from these artifacts.
       - name: Upload installer.
         id: up_setup
+        if: github.event_name != 'workflow_dispatch' || inputs.upload_packages
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
@@ -647,6 +655,7 @@ jobs:
 
       - name: Upload portable.
         id: up_portable
+        if: github.event_name != 'workflow_dispatch' || inputs.upload_packages
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
