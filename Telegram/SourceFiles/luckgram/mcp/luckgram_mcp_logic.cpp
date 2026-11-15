@@ -413,7 +413,8 @@ constexpr const char *kProtocolVersions[] = {
 		"Join group, channel or bot",
 		"Skill \"groups\". Join one group or channel as the account, by "
 		"username, link or invite link; for a bot, start it (sends "
-		"/start). Answers joined, already_member, started (a bot) or "
+		"/start). Answers joined, already_member, started (a bot: /start "
+		"was queued, not delivered if the account blocked the bot) or "
 		"requested (the group approves new members by hand). At most 5 "
 		"an hour and 20 a day per account.",
 		properties,
@@ -1695,8 +1696,13 @@ ChatLink ParseChatLink(const QString &text) {
 		if (hash.size() < 8 || hash.size() > 64) {
 			return false;
 		}
+		// t.me/+8613800000000 is a phone number link, not an invite.
+		auto digitsOnly = true;
 		for (const auto ch : hash) {
 			const auto code = ch.unicode();
+			if (code < '0' || code > '9') {
+				digitsOnly = false;
+			}
 			if (!((code >= '0' && code <= '9')
 				|| (code >= 'a' && code <= 'z')
 				|| (code >= 'A' && code <= 'Z')
@@ -1705,7 +1711,7 @@ ChatLink ParseChatLink(const QString &text) {
 				return false;
 			}
 		}
-		return true;
+		return !digitsOnly;
 	};
 	const auto until = [](const QString &value, const char *stops) {
 		auto end = value.size();
