@@ -1031,7 +1031,7 @@ rpl::producer<FullMsgId> Application::floatPlayerClosed() const {
 
 void Application::logout(Main::Account *account) {
 	if (account) {
-		account->logOut();
+		account->logOut({ .reason = Luckgram::Logout::Reason::User });
 	} else {
 		_domain->resetWithForgottenPasscode();
 	}
@@ -1072,7 +1072,9 @@ void Application::forceLogOut(
 	const auto weak = base::make_weak(account);
 	connect(box.get(), &QObject::destroyed, [=] {
 		crl::on_main(weak, [=] {
-			account->forcedLogOut();
+			account->forcedLogOut({
+				.reason = Luckgram::Logout::Reason::ServerNotice,
+			});
 		});
 	});
 }

@@ -202,7 +202,9 @@ void Domain::resetWithForgottenPasscode() {
 		activateAfterStarting();
 	} else {
 		for (const auto &[index, account] : _accounts) {
-			account->logOut();
+			account->logOut({
+				.reason = Luckgram::Logout::Reason::ForgottenPasscode,
+			});
 		}
 	}
 }

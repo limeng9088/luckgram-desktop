@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mtproto/mtproto_auth_key.h"
 #include "mtproto/mtp_instance.h"
 #include "base/weak_ptr.h"
+#include "luckgram/luckgram_logout_logic.h" // Luckgram: logout reason
 
 namespace Storage {
 class Account;
@@ -58,8 +59,9 @@ public:
 		int streamVersion,
 		std::unique_ptr<SessionSettings> settings);
 
-	void logOut();
-	void forcedLogOut();
+	// Luckgram: the cause goes into one log line in loggedOut().
+	void logOut(Luckgram::Logout::Cause cause = {});
+	void forcedLogOut(Luckgram::Logout::Cause cause = {});
 	[[nodiscard]] bool loggingOut() const;
 
 	[[nodiscard]] AppConfig &appConfig() const {
@@ -165,6 +167,7 @@ private:
 	MTP::Instance::Fields _mtpFields;
 	MTP::AuthKeysList _mtpKeysToDestroy;
 	bool _loggingOut = false;
+	Luckgram::Logout::Cause _logoutCause; // Luckgram
 	bool _destroyingSession = false;
 
 	rpl::lifetime _lifetime;

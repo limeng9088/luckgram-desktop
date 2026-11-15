@@ -469,14 +469,19 @@ void Account::startMtp(std::unique_ptr<MTP::Config> config) {
 	_mtp->setUpdatesHandler([=](const MTP::Response &message) {
 		checkForUpdates(message) || checkForNewSession(message);
 	});
-	_mtp->setGlobalFailHandler([=](const MTP::Error &, const MTP::Response &) {
+	_mtp->setGlobalFailHandler([=](
+			const MTP::Error &error,
+			const MTP::Response &) {
 		if (Luckgram::CiOfflineSession()) {
 			// CI screenshots only (never true in a release build): the
 			// session has no authorization, every request gets 401.
 			return;
 		}
 		if (const auto session = maybeSession()) {
-			crl::on_main(session, [=] { logOut(); });
+			const auto cause = Luckgram::Logout::ServerError(
+				error.code(),
+				error.type());
+			crl::on_main(session, [=] { logOut(cause); });
 		}
 	});
 	_mtp->setStateChangedHandler([=](MTP::ShiftedDcId dc, int32 state) {
@@ -536,11 +541,12 @@ bool Account::checkForNewSession(const MTP::Response &message) {
 	return true;
 }
 
-void Account::logOut() {
+void Account::logOut(Luckgram::Logout::Cause cause) {
 	if (_loggingOut) {
 		return;
 	}
 	_loggingOut = true;
+	_logoutCause = std::move(cause);
 	if (_mtp) {
 		_mtp->logout([=] { loggedOut(); });
 	} else {
@@ -553,14 +559,30 @@ bool Account::loggingOut() const {
 	return _loggingOut;
 }
 
-void Account::forcedLogOut() {
+void Account::forcedLogOut(Luckgram::Logout::Cause cause) {
 	if (sessionExists()) {
+		_logoutCause = std::move(cause);
 		loggedOut();
 		resetAuthorizationKeys();
 	}
 }
 
 void Account::loggedOut() {
+	// Luckgram: which account went and why (index, user id, reason only).
+	{
+		auto index = -1;
+		for (const auto &[i, account] : domain().accounts()) {
+			if (account.get() == this) {
+				index = i;
+				break;
+			}
+		}
+		const auto session = maybeSession();
+		LOG((Luckgram::Logout::LogLine(
+			index,
+			session ? session->userId().bare : 0,
+			base::take(_logoutCause))));
+	}
 	_loggingOut = false;
 	Media::Player::mixer()->stopAndClear();
 	destroySession(DestroyReason::LoggedOut);

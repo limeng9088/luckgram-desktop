@@ -40,3 +40,41 @@ LUCKGRAM_TEST(LogoutRestartWithProxyAfterLastLogout) {
 	LG_CHECK(ClearsDeviceData(Event::AccountLoggedOut, 0));
 	LG_CHECK(!ClearsDeviceData(Event::Startup, 0));
 }
+
+// One log line per logout (xs-master 2026-11-15): index, user id and the
+// reason, nothing else.
+LUCKGRAM_TEST(LogoutReasonLine) {
+	LG_EQUAL(
+		LogLine(3, 6000000001ULL, { .reason = Reason::User }),
+		QStringLiteral("Luckgram Account: logged out, account index 3, user 6000000001, reason: user"));
+	LG_EQUAL(
+		LogLine(-1, 0, {}),
+		QStringLiteral("Luckgram Account: logged out, account index -1, user 0, reason: unknown"));
+	LG_EQUAL(
+		Describe(ServerError(401, QStringLiteral("AUTH_KEY_UNREGISTERED"))),
+		QStringLiteral("server error 401 AUTH_KEY_UNREGISTERED"));
+	LG_EQUAL(
+		Describe(ServerError(401, QString())),
+		QStringLiteral("server error 401 (no type)"));
+	LG_EQUAL(Describe({ .reason = Reason::ServerNotice }), QStringLiteral("server notice"));
+	LG_EQUAL(Describe({ .reason = Reason::WrongSelf }), QStringLiteral("wrong self user"));
+	LG_EQUAL(
+		Describe({ .reason = Reason::ForgottenPasscode }),
+		QStringLiteral("forgotten passcode"));
+	LG_EQUAL(
+		Describe({ .reason = Reason::AlreadyLoggedIn }),
+		QStringLiteral("already logged in"));
+}
+
+LUCKGRAM_TEST(LogoutReasonServerTypeCleaned) {
+	// Only what Telegram error types are made of; anything else (text,
+	// digits of a phone after a +, spaces) is dropped, and it is capped.
+	LG_EQUAL(
+		ServerError(401, QStringLiteral("SESSION_REVOKED: +123 abc")).type,
+		QStringLiteral("SESSION_REVOKED123"));
+	LG_EQUAL(
+		ServerError(401, QString(100, QChar('A'))).type.size(),
+		64);
+	LG_EQUAL(ServerError(401, QStringLiteral("X")).code, 401);
+	LG_CHECK(ServerError(401, QStringLiteral("X")).reason == Reason::ServerError);
+}

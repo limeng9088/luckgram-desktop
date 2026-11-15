@@ -199,7 +199,9 @@ void Step::finish(const MTPUser &user, QImage &&photo) {
 		if (const auto session = raw->maybeSession()) {
 			if (raw->mtp().environment() == _account->mtp().environment()
 				&& UserId(user.c_user().vid()) == session->userId()) {
-				_account->logOut();
+				_account->logOut({
+					.reason = Luckgram::Logout::Reason::AlreadyLoggedIn,
+				});
 				crl::on_main(raw, [=] {
 					Core::App().domain().activate(raw);
 					Local::sync();

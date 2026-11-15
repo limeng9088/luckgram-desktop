@@ -152,6 +152,18 @@ private:
 				const auto targetName = _logsFilePath(type, postfix);
 
 				auto target = QFile(targetName);
+				// Luckgram: the log of the run before is kept as
+				// log_prev.txt instead of being deleted (xs-master
+				// 2026-11-15: an account was gone after a restart and its
+				// log was already overwritten). Only one older log, so the
+				// data folder holds at most two.
+				if (target.exists()) {
+					const auto prevName = _logsFilePath(type, u"_prev"_q);
+					auto prev = QFile(prevName);
+					if (!prev.exists() || prev.remove()) {
+						target.rename(prevName);
+					}
+				}
 				if (target.exists() && !target.remove()) {
 					LOG(("Could not delete '%1' file to start new logging: %2").arg(targetName, target.errorString()));
 					return false;
