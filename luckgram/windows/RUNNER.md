@@ -62,3 +62,44 @@ config.cmd --url https://github.com/limeng9088/luckgram-desktop --token <token> 
 
 Settings → Actions → General → "Fork pull request workflows": keep
 "Require approval for all external contributors".
+
+## Action archive cache (no downloads in "Set up job")
+
+xs-master sometimes cannot reach codeload.github.com through the proxy
+(runs 43685512381, 43686133298: "The SSL connection could not be
+established", then a 100 s timeout, the job fails before it starts). The
+runner can take the action archives from a local folder instead
+(`ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE`, actions/runner `ActionManager.cs`):
+
+```
+<cache>\<owner>_<repo>\<sha>.zip      zipball of the action repository at <sha>
+E:\r\action-archive-cache\actions_checkout\3d3c42e5aac5ba805825da76410c181273ba90b1.zip
+```
+
+`<sha>` is the commit the ref in build.yml resolves to (the "Set up job"
+log prints it: `Download action repository 'actions/checkout@v7'
+(SHA:...)`). A missing archive is not an error, the runner downloads it as
+before. Resolving the refs ("Getting action download info") still needs
+the network; only the archive downloads go away.
+
+1. When the network is good, fill the cache (re-running it is harmless,
+   it only fetches what is missing):
+
+   ```
+   powershell -NoProfile -File luckgram\windows\prepare_action_cache.ps1 -Cache E:\r\action-archive-cache
+   ```
+
+2. Once: add this line to `E:\r\.env` and restart the runner service while
+   no job runs (`Restart-Service actions.runner.limeng9088-luckgram-desktop.xs-master`):
+
+   ```
+   ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE=E:\r\action-archive-cache
+   ```
+
+3. Check: the next job's `E:\r\_diag\Worker_*.log` has
+   `Found action archive 'E:\r\action-archive-cache\...zip' in cache directory`
+   for each action.
+
+When build.yml gets a new action, or a tag / branch it uses moves (the
+SHA in the "Set up job" log changes), add the new `owner/repo@sha` to the
+list in prepare_action_cache.ps1 and run it again.
