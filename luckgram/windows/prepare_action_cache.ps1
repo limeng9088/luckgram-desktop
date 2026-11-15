@@ -2,7 +2,7 @@
 # (ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE). Run when the network is good.
 # Layout the runner looks for (actions/runner v2.338.2, ActionManager.cs):
 #   <cache>\<owner>_<repo>\<sha>.zip   (zipball of the action repository)
-param([string]$Cache = 'E:\r-action-cache', [string]$Proxy = 'http://127.0.0.1:7897')
+param([string]$Cache = 'E:\r\action-archive-cache', [string]$Proxy = 'http://127.0.0.1:7897')
 $ProgressPreference = 'SilentlyContinue'
 $actions = @(   # what build.yml (Luckgram x64) uses, sha = the ref resolved on 2026-11-15
   'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',                  # v7

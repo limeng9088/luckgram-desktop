@@ -73,7 +73,7 @@ runner can take the action archives from a local folder instead
 
 ```
 <cache>\<owner>_<repo>\<sha>.zip      zipball of the action repository at <sha>
-E:\r-action-cache\actions_checkout\3d3c42e5aac5ba805825da76410c181273ba90b1.zip
+E:\r\action-archive-cache\actions_checkout\3d3c42e5aac5ba805825da76410c181273ba90b1.zip
 ```
 
 `<sha>` is the commit the ref in build.yml resolves to (the "Set up job"
@@ -86,18 +86,18 @@ the network; only the archive downloads go away.
    it only fetches what is missing):
 
    ```
-   powershell -NoProfile -File luckgram\windows\prepare_action_cache.ps1 -Cache E:\r-action-cache
+   powershell -NoProfile -File luckgram\windows\prepare_action_cache.ps1 -Cache E:\r\action-archive-cache
    ```
 
 2. Once: add this line to `E:\r\.env` and restart the runner service while
    no job runs (`Restart-Service actions.runner.limeng9088-luckgram-desktop.xs-master`):
 
    ```
-   ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE=E:\r-action-cache
+   ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE=E:\r\action-archive-cache
    ```
 
 3. Check: the next job's `E:\r\_diag\Worker_*.log` has
-   `Found action archive 'E:\r-action-cache\...zip' in cache directory`
+   `Found action archive 'E:\r\action-archive-cache\...zip' in cache directory`
    for each action.
 
 When build.yml gets a new action, or a tag / branch it uses moves (the
