@@ -24,6 +24,12 @@
 #                          Only master pushes and manual runs use it (PRs
 #                          do not compile, so no fork code). Put the runner work folder
 #                          on a large disk (E:), see luckgram/windows/RUNNER.md.
+# Actions are pinned to commit SHAs (the tag or branch they stood for in
+# the comment): xs-master takes their archives from a local cache keyed by
+# SHA (ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE, luckgram/windows/RUNNER.md), so
+# a moving tag must not turn it into a download again. Changing a pin means
+# adding the new owner/repo@sha to luckgram/windows/prepare_action_cache.ps1
+# and filling the cache on xs-master.
 name: Build
 
 # Compiles only on master pushes and manual runs (w-1109, 2026-11-13:
@@ -111,7 +117,7 @@ jobs:
     name: Installer script check
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Build installer with a placeholder exe.
         shell: pwsh
         run: |
@@ -171,7 +177,7 @@ jobs:
           echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
 
       - name: Clone.
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: recursive
           path: TBuild\luckgram-desktop
@@ -193,7 +199,7 @@ jobs:
       - name: Finished libraries already cached?
         if: env.SELF_HOSTED != 'true'
         id: done
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ${{ env.TBUILD }}\Libraries
@@ -204,7 +210,7 @@ jobs:
       - name: Restore partial libraries.
         if: env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true'
         id: partial
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ${{ env.TBUILD }}\Libraries
@@ -251,7 +257,7 @@ jobs:
           if (-not $atl) { Write-Error "ATL for 14.44 still missing"; exit 1 }
           Write-Host "Installed: $($atl.FullName)"
 
-      - uses: Eden-CI/msvc-dev-cmd@master
+      - uses: Eden-CI/msvc-dev-cmd@1bd71f95d6f3d1b2b3395b335cc63bcdc90cf223 # master
         if: steps.done.outputs.cache-hit != 'true'
         name: Native Tools Command Prompt.
         with:
@@ -301,7 +307,7 @@ jobs:
 
       - name: Save finished libraries.
         if: env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ${{ env.TBUILD }}\Libraries
@@ -317,7 +323,7 @@ jobs:
 
       - name: Save partial libraries (continue next run).
         if: always() && env.SELF_HOSTED != 'true' && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success' && steps.prepare.outcome != 'skipped'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ${{ env.TBUILD }}\Libraries
@@ -397,7 +403,7 @@ jobs:
           echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
 
       - name: Clone.
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: recursive
           path: TBuild\luckgram-desktop
@@ -406,7 +412,7 @@ jobs:
 
       - name: Restore libraries.
         if: env.SELF_HOSTED != 'true'
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ${{ env.TBUILD }}\Libraries
@@ -429,7 +435,7 @@ jobs:
             sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
           fi
 
-      - uses: Eden-CI/msvc-dev-cmd@master
+      - uses: Eden-CI/msvc-dev-cmd@1bd71f95d6f3d1b2b3395b335cc63bcdc90cf223 # master
         name: Native Tools Command Prompt.
         with:
           arch: x64
@@ -651,7 +657,7 @@ jobs:
         id: aws
         if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || inputs.upload_packages)
         continue-on-error: true
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: arn:aws:iam::515517431844:role/luckgram-ci-downloads
           aws-region: ap-southeast-1
@@ -718,7 +724,7 @@ jobs:
         id: up_setup
         if: github.event_name == 'workflow_dispatch' && inputs.upload_packages && github.ref != 'refs/heads/master'
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Luckgram-Setup-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64
           path: dist/Luckgram-Setup-*.exe
@@ -728,7 +734,7 @@ jobs:
         id: up_setup_retry
         if: steps.up_setup.outcome == 'failure'
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Luckgram-Setup-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64
           path: dist/Luckgram-Setup-*.exe
@@ -739,7 +745,7 @@ jobs:
         id: up_portable
         if: github.event_name == 'workflow_dispatch' && inputs.upload_packages && github.ref != 'refs/heads/master'
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64-portable
           path: dist/Luckgram-*-portable.zip
@@ -749,7 +755,7 @@ jobs:
         id: up_portable_retry
         if: steps.up_portable.outcome == 'failure'
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-x64-portable
           path: dist/Luckgram-*-portable.zip
@@ -823,7 +829,7 @@ jobs:
       - name: Upload screenshots.
         if: always() && steps.shots.outcome != 'skipped'
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-screenshots
           path: screenshots/*.png
@@ -892,7 +898,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
           submodules: false
@@ -1017,7 +1023,7 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: '12.0'
     steps:
       - name: Clone.
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
           path: luckgram-desktop
@@ -1035,7 +1041,7 @@ jobs:
 
       - name: Finished libraries already cached?
         id: done
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             Libraries
@@ -1045,7 +1051,7 @@ jobs:
 
       - name: Restore partial libraries.
         if: steps.done.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             Libraries
@@ -1108,7 +1114,7 @@ jobs:
 
       - name: Save finished libraries.
         if: steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             Libraries
@@ -1117,7 +1123,7 @@ jobs:
 
       - name: Save partial libraries (continue next run).
         if: always() && steps.done.outputs.cache-hit != 'true' && steps.prepare.outcome != 'success' && steps.prepare.outcome != 'skipped'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             Libraries
@@ -1158,7 +1164,7 @@ jobs:
       CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime,clang_index_store,modules,system_headers
     steps:
       - name: Clone.
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
           path: luckgram-desktop
@@ -1174,7 +1180,7 @@ jobs:
           echo "done=mac-libs-$HASH-done3" >> $GITHUB_OUTPUT
 
       - name: Restore libraries.
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             Libraries
@@ -1198,7 +1204,7 @@ jobs:
           echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
 
       - name: Restore compiler cache.
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .ccache
           # "-run-" after the branch: the prefix of feat/x never matches the
@@ -1275,7 +1281,7 @@ jobs:
 
       - name: Save compiler cache (part 1).
         if: always() && (steps.build1.outcome == 'success' || steps.build1.outcome == 'failure')
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .ccache
           key: ccache-macos-${{ github.ref_name }}-run-${{ github.run_id }}-p1
@@ -1307,7 +1313,7 @@ jobs:
 
       - name: Save compiler cache (part 2).
         if: always() && (steps.build2.outcome == 'success' || steps.build2.outcome == 'failure')
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .ccache
           key: ccache-macos-${{ github.ref_name }}-run-${{ github.run_id }}-p2
@@ -1339,7 +1345,7 @@ jobs:
 
       - name: Save compiler cache (part 3).
         if: always() && (steps.build3.outcome == 'success' || steps.build3.outcome == 'failure')
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .ccache
           key: ccache-macos-${{ github.ref_name }}-run-${{ github.run_id }}-p3
@@ -1371,7 +1377,7 @@ jobs:
 
       - name: Save compiler cache (part 4).
         if: always() && (steps.build4.outcome == 'success' || steps.build4.outcome == 'failure')
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .ccache
           key: ccache-macos-${{ github.ref_name }}-run-${{ github.run_id }}-p4
@@ -1543,14 +1549,14 @@ jobs:
           xcrun stapler staple "$DMG"
 
       - name: Upload disk image.
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-macos-dmg
           path: dist/*.dmg
           if-no-files-found: error
 
       - name: Upload update zip.
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Luckgram-${{ env.LUCKGRAM_VERSION }}-${{ env.LUCKGRAM_BUILD }}-macos-zip
           path: dist/*-mac.zip
@@ -1574,7 +1580,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
           submodules: false
@@ -1590,7 +1596,7 @@ jobs:
           echo "ZIP=Luckgram-$VER-$GITHUB_RUN_NUMBER-mac.zip" >> "$GITHUB_ENV"
 
       - name: Download packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: Luckgram-*${{ github.run_number }}-macos-*
           path: out
@@ -1603,7 +1609,7 @@ jobs:
           test -f "out/$ZIP" || { echo "::error::$ZIP missing"; exit 1; }
 
       - name: Configure AWS for dl.luckgram.cc
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: arn:aws:iam::515517431844:role/luckgram-ci-downloads
           aws-region: ap-southeast-1
