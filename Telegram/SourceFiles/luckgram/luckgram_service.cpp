@@ -8,6 +8,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/discover/luckgram_nearby_state.h"
 
 #include "base/timer.h"
+#include "base/unixtime.h"
 #include "luckgram/luckgram_api.h"
 #include "luckgram/luckgram_settings.h"
 #include "luckgram/mcp/luckgram_mcp.h"
@@ -101,7 +102,26 @@ void LogMemory() {
 		).arg(messages));
 }
 
+// specs#208: messages of chats not shown anywhere are freed every check,
+// keeping the newest ones and the last hour's.
+constexpr auto kTrimKeepNewest = 50;
+constexpr auto kTrimKeepSeconds = TimeId(60 * 60);
+
+void TrimMessages() {
+	const auto keepAfter = base::unixtime::now() - kTrimKeepSeconds;
+	auto freed = int64(0);
+	for (const auto &[index, account] : Core::App().domain().accounts()) {
+		if (const auto session = account->maybeSession()) {
+			freed += session->data().luckgramTrimMessages(
+				kTrimKeepNewest,
+				keepAfter);
+		}
+	}
+	LOG(("Luckgram memory: freed_messages=%1").arg(freed));
+}
+
 void Check() {
+	TrimMessages();
 	LogMemory();
 	if (ConfigStale()) {
 		RefreshRemoteConfig();

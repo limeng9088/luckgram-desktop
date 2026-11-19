@@ -6287,6 +6287,29 @@ int64 Session::luckgramMessagesInMemory() const {
 	return result;
 }
 
+bool Session::luckgramHasDependentMessages(
+		not_null<HistoryItem*> item) const {
+	const auto i = _dependentMessages.find(item);
+	return (i != end(_dependentMessages)) && !i->second.empty();
+}
+
+int64 Session::luckgramTrimMessages(int keepNewest, TimeId keepAfter) {
+	auto peers = std::vector<PeerId>();
+	peers.reserve(_messages.size());
+	for (const auto &[peerId, messages] : _messages) {
+		if (int(messages.size()) > keepNewest) {
+			peers.push_back(peerId);
+		}
+	}
+	auto result = int64(0);
+	for (const auto peerId : peers) {
+		if (const auto history = historyLoaded(peerId)) {
+			result += history->luckgramTrimDetached(keepNewest, keepAfter);
+		}
+	}
+	return result;
+}
+
 int Session::luckgramChatsWithMessages() const {
 	auto result = 0;
 	for (const auto &[peerId, messages] : _messages) {

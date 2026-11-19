@@ -154,6 +154,10 @@ public:
 	void destroyMessagesByDates(TimeId minDate, TimeId maxDate);
 	void destroyMessagesByTopic(MsgId topicRootId);
 	void destroyMessagesBySublist(not_null<PeerData*> sublistPeer);
+	// Luckgram specs#208: frees messages of a chat that is not shown
+	// anywhere, keeping the newest `keepNewest` and those dated after
+	// `keepAfter`. Returns how many were freed. See history.cpp.
+	int luckgramTrimDetached(int keepNewest, TimeId keepAfter);
 
 	void unpinMessagesFor(MsgId topicRootId, PeerId monoforumPeerId);
 
