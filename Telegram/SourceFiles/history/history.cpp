@@ -794,17 +794,26 @@ void History::destroyMessagesByTopic(MsgId topicRootId) {
 int History::luckgramTrimDetached(int keepNewest, TimeId keepAfter) {
 	// Luckgram specs#208: every message that arrives stays in _items for
 	// the whole session, also in chats nobody opens. With 50 accounts in
-	// busy groups that is hundreds of thousands of messages and GBs. Only a
-	// chat with no views (not open in any window) and no message list
-	// (no replies / topic / pinned section built over it) is trimmed, so
-	// nothing on screen loses a message; opening the chat loads it again.
-	if (!blocks.empty()
-		|| _messages
+	// busy groups that is hundreds of thousands of messages and GBs. Called
+	// only for a chat not shown in any window; one with a message list
+	// (replies / topic / pinned section built over it) is left alone.
+	// Opening the chat loads its messages again.
+	if (_messages
 		|| peer->isSelf()
 		|| peer->isForum()
 		|| peer->isMonoforum()
 		|| int(_items.size()) <= keepNewest) {
 		return 0;
+	}
+	// A chat "loaded at bottom" gets every new message as a view in blocks
+	// even when it is not open, so blocks alone do not mean it is shown.
+	// The caller skips the chats shown in a window; here the views go the
+	// way HistoryWidget unloads a chat it leaves.
+	if (!blocks.empty()) {
+		if (isBuildingFrontBlock()) {
+			return 0;
+		}
+		clear(ClearType::Unload);
 	}
 	const auto keep = [&](not_null<HistoryItem*> item) {
 		return !item->isRegular()
