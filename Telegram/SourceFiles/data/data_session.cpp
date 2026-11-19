@@ -6310,9 +6310,7 @@ int64 Session::luckgramTrimMessages(int keepNewest, TimeId keepAfter) {
 			if (const auto from = history->migrateFrom()) {
 				shown.emplace(from);
 			}
-			if (const auto to = history->migrateTo()) {
-				shown.emplace(to);
-			}
+			shown.emplace(history->migrateToOrMe());
 		}
 	}
 	auto result = int64(0);
