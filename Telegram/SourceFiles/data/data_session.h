@@ -216,6 +216,12 @@ public:
 	// (all chats) and in how many chats, for the periodic memory log.
 	[[nodiscard]] int64 luckgramMessagesInMemory() const;
 	[[nodiscard]] int luckgramChatsWithMessages() const;
+	// specs#208: whether another message refers to this one (a reply).
+	[[nodiscard]] bool luckgramHasDependentMessages(
+		not_null<HistoryItem*> item) const;
+	// specs#208: frees old messages of chats not shown anywhere, see
+	// History::luckgramTrimDetached. Returns how many were freed.
+	int64 luckgramTrimMessages(int keepNewest, TimeId keepAfter);
 	[[nodiscard]] Stickers &stickers() const {
 		return *_stickers;
 	}

@@ -791,6 +791,69 @@ void History::destroyMessagesByTopic(MsgId topicRootId) {
 	}
 }
 
+int History::luckgramTrimDetached(int keepNewest, TimeId keepAfter) {
+	// Luckgram specs#208: every message that arrives stays in _items for
+	// the whole session, also in chats nobody opens. With 50 accounts in
+	// busy groups that is hundreds of thousands of messages and GBs. Only a
+	// chat with no views (not open in any window) and no message list
+	// (no replies / topic / pinned section built over it) is trimmed, so
+	// nothing on screen loses a message; opening the chat loads it again.
+	if (!blocks.empty()
+		|| _messages
+		|| peer->isSelf()
+		|| peer->isForum()
+		|| peer->isMonoforum()
+		|| int(_items.size()) <= keepNewest) {
+		return 0;
+	}
+	const auto keep = [&](not_null<HistoryItem*> item) {
+		return !item->isRegular()
+			|| item->isSending()
+			|| item->hasFailed()
+			|| item->mainView()
+			|| item->date() > keepAfter
+			|| item->id == lastKeyboardId
+			|| item.get() == _lastMessage.value_or(nullptr)
+			|| item.get() == _lastServerMessage.value_or(nullptr)
+			|| item.get() == _chatListMessage.value_or(nullptr)
+			|| item.get() == _joinedMessage
+			|| item.get() == _newPeerNameChange
+			|| item.get() == _newPeerPhotoChange
+			|| owner().luckgramHasDependentMessages(item);
+	};
+	auto candidates = std::vector<not_null<HistoryItem*>>();
+	candidates.reserve(_items.size());
+	for (const auto &item : _items) {
+		if (!keep(item.get())) {
+			candidates.push_back(item.get());
+		}
+	}
+	if (int(candidates.size()) <= keepNewest) {
+		return 0;
+	}
+	// The newest `keepNewest` stay, so the chat list preview, notifications
+	// and a quick open still have them.
+	ranges::sort(candidates, [](
+			not_null<HistoryItem*> a,
+			not_null<HistoryItem*> b) {
+		return a->id > b->id;
+	});
+	candidates.erase(begin(candidates), begin(candidates) + keepNewest);
+
+	// The unread counter comes from the server; freeing an unread message
+	// must not lower it (itemVanished does that for a deleted one).
+	const auto unreadKnown = unreadCountKnown();
+	const auto unread = unreadKnown ? unreadCount() : 0;
+	owner().notifyItemsAboutToBeDestroyed(candidates);
+	for (const auto &item : candidates) {
+		item->destroy();
+	}
+	if (unreadKnown && unreadCount() != unread) {
+		setUnreadCount(unread);
+	}
+	return int(candidates.size());
+}
+
 void History::destroyMessagesBySublist(not_null<PeerData*> sublistPeer) {
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	toDestroy.reserve(_items.size());
