@@ -212,6 +212,10 @@ public:
 	[[nodiscard]] Histories &histories() const {
 		return *_histories;
 	}
+	// Luckgram specs#208: how many messages this account holds in memory
+	// (all chats) and in how many chats, for the periodic memory log.
+	[[nodiscard]] int64 luckgramMessagesInMemory() const;
+	[[nodiscard]] int luckgramChatsWithMessages() const;
 	[[nodiscard]] Stickers &stickers() const {
 		return *_stickers;
 	}

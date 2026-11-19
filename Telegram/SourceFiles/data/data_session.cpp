@@ -6279,4 +6279,22 @@ HistoryItem *Session::messageWithPeer(PeerId id) const {
 	return nullptr;
 }
 
+int64 Session::luckgramMessagesInMemory() const {
+	auto result = int64(0);
+	for (const auto &[peerId, messages] : _messages) {
+		result += int64(messages.size());
+	}
+	return result;
+}
+
+int Session::luckgramChatsWithMessages() const {
+	auto result = 0;
+	for (const auto &[peerId, messages] : _messages) {
+		if (!messages.empty()) {
+			++result;
+		}
+	}
+	return result;
+}
+
 } // namespace Data

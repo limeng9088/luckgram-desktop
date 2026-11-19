@@ -14,9 +14,19 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include "luckgram/translate/translate_service.h"
 #include "luckgram/pro/luckgram_pro.h"
 #include "luckgram/xray/luckgram_xray.h"
+#include "core/application.h"
+#include "data/data_session.h"
+#include "main/main_account.h"
+#include "main/main_domain.h"
+#include "main/main_session.h"
 
 #include <QtCore/QDateTime>
 #include <QtCore/QJsonObject>
+
+#ifdef Q_OS_WIN
+#include "base/platform/win/base_windows_h.h"
+#include <psapi.h>
+#endif // Q_OS_WIN
 
 namespace Luckgram {
 namespace {
@@ -53,7 +63,45 @@ struct ServiceState {
 	return !at || now < at || now - at >= kConfigRefreshSeconds;
 }
 
+// specs#208: one line per check (every 10 minutes) so a client left in the
+// tray for days shows what grows: the process memory next to the messages
+// every logged-in account holds in memory. Counts only, no content.
+void LogMemory() {
+	if (!Core::IsAppLaunched() || !Core::App().domain().started()) {
+		return;
+	}
+	auto accounts = 0;
+	auto chats = int64(0);
+	auto messages = int64(0);
+	for (const auto &[index, account] : Core::App().domain().accounts()) {
+		if (const auto session = account->maybeSession()) {
+			++accounts;
+			chats += session->data().luckgramChatsWithMessages();
+			messages += session->data().luckgramMessagesInMemory();
+		}
+	}
+	auto process = QString();
+#ifdef Q_OS_WIN
+	auto counters = PROCESS_MEMORY_COUNTERS_EX();
+	if (GetProcessMemoryInfo(
+			GetCurrentProcess(),
+			reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters),
+			sizeof(counters))) {
+		process = u" working_set_mb=%1 private_mb=%2"_q
+			.arg(qulonglong(counters.WorkingSetSize >> 20))
+			.arg(qulonglong(counters.PrivateUsage >> 20));
+	}
+#endif // Q_OS_WIN
+	LOG(("Luckgram memory:%1 accounts=%2 chats_with_messages=%3"
+		" messages_in_memory=%4"
+		).arg(process
+		).arg(accounts
+		).arg(chats
+		).arg(messages));
+}
+
 void Check() {
+	LogMemory();
 	if (ConfigStale()) {
 		RefreshRemoteConfig();
 	}
