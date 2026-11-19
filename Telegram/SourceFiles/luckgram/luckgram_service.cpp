@@ -24,8 +24,7 @@ Luckgram changes are licensed under GPL-3.0 like the upstream project.
 #include <QtCore/QJsonObject>
 
 #ifdef Q_OS_WIN
-#include "base/platform/win/base_windows_h.h"
-#include <psapi.h>
+#include "platform/win/windows_dlls.h"
 #endif // Q_OS_WIN
 
 namespace Luckgram {
@@ -82,8 +81,10 @@ void LogMemory() {
 	}
 	auto process = QString();
 #ifdef Q_OS_WIN
+	namespace Dlls = ::Platform::Dlls;
 	auto counters = PROCESS_MEMORY_COUNTERS_EX();
-	if (GetProcessMemoryInfo(
+	if (Dlls::GetProcessMemoryInfo
+		&& Dlls::GetProcessMemoryInfo(
 			GetCurrentProcess(),
 			reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters),
 			sizeof(counters))) {
