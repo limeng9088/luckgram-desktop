@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_app_config.h"
 #include "apiwrap.h"
 #include "mainwidget.h"
+#include "window/window_session_controller.h" // specs#208
 #include "api/api_bot.h"
 #include "api/api_premium.h"
 #include "api/api_text_entities.h"
@@ -6301,10 +6302,25 @@ int64 Session::luckgramTrimMessages(int keepNewest, TimeId keepAfter) {
 			peers.push_back(peerId);
 		}
 	}
+	// Chats shown in a window keep everything (with the migrated group).
+	auto shown = base::flat_set<not_null<History*>>();
+	for (const auto &window : _session->windows()) {
+		if (const auto history = window->activeChatCurrent().owningHistory()) {
+			shown.emplace(history);
+			if (const auto from = history->migrateFrom()) {
+				shown.emplace(from);
+			}
+			shown.emplace(history->migrateToOrMe());
+		}
+	}
 	auto result = int64(0);
 	for (const auto peerId : peers) {
 		if (const auto history = historyLoaded(peerId)) {
-			result += history->luckgramTrimDetached(keepNewest, keepAfter);
+			if (!shown.contains(history)) {
+				result += history->luckgramTrimDetached(
+					keepNewest,
+					keepAfter);
+			}
 		}
 	}
 	return result;
