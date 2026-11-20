@@ -103,9 +103,11 @@ void LogMemory() {
 }
 
 // specs#208: messages of chats not shown anywhere are freed every check,
-// keeping the newest ones and the last hour's.
-constexpr auto kTrimKeepNewest = 50;
-constexpr auto kTrimKeepSeconds = TimeId(60 * 60);
+// keeping only the newest few and the last ten minutes'. With ~19k chats
+// across accounts, 50 per chat let memory keep growing toward ~1M
+// messages; closed chats reload their history from the server on open.
+constexpr auto kTrimKeepNewest = 3;
+constexpr auto kTrimKeepSeconds = TimeId(10 * 60);
 
 void TrimMessages() {
 	const auto keepAfter = base::unixtime::now() - kTrimKeepSeconds;
