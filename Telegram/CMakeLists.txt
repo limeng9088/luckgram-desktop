@@ -2781,6 +2781,7 @@ elseif (APPLE)
         nl
         ko
         pt-BR
+        zh-Hans
     )
     foreach (lang ${lang_packs})
         set(strings_path ${res_loc}/langs/${lang}.lproj/Localizable.strings)
@@ -2791,6 +2792,14 @@ elseif (APPLE)
         target_sources(Telegram PRIVATE ${strings_path})
         source_group(TREE ${res_loc} PREFIX Resources FILES ${strings_path})
     endforeach()
+    # Luckgram M1: Chinese texts of the permission prompts (Info.plist).
+    set(info_strings_path ${res_loc}/langs/zh-Hans.lproj/InfoPlist.strings)
+    set_source_files_properties(${info_strings_path} PROPERTIES
+    MACOSX_PACKAGE_LOCATION
+        Resources/zh-Hans.lproj
+    )
+    target_sources(Telegram PRIVATE ${info_strings_path})
+    source_group(TREE ${res_loc} PREFIX Resources FILES ${info_strings_path})
 
     add_custom_command(TARGET Telegram
     PRE_LINK

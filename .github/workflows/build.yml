@@ -71,6 +71,11 @@ on:
         type: choice
         options: [both, windows, macos]
         default: both
+      mac_archs:
+        description: 'macOS architectures: default = repository variable MAC_ARCHS (else arm64); x86_64 for the Intel test Mac (M1)'
+        type: choice
+        options: [default, arm64, x86_64, universal]
+        default: default
 
 concurrency:
   # Pushes and manual runs in their own groups: a new master push must not
@@ -1151,7 +1156,9 @@ jobs:
       # finish the universal build in 6 hours, run 43415777359). Repository
       # variable MAC_ARCHS='arm64;x86_64' builds the universal app again
       # (the libraries are universal already).
-      MAC_ARCHS: ${{ vars.MAC_ARCHS || 'arm64' }}
+      # The dispatch input mac_archs overrides it for one run (x86_64 for the
+      # Intel test Mac) without touching the variable other runs read.
+      MAC_ARCHS: ${{ (inputs.mac_archs == 'universal' && 'arm64;x86_64') || (inputs.mac_archs == 'arm64' && 'arm64') || (inputs.mac_archs == 'x86_64' && 'x86_64') || vars.MAC_ARCHS || 'arm64' }}
       # ccache under the Xcode generator (wrapper compilers, see Configure),
       # kept with actions/cache per branch, saved also when Build times out,
       # so the next run goes on from there.

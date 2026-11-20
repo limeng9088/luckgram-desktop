@@ -1,0 +1,7 @@
+/*
+Luckgram M1: Chinese texts of the macOS permission prompts (Info.plist keys).
+*/
+"NSMicrophoneUsageDescription" = "需要使用麦克风，才能录制语音消息、拨打电话和使用语音输入。";
+"NSCameraUsageDescription" = "需要使用摄像头，才能录制视频消息和进行视频通话。";
+"NSLocationUsageDescription" = "需要获取你的位置，才能发送当前位置。";
+"NSBluetoothAlwaysUsageDescription" = "需要使用蓝牙，才能通过扫码用手机上的通行密钥登录。";

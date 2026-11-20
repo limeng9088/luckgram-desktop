@@ -245,14 +245,21 @@ void ShowTranslocationError() {
 	[app setActivationPolicy:NSApplicationActivationPolicyRegular];
 	[app activateIgnoringOtherApps:YES];
 
+	// Luckgram M1: the usual way here is opening the app straight from the
+	// .dmg window, so say how to install it, in the system language.
+	NSString *first = [[NSLocale preferredLanguages] firstObject];
+	const auto chinese = (first != nil) && [first hasPrefix:@"zh"];
 	NSAlert *alert = [[NSAlert alloc] init];
 	alert.alertStyle = NSAlertStyleCritical;
-	alert.messageText = @"Telegram Desktop can't start from here";
-	alert.informativeText = @"macOS started this copy of Telegram Desktop "
-		@"from a read-only temporary location (App Translocation), so it "
-		@"can't use its own folder. Please reinstall the app and launch it "
-		@"again.";
-	[alert addButtonWithTitle:@"Quit"];
+	alert.messageText = chinese
+		? @"Luckgram 无法从这里启动"
+		: @"Luckgram can't start from here";
+	alert.informativeText = chinese
+		? @"请先把 Luckgram 拖到「应用程序」文件夹，"
+			@"再从「应用程序」里打开。"
+		: @"Drag Luckgram to the Applications folder first, "
+			@"then open it from Applications.";
+	[alert addButtonWithTitle:(chinese ? @"退出" : @"Quit")];
 	[alert runModal];
 	[alert release];
 }
